@@ -155,6 +155,30 @@ describe('symmetric layouts (repeats + dividers)', () => {
     expect(divider.paint.fill).toBe(true) // dot is a fill motif
   })
 
+  it('dividers track run centres under start/end alignment', () => {
+    const base = {
+      text: 'LIET MFG',
+      repeats: 2,
+      anchorDeg: 0,
+      dividerSource: { kind: 'builtin', motifId: 'dot' } as const,
+      dividerSizeMM: 0.9,
+    }
+    const arc = ringTextArcDeg(makeRingTextLayer(base), garamond)
+    const anglesFor = (anchorAlign: 'start' | 'center' | 'end') => {
+      const out = compileRingText(makeRingTextLayer({ ...base, anchorAlign }), garamond)
+      const div = out.shapes.find((s) => s.kind === 'instanced')
+      if (div?.kind !== 'instanced') throw new Error('expected divider')
+      return div.transforms.map((t) => t.rotateDeg)
+    }
+    expect(anglesFor('center')).toEqual([90, 270])
+    const start = anglesFor('start')
+    expect(start[0]).toBeCloseTo(90 + arc / 2, 9) // shifted with the runs
+    expect(start[1]).toBeCloseTo(270 + arc / 2, 9)
+    const end = anglesFor('end')
+    expect(end[0]).toBeCloseTo(90 - arc / 2, 9)
+    expect(end[1]).toBeCloseTo(270 - arc / 2, 9)
+  })
+
   it('renders dividers even when the font is unavailable', () => {
     const out = compileRingText(
       makeRingTextLayer({ text: 'X', repeats: 3, dividerSource: { kind: 'builtin', motifId: 'dot' } }),

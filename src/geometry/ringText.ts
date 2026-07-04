@@ -34,17 +34,15 @@ export function compileRingText(
   const r = Math.max(0.1, layer.radiusMM)
   const dir = layer.direction === 'outward' ? 1 : -1
 
-  compileDividers(layer, repeats, r, dir, getSvgAsset, shapes, warnings)
-
   if (!font) {
+    // dividers are font-independent; without metrics they assume centred runs
+    compileDividers(layer, repeats, r, dir, 0, getSvgAsset, shapes, warnings)
     warnings.push('Font unavailable — text not rendered (loading, or a missing local font).')
     return { shapes, warnings }
   }
-  if (layer.text.length === 0) return { shapes, warnings }
 
   const scale = layer.sizeMM / font.unitsPerEm
-  const glyphs = font.stringToGlyphs(layer.text)
-  if (glyphs.length === 0) return { shapes, warnings }
+  const glyphs = layer.text.length > 0 ? font.stringToGlyphs(layer.text) : []
 
   const advanceMM = glyphs.map((g) => (g.advanceWidth ?? 0) * scale)
   const gapMM = glyphs.map((g, i) => {
@@ -56,6 +54,18 @@ export function compileRingText(
   const angleOf = (mm: number) => (mm / r) * RAD2DEG
   const totalMM = advanceMM.reduce((s, a) => s + a, 0) + gapMM.reduce((s, k) => s + k, 0)
   const totalArc = angleOf(totalMM)
+
+  // Dividers sit midway between RUN CENTRES. Start/End alignment shifts every
+  // run centre off its anchor by ±totalArc/2 — dividers must follow, or they
+  // land near the end of each run instead of the middle of the gap.
+  const alignShift =
+    layer.anchorAlign === 'start'
+      ? (dir * totalArc) / 2
+      : layer.anchorAlign === 'end'
+        ? (-dir * totalArc) / 2
+        : 0
+  compileDividers(layer, repeats, r, dir, alignShift, getSvgAsset, shapes, warnings)
+  if (glyphs.length === 0) return { shapes, warnings }
 
   if (totalArc * repeats > 360) {
     warnings.push(
@@ -125,6 +135,7 @@ function compileDividers(
   repeats: number,
   r: number,
   dir: number,
+  alignShiftDeg: number,
   getSvgAsset: (assetId: string) => ParsedSvgAsset | null,
   shapes: Shape[],
   warnings: string[],
@@ -154,7 +165,7 @@ function compileDividers(
 
   const dividerR = r + dir * 0.32 * layer.sizeMM
   const transforms: InstanceTransform[] = Array.from({ length: repeats }, (_, k) => ({
-    rotateDeg: layer.anchorDeg + ((k + 0.5) * 360) / repeats,
+    rotateDeg: layer.anchorDeg + alignShiftDeg + ((k + 0.5) * 360) / repeats,
     dx: 0,
     dy: 0,
     mirrorX: false,
