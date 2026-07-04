@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseDoc, stringifyDoc } from './serialize'
+import { coerceDoc, parseDoc, stringifyDoc } from './serialize'
 import {
   DOC_VERSION,
   makeBendLayer,
@@ -45,6 +45,30 @@ describe('serialize round-trip', () => {
     const result = parseDoc(stringifyDoc(doc))
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.doc).toEqual(doc)
+  })
+})
+
+describe('coerceDoc (plain values, no JSON text)', () => {
+  it('accepts a valid structured-clone object', () => {
+    const doc = docWithEverything()
+    const clone = structuredClone(doc)
+    const r = coerceDoc(clone)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.doc).toEqual(doc)
+  })
+
+  it('rejects versionless and non-object values with readable errors', () => {
+    const noVersion = coerceDoc({ name: 'x' })
+    expect(noVersion.ok).toBe(false)
+    if (!noVersion.ok) expect(noVersion.error).toMatch(/version/)
+    expect(coerceDoc(null).ok).toBe(false)
+    expect(coerceDoc(42).ok).toBe(false)
+  })
+
+  it('rejects docs from a newer app version', () => {
+    const r = coerceDoc({ ...makeBlankDoc(), version: DOC_VERSION + 3 })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/newer/)
   })
 })
 

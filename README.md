@@ -44,6 +44,16 @@ Two bundled templates recreate the reference buttons the project was built again
 - **Seam-exact**: instance angles are exact multiples of 360/N (never accumulated) and
   full-circle warps weld the 0°/360° seam.
 
+## Workspace
+
+Every button you work on is cached locally in the browser (IndexedDB) and autosaves as you
+edit. The `▾` next to the document name opens the switcher — thumbnails, last-edited times,
+duplicate/download/delete — and "New" always creates a fresh cached button, never
+overwriting the current one. Load projects via `Open…`, `⌘O`, or by dropping a `.json` /
+exported SVG onto the canvas; loaded files join the workspace as new entries. Nothing
+leaves your machine; private-mode browsers fall back to a session-only workspace with a
+warning banner.
+
 ## Export
 
 - **SVG die file** — millimetre-true (`width="17mm"`, user units = mm), instances expanded
@@ -52,7 +62,6 @@ Two bundled templates recreate the reference buttons the project was built again
   in `<metadata>`, so an exported SVG re-opens as a document.
 - **PNG mockup** — flat or metal-preview rendering at 1024/2048/4096 px.
 - **Project JSON** — portable save/load with fonts and SVG assets embedded base64.
-  Autosaves to localStorage.
 
 ## Fonts
 
@@ -63,7 +72,7 @@ escape hatch). No WOFF2.
 
 ## Keyboard
 
-`⌘Z / ⇧⌘Z` undo/redo · `⌘S` save project · `⌘D` duplicate layer · `⌫` delete layer ·
+`⌘Z / ⇧⌘Z` undo/redo · `⌘S` save project · `⌘O` open project · `⌘D` duplicate layer · `⌫` delete layer ·
 `[ ]` reorder · `0 / = / -` zoom fit/in/out · `M` metal preview · `Esc` deselect ·
 space-drag / middle-drag pan · `⌘`+wheel zoom · arrow keys nudge fields (⇧ ×10, ⌥ ×0.1) ·
 drag field labels to scrub · ⌥ bypasses snapping while dragging.

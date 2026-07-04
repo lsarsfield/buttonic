@@ -6,6 +6,8 @@ import { redo, undo, useEngraver } from './state/store'
 import { useViewport } from './state/viewport'
 import { exportSvg, extractEmbeddedProject } from './io/exportSvg'
 import { exportPng } from './io/exportPng'
+import { loadProjectFile } from './io/project'
+import * as workspace from './io/workspace'
 import { presetBlank, presetReferenceA, presetReferenceB } from './model/presets'
 import { parseDoc } from './model/serialize'
 
@@ -21,6 +23,8 @@ if (import.meta.env.DEV) {
       exportPng,
       extractEmbeddedProject,
       parseDoc,
+      loadProjectFile,
+      workspace,
       presets: { presetBlank, presetReferenceA, presetReferenceB },
     },
   })

@@ -1,8 +1,7 @@
 import { TEMPLATES } from '../../model/presets'
-import { useEngraver } from '../../state/store'
+import { createFromDoc } from '../../io/workspace'
 
 export function TemplatePicker({ onClose }: { onClose: () => void }) {
-  const setDoc = useEngraver((s) => s.setDoc)
   return (
     <div className="modal-backdrop" onPointerDown={onClose}>
       <div className="modal" onPointerDown={(e) => e.stopPropagation()}>
@@ -18,9 +17,8 @@ export function TemplatePicker({ onClose }: { onClose: () => void }) {
               type="button"
               className="template-card"
               onClick={() => {
-                setDoc(t.make())
-                useEngraver.temporal.getState().clear()
-                onClose()
+                // creates a NEW workspace entry — the current button stays cached
+                void createFromDoc(t.make()).then(onClose)
               }}
             >
               <span className="template-name">{t.name}</span>

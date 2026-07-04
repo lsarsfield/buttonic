@@ -23,6 +23,8 @@ export interface SvgExportOptions {
   expandInstances: boolean
   mirrorForDie: boolean
   includeBlankOutline: boolean
+  /** Embed the project JSON in <metadata> (default true; thumbnails pass false). */
+  embedProject?: boolean
 }
 
 export const DEFAULT_SVG_OPTIONS: SvgExportOptions = {
@@ -172,7 +174,10 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
     : ''
   const mirror = options.mirrorForDie ? ` transform="scale(-1 1)"` : ''
   const defsBlock = defs.length > 0 ? `<defs>\n${defs.join('\n')}\n</defs>\n` : ''
-  const meta = `<metadata id="buttonic-project">${xmlEscape(stringifyDoc(doc))}</metadata>`
+  const meta =
+    options.embedProject === false
+      ? ''
+      : `<metadata id="buttonic-project">${xmlEscape(stringifyDoc(doc))}</metadata>`
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(-R)} ${fmt(-R)} ${fmt(doc.diameterMM)} ${fmt(

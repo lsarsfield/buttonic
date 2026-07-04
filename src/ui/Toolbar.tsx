@@ -1,12 +1,19 @@
 import { redo, undo, useCanRedo, useCanUndo, useEngraver } from '../state/store'
 import { useViewport } from '../state/viewport'
+import { ButtonSwitcher } from './ButtonSwitcher'
 import { SegmentedControl } from './controls/SegmentedControl'
 
-export function Toolbar({ onExport, onNew }: { onExport: () => void; onNew: () => void }) {
-  const doc = useEngraver((s) => s.doc)
+export function Toolbar({
+  onExport,
+  onNew,
+  onOpen,
+}: {
+  onExport: () => void
+  onNew: () => void
+  onOpen: () => void
+}) {
   const view = useEngraver((s) => s.view)
   const setView = useEngraver((s) => s.setView)
-  const updateDocMeta = useEngraver((s) => s.updateDocMeta)
   const canUndo = useCanUndo()
   const canRedo = useCanRedo()
 
@@ -16,12 +23,10 @@ export function Toolbar({ onExport, onNew }: { onExport: () => void; onNew: () =
       <button type="button" onClick={onNew} title="New from template">
         New
       </button>
-      <input
-        className="doc-name"
-        value={doc.name}
-        onChange={(e) => updateDocMeta({ name: e.target.value })}
-        spellCheck={false}
-      />
+      <button type="button" onClick={onOpen} title="Open a project file or exported SVG (⌘O)">
+        Open…
+      </button>
+      <ButtonSwitcher onNew={onNew} />
       <span className="toolbar-spacer" />
       <div className="toolbar-group">
         <button type="button" disabled={!canUndo} onClick={undo} title="Undo (⌘Z)">

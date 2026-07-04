@@ -10,16 +10,13 @@ export type ParseDocResult =
   | { ok: true; doc: ButtonDoc }
   | { ok: false; error: string }
 
-/** JSON text → migrated, validated ButtonDoc. Never throws. */
-export function parseDoc(json: string): ParseDocResult {
-  let raw: unknown
-  try {
-    raw = JSON.parse(json)
-  } catch {
-    return { ok: false, error: 'file is not valid JSON' }
-  }
+/**
+ * Plain value → migrated, validated ButtonDoc. Never throws. Used directly by
+ * the workspace store, which persists structured-clone objects, not JSON text.
+ */
+export function coerceDoc(raw: unknown): ParseDocResult {
   if (typeof raw !== 'object' || raw === null) {
-    return { ok: false, error: 'file is not a project document' }
+    return { ok: false, error: 'value is not a project document' }
   }
   let migrated: Record<string, unknown>
   try {
@@ -28,4 +25,15 @@ export function parseDoc(json: string): ParseDocResult {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
   return validateDoc(migrated)
+}
+
+/** JSON text → migrated, validated ButtonDoc. Never throws. */
+export function parseDoc(json: string): ParseDocResult {
+  let raw: unknown
+  try {
+    raw = JSON.parse(json)
+  } catch {
+    return { ok: false, error: 'file is not valid JSON' }
+  }
+  return coerceDoc(raw)
 }
