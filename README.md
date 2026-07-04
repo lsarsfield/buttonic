@@ -65,10 +65,13 @@ warning banner.
 
 ## Fonts
 
-Bundled (OFL, licenses in `public/fonts/`): Cinzel, EB Garamond, UnifrakturCook.
+A bundled dozen (OFL/Apache, licenses in `public/fonts/`, lazy-loaded on first use):
+Cinzel (engraved caps), EB Garamond (classic serif), UnifrakturCook (blackletter),
+Roboto (universal sans), Oswald (condensed industrial), Playfair Display (didone),
+Jost (geometric), Roboto Slab, Pinyon Script (copperplate), Rye (western),
+Allerta Stencil, Bebas Neue (display caps).
 Upload any `.ttf`/`.otf`. Kerning uses what opentype.js can read (GPOS support varies by
-font — Cinzel kerns, EB Garamond's pairs aren't readable; letter-spacing is the manual
-escape hatch). No WOFF2.
+font — letter-spacing is the manual escape hatch). No WOFF2.
 
 **Local fonts** (Chrome/Edge): the font picker's `Local…` button browses the fonts
 installed on your machine via the Local Font Access API — one permission prompt, previews

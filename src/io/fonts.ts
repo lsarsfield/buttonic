@@ -23,8 +23,17 @@ const base = import.meta.env.BASE_URL
 
 export const BUNDLED_FONTS: readonly BundledFont[] = [
   { id: 'cinzel', label: 'Cinzel (engraved caps)', url: `${base}fonts/cinzel.ttf` },
-  { id: 'garamond', label: 'EB Garamond', url: `${base}fonts/ebgaramond.ttf` },
+  { id: 'garamond', label: 'EB Garamond (classic serif)', url: `${base}fonts/ebgaramond.ttf` },
   { id: 'unifraktur', label: 'UnifrakturCook (blackletter)', url: `${base}fonts/unifrakturcook-bold.ttf` },
+  { id: 'roboto', label: 'Roboto (universal sans)', url: `${base}fonts/roboto.ttf` },
+  { id: 'oswald', label: 'Oswald (condensed industrial)', url: `${base}fonts/oswald.ttf` },
+  { id: 'playfair', label: 'Playfair Display (didone luxury)', url: `${base}fonts/playfair-display.ttf` },
+  { id: 'jost', label: 'Jost (geometric)', url: `${base}fonts/jost.ttf` },
+  { id: 'robotoslab', label: 'Roboto Slab (slab industrial)', url: `${base}fonts/roboto-slab.ttf` },
+  { id: 'pinyon', label: 'Pinyon Script (copperplate)', url: `${base}fonts/pinyon-script.ttf` },
+  { id: 'rye', label: 'Rye (western)', url: `${base}fonts/rye.ttf` },
+  { id: 'stencil', label: 'Allerta Stencil (workwear)', url: `${base}fonts/allerta-stencil.ttf` },
+  { id: 'bebas', label: 'Bebas Neue (display caps)', url: `${base}fonts/bebas-neue.ttf` },
 ]
 
 const cache = new Map<FontId, opentype.Font>()
@@ -135,14 +144,33 @@ export async function uploadFont(file: File): Promise<{ ok: true; fontId: FontId
   return { ok: true, fontId }
 }
 
-/** Options for font pickers: bundled faces + doc-embedded fonts + local references. */
-export function fontOptions(doc: ButtonDoc): { value: string; label: string }[] {
+export interface FontOption {
+  value: string
+  label: string
+}
+
+export interface FontOptionGroup {
+  label: string
+  options: FontOption[]
+}
+
+/** Grouped options for font pickers: bundled faces / doc-embedded fonts / local references. */
+export function fontOptionGroups(doc: ButtonDoc): FontOptionGroup[] {
   const uploaded = Object.entries(doc.assets)
     .filter(([, a]) => a.kind === 'font')
     .map(([id, a]) => ({ value: id, label: a.name.replace(/\.(ttf|otf)$/i, '') }))
   const local = Object.entries(doc.localFonts).map(([id, ref]) => ({
     value: id,
-    label: `${ref.fullName || ref.family} (local${cache.has(id) ? '' : ' — missing'})`,
+    label: `${ref.fullName || ref.family}${cache.has(id) ? '' : ' — missing'}`,
   }))
-  return [...BUNDLED_FONTS.map((f) => ({ value: f.id, label: f.label })), ...uploaded, ...local]
+  return [
+    { label: 'Bundled', options: BUNDLED_FONTS.map((f) => ({ value: f.id, label: f.label })) },
+    { label: 'This project', options: uploaded },
+    { label: 'Local (this machine)', options: local },
+  ].filter((g) => g.options.length > 0)
+}
+
+/** Flat view of the grouped options (membership checks). */
+export function fontOptions(doc: ButtonDoc): FontOption[] {
+  return fontOptionGroups(doc).flatMap((g) => g.options)
 }

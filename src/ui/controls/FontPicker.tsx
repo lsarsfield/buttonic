@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { fontOptions, getFontError, getLoadedFont, uploadFont } from '../../io/fonts'
+import { fontOptionGroups, fontOptions, getFontError, getLoadedFont, uploadFont } from '../../io/fonts'
 import { embedLocalFont, resolveLocalFonts } from '../../io/localFonts'
 import { isLocalFontId } from '../../model/types'
 import { useEngraver } from '../../state/store'
@@ -20,8 +20,8 @@ export function FontPicker({ value, onChange }: FontPickerProps) {
   const [localDialog, setLocalDialog] = useState(false)
   const [relinking, setRelinking] = useState(false)
 
-  const options = fontOptions(doc)
-  const known = options.some((o) => o.value === value)
+  const groups = fontOptionGroups(doc)
+  const known = fontOptions(doc).some((o) => o.value === value)
   const isLocal = isLocalFontId(value)
   const localLoaded = isLocal && getLoadedFont(value) !== null
   const localMissing = isLocal && !localLoaded
@@ -67,10 +67,14 @@ export function FontPicker({ value, onChange }: FontPickerProps) {
         <span className="field-label">Font</span>
         <select value={known ? value : ''} onChange={(e) => onChange(e.target.value)}>
           {!known && <option value="">— missing font —</option>}
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
+          {groups.map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
         <button
