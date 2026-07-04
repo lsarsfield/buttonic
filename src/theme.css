@@ -703,6 +703,7 @@ button.active {
 .inspector-body {
   padding: 10px;
   overflow-y: auto;
+  overflow-x: hidden; /* the side panel must never scroll sideways */
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -786,12 +787,24 @@ button.active {
 
 .field select {
   flex: 1;
+  /* flex min-width:auto would force the row wider than the panel to fit the
+     longest option label — allow shrinking and ellipsize instead */
+  min-width: 0;
+  width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
   font: inherit;
   color: var(--text);
   background: var(--bg0);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 4px 6px;
+}
+
+.field > button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .field-toggle input {
