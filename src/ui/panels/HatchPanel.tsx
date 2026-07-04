@@ -1,0 +1,98 @@
+import type { HatchLayer } from '../../model/types'
+import { useEngraver } from '../../state/store'
+import { NumberField } from '../controls/NumberField'
+import { SegmentedControl } from '../controls/SegmentedControl'
+import { Slider } from '../controls/Slider'
+
+export function HatchPanel({ layer }: { layer: HatchLayer }) {
+  const updateLayer = useEngraver((s) => s.updateLayer)
+  const maxR = useEngraver((s) => s.doc.diameterMM / 2)
+  const update = (patch: Partial<HatchLayer>) => updateLayer(layer.id, patch)
+
+  const rMid = (layer.rInnerMM + layer.rOuterMM) / 2
+  const density = rMid > 0 ? layer.count / (2 * Math.PI * rMid) : 0
+
+  return (
+    <>
+      <div className="field-group">
+        <NumberField
+          label="Count"
+          value={layer.count}
+          min={4}
+          max={720}
+          step={1}
+          onChange={(count) => update({ count: Math.round(count) })}
+        />
+        <Slider
+          label=""
+          value={layer.count}
+          min={4}
+          max={480}
+          step={1}
+          onChange={(count) => update({ count })}
+        />
+        <div className="readout">
+          {density.toFixed(2)} ticks/mm at mid-radius
+        </div>
+      </div>
+      <div className="field-group">
+        <NumberField
+          label="Inner r"
+          value={layer.rInnerMM}
+          min={0}
+          max={maxR}
+          step={0.05}
+          unit="mm"
+          onChange={(rInnerMM) => update({ rInnerMM: Math.min(rInnerMM, layer.rOuterMM - 0.05) })}
+        />
+        <NumberField
+          label="Outer r"
+          value={layer.rOuterMM}
+          min={0.1}
+          max={maxR}
+          step={0.05}
+          unit="mm"
+          onChange={(rOuterMM) => update({ rOuterMM: Math.max(rOuterMM, layer.rInnerMM + 0.05) })}
+        />
+        <NumberField
+          label="Stroke"
+          value={layer.strokeMM}
+          min={0.02}
+          max={1}
+          step={0.01}
+          unit="mm"
+          onChange={(strokeMM) => update({ strokeMM })}
+        />
+      </div>
+      <div className="field-group">
+        <NumberField
+          label="Twist"
+          value={layer.twistDeg}
+          min={-90}
+          max={90}
+          step={0.5}
+          unit="°"
+          onChange={(twistDeg) => update({ twistDeg })}
+        />
+        <Slider
+          label=""
+          value={layer.twistDeg}
+          min={-90}
+          max={90}
+          step={0.5}
+          unit="°"
+          onChange={(twistDeg) => update({ twistDeg })}
+        />
+        <SegmentedControl
+          label="Cap"
+          value={layer.cap}
+          options={[
+            { value: 'butt', label: 'Butt' },
+            { value: 'round', label: 'Round' },
+          ]}
+          onChange={(cap) => update({ cap })}
+        />
+      </div>
+    </>
+  )
+}
