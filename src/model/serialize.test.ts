@@ -51,8 +51,8 @@ describe('serialize round-trip', () => {
   })
 })
 
-describe('v1 → v2 migration', () => {
-  it('adds an empty localFonts registry to v1 documents', () => {
+describe('migrations', () => {
+  it('v1: adds an empty localFonts registry', () => {
     const v1 = { ...makeBlankDoc(), version: 1 } as Record<string, unknown>
     delete v1.localFonts
     const r = parseDoc(JSON.stringify(v1))
@@ -60,6 +60,24 @@ describe('v1 → v2 migration', () => {
     if (r.ok) {
       expect(r.doc.version).toBe(DOC_VERSION)
       expect(r.doc.localFonts).toEqual({})
+    }
+  })
+
+  it('v2: ring text layers gain symmetric-layout defaults', () => {
+    const oldRingText = makeRingTextLayer() as unknown as Record<string, unknown>
+    delete oldRingText.repeats
+    delete oldRingText.dividerSource
+    delete oldRingText.dividerSizeMM
+    delete oldRingText.dividerStrokeMM
+    const v2 = { ...makeBlankDoc(), version: 2, layers: [oldRingText] }
+    const r = parseDoc(JSON.stringify(v2))
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      const layer = r.doc.layers[0]!
+      if (layer.type !== 'ringText') throw new Error('expected ringText')
+      expect(layer.repeats).toBe(1)
+      expect(layer.dividerSource).toBeNull()
+      expect(layer.dividerSizeMM).toBe(0.8)
     }
   })
 })

@@ -49,7 +49,7 @@ function compileByType(layer: Layer, ctx: CompileCtx): CompiledLayer {
     case 'repeat':
       return compileRepeat(layer, ctx.getSvgAsset)
     case 'ringText':
-      return compileRingText(layer, ctx.getFont(layer.fontId), ctx.toleranceMM)
+      return compileRingText(layer, ctx.getFont(layer.fontId), ctx.toleranceMM, ctx.getSvgAsset)
     case 'center':
       return compileCenter(
         layer,

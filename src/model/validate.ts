@@ -29,6 +29,7 @@ const REQUIRED: Record<LayerType, Record<string, 'n' | 's' | 'b'>> = {
   ringText: {
     text: 's', fontId: 's', sizeMM: 'n', radiusMM: 'n', anchorDeg: 'n', anchorAlign: 's',
     letterSpacingMM: 'n', direction: 's', mode: 's', useKerning: 'b',
+    repeats: 'n', dividerSizeMM: 'n', dividerStrokeMM: 'n',
   },
   center: {
     sourceType: 's', text: 's', fontId: 's', sizeMM: 'n', rotationDeg: 'n',
@@ -62,6 +63,12 @@ function checkLayer(value: unknown, index: number): string | null {
     const src = value.source
     if (!isObj(src) || (src.kind !== 'builtin' && src.kind !== 'asset')) {
       return `layer ${index} ("${value.name}") has an invalid motif source`
+    }
+  }
+  if (type === 'ringText' && value.dividerSource !== null) {
+    const src = value.dividerSource
+    if (!isObj(src) || (src.kind !== 'builtin' && src.kind !== 'asset')) {
+      return `layer ${index} ("${value.name}") has an invalid divider source`
     }
   }
   return null

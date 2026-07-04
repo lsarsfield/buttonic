@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 2
+export const DOC_VERSION = 3
 
 /** Local-font ids are namespaced by PostScript name: `local:HelveticaNeue-Bold`. */
 export const LOCAL_FONT_PREFIX = 'local:'
@@ -135,6 +135,13 @@ export interface RingTextLayer extends LayerBase {
   /** arc = classic per-glyph placement (coins); warp = glyph outlines bent through the polar warp. */
   mode: 'arc' | 'warp'
   useKerning: boolean
+  /** The whole text run placed this many times at exact 360/N spacing (symmetric layouts). */
+  repeats: number
+  /** Motif rendered at the midpoints between runs (null = none). */
+  dividerSource: MotifSource | null
+  dividerSizeMM: number
+  /** Stroke width for stroke-type divider motifs. */
+  dividerStrokeMM: number
 }
 
 /** Monogram glyph or SVG asset placed at the axis. */
@@ -279,6 +286,10 @@ export function makeRingTextLayer(patch: Partial<RingTextLayer> = {}): RingTextL
     direction: 'outward',
     mode: 'arc',
     useKerning: true,
+    repeats: 1,
+    dividerSource: null,
+    dividerSizeMM: 0.8,
+    dividerStrokeMM: 0.12,
     ...patch,
   }
 }

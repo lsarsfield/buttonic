@@ -113,6 +113,99 @@ describe('ring text layout', () => {
   })
 })
 
+describe('symmetric layouts (repeats + dividers)', () => {
+  it('repeats=1 with no divider compiles identically to the pre-feature output', () => {
+    const layer = makeRingTextLayer({ text: 'RIVET' })
+    const out = compileRingText(layer, garamond)
+    expect(out.shapes).toHaveLength(1)
+    expect(out.shapes[0]!.kind).toBe('path')
+  })
+
+  it('repeats=2 doubles the glyph runs, second run rotated exactly 180°', () => {
+    const single = compileRingText(makeRingTextLayer({ text: 'AB', repeats: 1 }), garamond)
+    const double = compileRingText(makeRingTextLayer({ text: 'AB', repeats: 2 }), garamond)
+    const countM = (s: { kind: string; d?: string }) =>
+      s.kind === 'path' ? (s.d!.match(/M /g) ?? []).length : 0
+    expect(countM(double.shapes[0]! as never)).toBe(2 * countM(single.shapes[0]! as never))
+    // second run's first point = first run's first point rotated 180° about the origin
+    const pts = [...(double.shapes[0]! as { d: string }).d.matchAll(/M ([-\d.]+) ([-\d.]+)/g)]
+    const subpathsPerRun = pts.length / 2
+    const a = { x: Number(pts[0]![1]), y: Number(pts[0]![2]) }
+    const b = { x: Number(pts[subpathsPerRun]![1]), y: Number(pts[subpathsPerRun]![2]) }
+    expect(b.x).toBeCloseTo(-a.x, 6)
+    expect(b.y).toBeCloseTo(-a.y, 6)
+  })
+
+  it('places dividers at the exact midpoints between runs', () => {
+    const out = compileRingText(
+      makeRingTextLayer({
+        text: 'LIET MFG',
+        repeats: 2,
+        anchorDeg: 0,
+        dividerSource: { kind: 'builtin', motifId: 'dot' },
+        dividerSizeMM: 0.8,
+      }),
+      garamond,
+    )
+    const divider = out.shapes.find((s) => s.kind === 'instanced')
+    expect(divider).toBeDefined()
+    if (divider?.kind !== 'instanced') return
+    expect(divider.transforms.map((t) => t.rotateDeg)).toEqual([90, 270])
+    expect(divider.def.dy).toBeLessThan(0) // sits at the divider radius
+    expect(divider.paint.fill).toBe(true) // dot is a fill motif
+  })
+
+  it('renders dividers even when the font is unavailable', () => {
+    const out = compileRingText(
+      makeRingTextLayer({ text: 'X', repeats: 3, dividerSource: { kind: 'builtin', motifId: 'dot' } }),
+      null,
+    )
+    expect(out.shapes.some((s) => s.kind === 'instanced')).toBe(true)
+    expect(out.warnings.some((w) => /font/i.test(w))).toBe(true)
+  })
+
+  it('warns when repeated runs overlap', () => {
+    const out = compileRingText(
+      makeRingTextLayer({ text: 'WIDE TEXT RUN', sizeMM: 3, radiusMM: 5, repeats: 3 }),
+      garamond,
+    )
+    expect(out.warnings.some((w) => /overlap/.test(w))).toBe(true)
+  })
+
+  it('uses an SVG asset divider via the unit-motif pipeline', () => {
+    const asset = {
+      paths: [
+        {
+          segs: [
+            { type: 'M' as const, x: 0, y: 0 },
+            { type: 'L' as const, x: 4, y: 0 },
+            { type: 'L' as const, x: 2, y: 6 },
+            { type: 'Z' as const },
+          ],
+          fill: true,
+          stroke: false,
+          strokeWidthSrc: 1,
+        },
+      ],
+      box: { x: 0, y: 0, w: 4, h: 6 },
+    }
+    const out = compileRingText(
+      makeRingTextLayer({
+        text: 'AB',
+        repeats: 2,
+        dividerSource: { kind: 'asset', assetId: 'div1' },
+        dividerSizeMM: 1,
+      }),
+      garamond,
+      0.01,
+      () => asset,
+    )
+    const divider = out.shapes.find((s) => s.kind === 'instanced')
+    expect(divider).toBeDefined()
+    if (divider?.kind === 'instanced') expect(divider.transforms).toHaveLength(2)
+  })
+})
+
 describe('centre monogram', () => {
   it('centres the glyph bounding box on the origin', () => {
     const out = compileCenter(makeCenterLayer({ text: 'D', fontId: 'garamond', sizeMM: 6 }), garamond)

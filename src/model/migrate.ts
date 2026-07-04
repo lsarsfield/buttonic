@@ -7,6 +7,15 @@ import { DOC_VERSION } from './types'
 export const migrations: Record<number, (doc: Record<string, unknown>) => Record<string, unknown>> = {
   // v2: machine-local font references (Local Font Access API)
   2: (doc) => ({ ...doc, localFonts: doc.localFonts ?? {} }),
+  // v3: symmetric ring text (repeats + dividers)
+  3: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) =>
+      typeof layer === 'object' && layer !== null && (layer as { type?: string }).type === 'ringText'
+        ? { repeats: 1, dividerSource: null, dividerSizeMM: 0.8, dividerStrokeMM: 0.12, ...layer }
+        : layer,
+    ),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {
