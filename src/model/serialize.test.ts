@@ -29,6 +29,9 @@ function docWithEverything(): ButtonDoc {
     assets: {
       a1: { kind: 'svg', name: 'laurel.svg', dataBase64: 'PHN2Zz48L3N2Zz4=' },
     },
+    localFonts: {
+      'local:TestFont-Bold': { postscriptName: 'TestFont-Bold', family: 'Test Font', fullName: 'Test Font Bold' },
+    },
   }
 }
 
@@ -45,6 +48,19 @@ describe('serialize round-trip', () => {
     const result = parseDoc(stringifyDoc(doc))
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.doc).toEqual(doc)
+  })
+})
+
+describe('v1 → v2 migration', () => {
+  it('adds an empty localFonts registry to v1 documents', () => {
+    const v1 = { ...makeBlankDoc(), version: 1 } as Record<string, unknown>
+    delete v1.localFonts
+    const r = parseDoc(JSON.stringify(v1))
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.doc.version).toBe(DOC_VERSION)
+      expect(r.doc.localFonts).toEqual({})
+    }
   })
 })
 

@@ -603,6 +603,62 @@ button.active {
   font-weight: 600;
 }
 
+/* ------------------------------------------------------------ local fonts */
+
+.local-font-modal {
+  width: 460px;
+}
+
+.local-font-list {
+  max-height: 46vh;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg0);
+  padding: 2px;
+}
+
+.local-font-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  background: transparent;
+  border-radius: 5px;
+}
+.local-font-row:hover:not(:disabled) {
+  background: var(--bg3);
+}
+
+.local-font-preview {
+  flex: 1;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.local-font-style {
+  color: var(--text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.local-missing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.local-missing button {
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+
 /* -------------------------------------------------------------- drag-drop */
 
 .stage-pane.drop-target::after {

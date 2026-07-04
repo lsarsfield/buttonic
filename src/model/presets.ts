@@ -20,6 +20,7 @@ export function presetBlank(): ButtonDoc {
       },
     ],
     assets: {},
+    localFonts: {},
   }
 }
 
@@ -75,6 +76,7 @@ export function presetReferenceA(): ButtonDoc {
       },
     ],
     assets: {},
+    localFonts: {},
   }
 }
 
@@ -108,6 +110,7 @@ export function presetReferenceB(): ButtonDoc {
       },
     ],
     assets: {},
+    localFonts: {},
   }
 }
 

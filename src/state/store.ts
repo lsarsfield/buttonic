@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { useStore } from 'zustand'
 import { temporal } from 'zundo'
 import { immer } from 'zustand/middleware/immer'
-import type { Asset, AssetId, ButtonDoc, Layer, LayerId, LayerType } from '../model/types'
+import type { Asset, AssetId, ButtonDoc, FontId, Layer, LayerId, LayerType, LocalFontRef } from '../model/types'
 import { LAYER_FACTORIES, makeBlankDoc, newId } from '../model/types'
 
 export type ViewMode = 'flat' | 'metal'
@@ -34,6 +34,9 @@ export interface EngraverState {
   moveLayerTo: (id: LayerId, index: number) => void
   updateLayer: (id: LayerId, patch: Partial<Layer>) => void
   updateDocAssets: (patch: Record<AssetId, Asset>) => void
+  addLocalFontRef: (fontId: FontId, ref: LocalFontRef) => void
+  /** Embed a local font: store bytes as an asset, repoint layers, drop the reference. */
+  embedLocalFontRef: (fontId: FontId, assetId: AssetId, asset: Asset) => void
   select: (id: LayerId | null) => void
   setView: (patch: Partial<ViewState>) => void
   bumpAssetsRevision: () => void
@@ -126,6 +129,22 @@ export const useEngraver = create<EngraverState>()(
       updateDocAssets: (patch) =>
         set((s) => {
           Object.assign(s.doc.assets, patch)
+        }),
+
+      addLocalFontRef: (fontId, ref) =>
+        set((s) => {
+          s.doc.localFonts[fontId] = ref
+        }),
+
+      embedLocalFontRef: (fontId, assetId, asset) =>
+        set((s) => {
+          s.doc.assets[assetId] = asset
+          for (const layer of s.doc.layers) {
+            if ((layer.type === 'ringText' || layer.type === 'center') && layer.fontId === fontId) {
+              layer.fontId = assetId
+            }
+          }
+          delete s.doc.localFonts[fontId]
         }),
 
       select: (id) =>

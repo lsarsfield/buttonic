@@ -19,7 +19,9 @@ export function compileRingText(
   font: Font | null,
   toleranceMM = 0.01,
 ): CompiledLayer {
-  if (!font) return { shapes: [], warnings: ['Loading font…'] }
+  if (!font) {
+    return { shapes: [], warnings: ['Font unavailable — text not rendered (loading, or a missing local font).'] }
+  }
   if (layer.text.length === 0) return { shapes: [], warnings: [] }
 
   const r = Math.max(0.1, layer.radiusMM)

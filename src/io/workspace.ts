@@ -5,6 +5,7 @@ import { coerceDoc, parseDoc, stringifyDoc } from '../model/serialize'
 import { useEngraver } from '../state/store'
 import { downloadText, safeFilename } from './download'
 import { openIdbBackend } from './idb'
+import { resetSilentResolve } from './localFonts'
 import { renderThumbSvg } from './thumbnail'
 
 /**
@@ -228,6 +229,7 @@ async function switchTo(id: string, doc: ButtonDoc, flushPrevious: boolean): Pro
   current = id
   storage.set(POINTER_KEY, id)
   suppressNextDocChange = true
+  resetSilentResolve() // the opened doc gets a fresh silent local-font attempt
   useEngraver.getState().setDoc(doc)
   useEngraver.temporal.getState().clear() // mandatory — see invariant 2
 }

@@ -1,9 +1,11 @@
 import { memo, useEffect } from 'react'
 import type { Layer } from '../model/types'
+import { isLocalFontId } from '../model/types'
 import { clearancesAbove, clipCompiled, type ClearanceDisc } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import { annulusPathD } from '../geometry/format'
 import { ensureFontLoaded, getLoadedFont } from '../io/fonts'
+import { ensureLocalFontsResolved } from '../io/localFonts'
 import { ensureSvgParsed, getSvgAsset } from '../io/svgAssets'
 import { useEngraver } from '../state/store'
 import { useViewport } from '../state/viewport'
@@ -16,11 +18,17 @@ export function DocRenderer() {
   const fontsRevision = useEngraver((s) => s.fontsRevision)
 
   // Kick lazy font loads / SVG parses for any layer that needs one; the
-  // revision bump on completion recompiles the affected layers.
+  // revision bump on completion recompiles the affected layers. Local-font
+  // references get one silent resolution attempt (works without a prompt
+  // once permission was granted in a past session).
   useEffect(() => {
+    const wantFont = (fontId: string) => {
+      if (isLocalFontId(fontId)) ensureLocalFontsResolved(doc)
+      else ensureFontLoaded(fontId, doc)
+    }
     for (const layer of doc.layers) {
-      if (layer.type === 'ringText') ensureFontLoaded(layer.fontId, doc)
-      if (layer.type === 'center' && layer.sourceType === 'glyph') ensureFontLoaded(layer.fontId, doc)
+      if (layer.type === 'ringText') wantFont(layer.fontId)
+      if (layer.type === 'center' && layer.sourceType === 'glyph') wantFont(layer.fontId)
       if (layer.type === 'center' && layer.sourceType === 'asset' && layer.assetId) {
         ensureSvgParsed(layer.assetId, doc)
       }
@@ -69,8 +77,12 @@ const LayerGroup = memo(
     discs: ClearanceDisc[]
   }) {
     if (!layer.visible) return null
-    const compiled = discs.length > 0 ? clipCompiled(compileLayer(layer, ctx), discs) : compileLayer(layer, ctx)
-    const hasShapes = compiled.shapes.length > 0
+    const compiled = compileLayer(layer, ctx)
+    const clipped = discs.length > 0 ? clipCompiled(compiled, discs) : compiled
+    const hasShapes = clipped.shapes.length > 0
+    // a layer wholly swallowed by a clearance moat is intentional emptiness,
+    // not a pending dependency — no placeholder for it
+    const swallowedByClearance = !hasShapes && compiled.shapes.length > 0
     return (
       <g
         data-layer-id={layer.id}
@@ -79,8 +91,8 @@ const LayerGroup = memo(
         <HitBand layer={layer} />
         <g pointerEvents="none">
           {hasShapes ? (
-            <ShapesRenderer layerId={layer.id} compiled={compiled} />
-          ) : (
+            <ShapesRenderer layerId={layer.id} compiled={clipped} />
+          ) : swallowedByClearance ? null : (
             <PlaceholderRenderer layer={layer} />
           )}
         </g>

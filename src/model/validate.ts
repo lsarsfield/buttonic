@@ -1,4 +1,4 @@
-import type { Asset, ButtonDoc, Layer, LayerType } from './types'
+import type { Asset, ButtonDoc, Layer, LayerType, LocalFontRef } from './types'
 import { LAYER_TYPE_LABELS } from './types'
 
 export type ValidationResult =
@@ -105,6 +105,14 @@ export function validateDoc(value: unknown): ValidationResult {
     if (err) return { ok: false, error: err }
   }
 
+  const localFonts = value.localFonts ?? {}
+  if (!isObj(localFonts)) return { ok: false, error: 'document localFonts are malformed' }
+  for (const [id, ref] of Object.entries(localFonts)) {
+    if (!isObj(ref) || !isStr(ref.postscriptName) || !isStr(ref.family) || !isStr(ref.fullName)) {
+      return { ok: false, error: `local font reference "${id}" is malformed` }
+    }
+  }
+
   return {
     ok: true,
     doc: {
@@ -114,6 +122,7 @@ export function validateDoc(value: unknown): ValidationResult {
       finish: value.finish as ButtonDoc['finish'],
       layers: value.layers as Layer[],
       assets: assets as Record<string, Asset>,
+      localFonts: localFonts as Record<string, LocalFontRef>,
     },
   }
 }

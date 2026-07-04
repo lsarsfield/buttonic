@@ -70,6 +70,15 @@ Upload any `.ttf`/`.otf`. Kerning uses what opentype.js can read (GPOS support v
 font — Cinzel kerns, EB Garamond's pairs aren't readable; letter-spacing is the manual
 escape hatch). No WOFF2.
 
+**Local fonts** (Chrome/Edge): the font picker's `Local…` button browses the fonts
+installed on your machine via the Local Font Access API — one permission prompt, previews
+rendered in each font, TrueType Collections (`.ttc`, most macOS system fonts) unpacked
+automatically. Projects store local fonts as *references*, not bytes: on a machine without
+the font, the design keeps its settings and shows a re-link prompt instead of that text —
+but exported SVG/PNG always contain baked outlines and render everywhere. A per-font
+**Embed** action copies the bytes into the project when you explicitly want a portable
+file (mind the font's license).
+
 ## Keyboard
 
 `⌘Z / ⇧⌘Z` undo/redo · `⌘S` save project · `⌘O` open project · `⌘D` duplicate layer · `⌫` delete layer ·

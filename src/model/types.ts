@@ -14,7 +14,22 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 1
+export const DOC_VERSION = 2
+
+/** Local-font ids are namespaced by PostScript name: `local:HelveticaNeue-Bold`. */
+export const LOCAL_FONT_PREFIX = 'local:'
+export const isLocalFontId = (fontId: string): boolean => fontId.startsWith(LOCAL_FONT_PREFIX)
+
+/**
+ * A machine-local font referenced by identity, not embedded — designs using
+ * one render only where that font is installed (exports always bake outlines,
+ * so exported SVG/PNG stay portable regardless).
+ */
+export interface LocalFontRef {
+  postscriptName: string
+  family: string
+  fullName: string
+}
 
 export type AssetKind = 'svg' | 'font'
 
@@ -35,6 +50,8 @@ export interface ButtonDoc {
   finish: Finish
   layers: Layer[]
   assets: Record<AssetId, Asset>
+  /** Machine-local fonts used by layers, keyed by their `local:` font id. */
+  localFonts: Record<FontId, LocalFontRef>
 }
 
 /** Fields shared by every layer type. */
@@ -328,5 +345,6 @@ export function makeBlankDoc(): ButtonDoc {
     finish: 'steel',
     layers: [makeRingLayer({ name: 'Rim', radiusMM: 8.2, strokeMM: 0.3 })],
     assets: {},
+    localFonts: {},
   }
 }

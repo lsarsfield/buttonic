@@ -2,10 +2,12 @@ import { DOC_VERSION } from './types'
 
 /**
  * Sequential document migrations: migrations[n] upgrades a version n-1 doc to
- * version n. Empty at v1; the machinery exists from day one so saved files
- * never strand their owners.
+ * version n.
  */
-export const migrations: Record<number, (doc: Record<string, unknown>) => Record<string, unknown>> = {}
+export const migrations: Record<number, (doc: Record<string, unknown>) => Record<string, unknown>> = {
+  // v2: machine-local font references (Local Font Access API)
+  2: (doc) => ({ ...doc, localFonts: doc.localFonts ?? {} }),
+}
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {
   let version = typeof raw.version === 'number' ? raw.version : NaN

@@ -47,6 +47,27 @@ export function registerFontBuffer(fontId: FontId, buffer: ArrayBuffer): opentyp
   return font
 }
 
+/** Register an already-parsed font (local-font resolution parses to match faces). */
+export function registerParsedFont(fontId: FontId, font: opentype.Font): void {
+  cache.set(fontId, font)
+  failed.delete(fontId)
+}
+
+/** Record a load failure so pickers and warnings can explain it. */
+export function markFontFailed(fontId: FontId, error: string): void {
+  failed.set(fontId, error)
+}
+
+export function clearFontFailure(fontId: FontId): void {
+  failed.delete(fontId)
+}
+
+export function _resetFontCachesForTests(): void {
+  cache.clear()
+  pending.clear()
+  failed.clear()
+}
+
 /**
  * Idempotent lazy load. Bundled ids fetch from public/fonts; asset-backed ids
  * decode from the doc. Bumps fontsRevision when the parse lands.
@@ -114,10 +135,14 @@ export async function uploadFont(file: File): Promise<{ ok: true; fontId: FontId
   return { ok: true, fontId }
 }
 
-/** Options for font pickers: bundled faces + fonts embedded in this doc. */
+/** Options for font pickers: bundled faces + doc-embedded fonts + local references. */
 export function fontOptions(doc: ButtonDoc): { value: string; label: string }[] {
   const uploaded = Object.entries(doc.assets)
     .filter(([, a]) => a.kind === 'font')
     .map(([id, a]) => ({ value: id, label: a.name.replace(/\.(ttf|otf)$/i, '') }))
-  return [...BUNDLED_FONTS.map((f) => ({ value: f.id, label: f.label })), ...uploaded]
+  const local = Object.entries(doc.localFonts).map(([id, ref]) => ({
+    value: id,
+    label: `${ref.fullName || ref.family} (local${cache.has(id) ? '' : ' — missing'})`,
+  }))
+  return [...BUNDLED_FONTS.map((f) => ({ value: f.id, label: f.label })), ...uploaded, ...local]
 }

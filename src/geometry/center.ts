@@ -45,7 +45,9 @@ export function compileCenter(
     }))
     return { shapes, warnings: [] }
   }
-  if (!font) return { shapes: [], warnings: ['Loading font…'] }
+  if (!font) {
+    return { shapes: [], warnings: ['Font unavailable — text not rendered (loading, or a missing local font).'] }
+  }
   if (layer.text.length === 0) return { shapes: [], warnings: [] }
 
   const path = font.getPath(layer.text, 0, 0, layer.sizeMM, { kerning: true })
