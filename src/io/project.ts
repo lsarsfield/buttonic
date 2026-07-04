@@ -4,7 +4,9 @@ import { useEngraver } from '../state/store'
 import { downloadText, safeFilename } from './download'
 import { extractEmbeddedProject } from './exportSvg'
 
-const AUTOSAVE_KEY = 'button-engraver:autosave'
+const AUTOSAVE_KEY = 'buttonic:autosave'
+/** Pre-rename key — read once as a fallback so existing sessions survive. */
+const LEGACY_AUTOSAVE_KEY = 'button-engraver:autosave'
 
 export function saveProject(doc: ButtonDoc): void {
   downloadText(stringifyDoc(doc), `${safeFilename(doc.name)}.button.json`, 'application/json')
@@ -18,7 +20,7 @@ export async function loadProjectFile(file: File): Promise<LoadResult> {
   if (/\.svg$/i.test(file.name) || text.trimStart().startsWith('<')) {
     const embedded = extractEmbeddedProject(text)
     if (!embedded) {
-      return { ok: false, error: 'This SVG has no embedded Button Engraver project.' }
+      return { ok: false, error: 'This SVG has no embedded Buttonic project.' }
     }
     text = embedded
   }
@@ -55,7 +57,7 @@ export function startAutosave(): () => void {
 
 export function readAutosave(): ButtonDoc | null {
   try {
-    const json = localStorage.getItem(AUTOSAVE_KEY)
+    const json = localStorage.getItem(AUTOSAVE_KEY) ?? localStorage.getItem(LEGACY_AUTOSAVE_KEY)
     if (!json) return null
     const result = parseDoc(json)
     return result.ok ? result.doc : null

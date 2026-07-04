@@ -172,7 +172,7 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
     : ''
   const mirror = options.mirrorForDie ? ` transform="scale(-1 1)"` : ''
   const defsBlock = defs.length > 0 ? `<defs>\n${defs.join('\n')}\n</defs>\n` : ''
-  const meta = `<metadata id="button-engraver-project">${xmlEscape(stringifyDoc(doc))}</metadata>`
+  const meta = `<metadata id="buttonic-project">${xmlEscape(stringifyDoc(doc))}</metadata>`
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(-R)} ${fmt(-R)} ${fmt(doc.diameterMM)} ${fmt(
@@ -189,9 +189,12 @@ ${layerMarkup.join('\n')}
   return { svg, warnings: [...new Set(warnings)] }
 }
 
-/** Re-open an exported SVG as a project (reads the embedded metadata JSON). */
+/**
+ * Re-open an exported SVG as a project (reads the embedded metadata JSON).
+ * Accepts the pre-rename "button-engraver-project" id so older exports open.
+ */
 export function extractEmbeddedProject(svgText: string): string | null {
-  const m = svgText.match(/<metadata id="button-engraver-project">([\s\S]*?)<\/metadata>/)
+  const m = svgText.match(/<metadata id="(?:buttonic|button-engraver)-project">([\s\S]*?)<\/metadata>/)
   if (!m) return null
   return m[1]!
     .replace(/&lt;/g, '<')

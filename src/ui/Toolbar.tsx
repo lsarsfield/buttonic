@@ -12,7 +12,7 @@ export function Toolbar({ onExport, onNew }: { onExport: () => void; onNew: () =
 
   return (
     <div className="toolbar">
-      <span className="wordmark">◉ Button Engraver</span>
+      <span className="wordmark">◉ Buttonic</span>
       <button type="button" onClick={onNew} title="New from template">
         New
       </button>

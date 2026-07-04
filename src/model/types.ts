@@ -1,5 +1,5 @@
 /**
- * Button Engraver document model.
+ * Buttonic document model.
  *
  * A ButtonDoc is the single source of truth: a button diameter plus an ordered
  * stack of parametric ring layers, every one computed from the centre axis

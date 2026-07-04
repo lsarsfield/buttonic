@@ -26,7 +26,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - run: npx vite build --base=/button-engraver/
+      - run: npx vite build --base=/buttonic/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
