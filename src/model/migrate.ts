@@ -16,6 +16,19 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
         : layer,
     ),
   }),
+  // v4: boolean knockouts (booleanRole) + text halos (haloMM/haloMode/haloStrokeMM)
+  4: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) => {
+      if (typeof layer !== 'object' || layer === null) return layer
+      const t = (layer as { type?: string }).type
+      if (t === 'ringText' || t === 'center') {
+        return { booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1, ...layer }
+      }
+      if (t === 'repeat' || t === 'bend') return { booleanRole: 'draw', ...layer }
+      return layer
+    }),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

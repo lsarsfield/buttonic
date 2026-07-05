@@ -36,7 +36,11 @@ function compileDoc(doc: ReturnType<typeof presetReferenceA>) {
     getSvgAsset: () => null,
   }
   return doc.layers.map((layer, index) => {
-    const compiled = clipCompiled(compileLayer(layer, ctx), clearancesAbove(doc.layers, index))
+    const compiled = clipCompiled(
+      compileLayer(layer, ctx),
+      { discs: clearancesAbove(doc.layers, index), regions: [] },
+      EXPORT_TOLERANCE_MM,
+    )
     return { layer: layer.id, warnings: compiled.warnings, shapes: compiled.shapes }
   })
 }

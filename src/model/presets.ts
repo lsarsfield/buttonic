@@ -73,6 +73,7 @@ export function presetReferenceA(): ButtonDoc {
         sourceType: 'glyph', text: 'F', fontId: 'garamond', assetId: null,
         sizeMM: 2.1, rotationDeg: 0, offsetXMM: 0, offsetYMM: 0,
         render: 'fill', strokeMM: 0.12, clearanceMM: 2.3,
+        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,
       },
     ],
     assets: {},
@@ -93,6 +94,7 @@ export function presetReferenceB(): ButtonDoc {
         sourceType: 'glyph', text: 'D', fontId: 'unifraktur', assetId: null,
         sizeMM: 5.6, rotationDeg: 0, offsetXMM: 0, offsetYMM: 0,
         render: 'fill', strokeMM: 0.12, clearanceMM: 0,
+        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,
       },
       {
         id: 'refB-border', type: 'ring', name: 'Inner border', visible: true, phaseDeg: 0,
@@ -103,6 +105,7 @@ export function presetReferenceB(): ButtonDoc {
         source: { kind: 'builtin', motifId: 'chevron' }, count: 46, radiusMM: 6.55, sizeMM: 0.95,
         align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
         rows: 2, rowGapMM: 1.05, staggerRow2: true, flipRow2: true, strokeMM: 0.15,
+        booleanRole: 'draw',
       },
       {
         id: 'refB-rim', type: 'ring', name: 'Rim', visible: true, phaseDeg: 0,

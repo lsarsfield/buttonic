@@ -14,7 +14,12 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 3
+export const DOC_VERSION = 4
+
+/** Whether a content layer engraves its geometry or subtracts it from below. */
+export type BooleanRole = 'draw' | 'subtract'
+/** Halo appearance: clear the pattern only, or also engrave the halo boundary. */
+export type HaloMode = 'clear' | 'outline'
 
 /** Local-font ids are namespaced by PostScript name: `local:HelveticaNeue-Bold`. */
 export const LOCAL_FONT_PREFIX = 'local:'
@@ -116,6 +121,8 @@ export interface RepeatLayer extends LayerBase {
   flipRow2: boolean
   /** Stroke width for stroke-type motifs. */
   strokeMM: number
+  /** draw = engrave the motifs; subtract = knock them out of filled layers below. */
+  booleanRole: BooleanRole
 }
 
 /** Text set on a circular baseline as real glyph outlines. */
@@ -142,6 +149,14 @@ export interface RingTextLayer extends LayerBase {
   dividerSizeMM: number
   /** Stroke width for stroke-type divider motifs. */
   dividerStrokeMM: number
+  /** draw = engrave the text; subtract = knock it out of filled layers below. */
+  booleanRole: BooleanRole
+  /** > 0: the text outline grown by this margin clears pattern layers below. */
+  haloMM: number
+  /** clear = pattern cleared only; outline = also engrave the halo boundary. */
+  haloMode: HaloMode
+  /** Stroke width of the engraved halo boundary (haloMode 'outline'). */
+  haloStrokeMM: number
 }
 
 /** Monogram glyph or SVG asset placed at the axis. */
@@ -161,6 +176,14 @@ export interface CenterLayer extends LayerBase {
   strokeMM: number
   /** > 0 clips line geometry of layers below inside this disc radius (the die "moat"). */
   clearanceMM: number
+  /** draw = engrave the monogram; subtract = knock it out of filled layers below. */
+  booleanRole: BooleanRole
+  /** > 0: the outline grown by this margin clears pattern layers below (shape-following). */
+  haloMM: number
+  /** clear = pattern cleared only; outline = also engrave the halo boundary. */
+  haloMode: HaloMode
+  /** Stroke width of the engraved halo boundary (haloMode 'outline'). */
+  haloStrokeMM: number
 }
 
 /** Arbitrary SVG warped into an annulus band — bbox x → angle, bbox y → radius. */
@@ -182,6 +205,8 @@ export interface BendLayer extends LayerBase {
   alternateMirror: boolean
   strokeHandling: 'auto' | 'centerline' | 'outline'
   strokeMM: number
+  /** draw = engrave the warped art; subtract = knock it out of filled layers below. */
+  booleanRole: BooleanRole
 }
 
 export type Layer =
@@ -265,6 +290,7 @@ export function makeRepeatLayer(patch: Partial<RepeatLayer> = {}): RepeatLayer {
     staggerRow2: true,
     flipRow2: true,
     strokeMM: 0.12,
+    booleanRole: 'draw',
     ...patch,
   }
 }
@@ -290,6 +316,10 @@ export function makeRingTextLayer(patch: Partial<RingTextLayer> = {}): RingTextL
     dividerSource: null,
     dividerSizeMM: 0.8,
     dividerStrokeMM: 0.12,
+    booleanRole: 'draw',
+    haloMM: 0,
+    haloMode: 'clear',
+    haloStrokeMM: 0.1,
     ...patch,
   }
 }
@@ -312,6 +342,10 @@ export function makeCenterLayer(patch: Partial<CenterLayer> = {}): CenterLayer {
     render: 'fill',
     strokeMM: 0.12,
     clearanceMM: 0,
+    booleanRole: 'draw',
+    haloMM: 0,
+    haloMode: 'clear',
+    haloStrokeMM: 0.1,
     ...patch,
   }
 }
@@ -335,6 +369,7 @@ export function makeBendLayer(patch: Partial<BendLayer> = {}): BendLayer {
     alternateMirror: false,
     strokeHandling: 'auto',
     strokeMM: 0.1,
+    booleanRole: 'draw',
     ...patch,
   }
 }

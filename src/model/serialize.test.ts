@@ -80,6 +80,32 @@ describe('migrations', () => {
       expect(layer.dividerSizeMM).toBe(0.8)
     }
   })
+
+  it('v3: content layers gain boolean-role/halo defaults without overwriting values', () => {
+    const oldText = makeRingTextLayer({ booleanRole: 'subtract' }) as unknown as Record<string, unknown>
+    for (const k of ['booleanRole', 'haloMM', 'haloMode', 'haloStrokeMM']) delete oldText[k]
+    const keepRole = makeCenterLayer({ booleanRole: 'subtract' }) as unknown as Record<string, unknown>
+    for (const k of ['haloMM', 'haloMode', 'haloStrokeMM'] as const) delete keepRole[k]
+    const v3 = { ...makeBlankDoc(), version: 3, layers: [oldText, keepRole] }
+    const r = parseDoc(JSON.stringify(v3))
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      const text = r.doc.layers[0]!
+      const center = r.doc.layers[1]!
+      if (text.type !== 'ringText' || center.type !== 'center') throw new Error('type')
+      expect(text.booleanRole).toBe('draw') // absent → default
+      expect(text.haloMM).toBe(0)
+      expect(text.haloMode).toBe('clear')
+      expect(center.booleanRole).toBe('subtract') // present → preserved
+    }
+  })
+
+  it('a v4 subtract layer round-trips unchanged', () => {
+    const doc = { ...makeBlankDoc(), layers: [makeCenterLayer({ booleanRole: 'subtract', haloMM: 0.5, haloMode: 'outline' })] }
+    const r = parseDoc(stringifyDoc(doc))
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.doc).toEqual(doc)
+  })
 })
 
 describe('coerceDoc (plain values, no JSON text)', () => {

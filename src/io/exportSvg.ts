@@ -142,7 +142,7 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
     if (!layer.visible) return
     let compiled = compileLayer(layer, ctx)
     const discs = clearancesAbove(doc.layers, index)
-    if (discs.length > 0) compiled = clipCompiled(compiled, discs)
+    if (discs.length > 0) compiled = clipCompiled(compiled, { discs, regions: [] }, ctx.toleranceMM)
     for (const w of compiled.warnings) warnings.push(`${layer.name}: ${w}`)
 
     const body: string[] = []

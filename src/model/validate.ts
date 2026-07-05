@@ -25,19 +25,23 @@ const REQUIRED: Record<LayerType, Record<string, 'n' | 's' | 'b'>> = {
   repeat: {
     count: 'n', radiusMM: 'n', sizeMM: 'n', align: 's', rotationOffsetDeg: 'n',
     alternateFlip: 'b', rows: 'n', rowGapMM: 'n', staggerRow2: 'b', flipRow2: 'b', strokeMM: 'n',
+    booleanRole: 's',
   },
   ringText: {
     text: 's', fontId: 's', sizeMM: 'n', radiusMM: 'n', anchorDeg: 'n', anchorAlign: 's',
     letterSpacingMM: 'n', direction: 's', mode: 's', useKerning: 'b',
     repeats: 'n', dividerSizeMM: 'n', dividerStrokeMM: 'n',
+    booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n',
   },
   center: {
     sourceType: 's', text: 's', fontId: 's', sizeMM: 'n', rotationDeg: 'n',
     offsetXMM: 'n', offsetYMM: 'n', render: 's', strokeMM: 'n', clearanceMM: 'n',
+    booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n',
   },
   bend: {
     rInnerMM: 'n', rOuterMM: 'n', startDeg: 'n', sweepMode: 's', sweepDeg: 'n',
     repeat: 'n', gapDeg: 'n', flipRadial: 'b', alternateMirror: 'b', strokeHandling: 's', strokeMM: 'n',
+    booleanRole: 's',
   },
 }
 

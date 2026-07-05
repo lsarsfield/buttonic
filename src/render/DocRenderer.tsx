@@ -78,7 +78,8 @@ const LayerGroup = memo(
   }) {
     if (!layer.visible) return null
     const compiled = compileLayer(layer, ctx)
-    const clipped = discs.length > 0 ? clipCompiled(compiled, discs) : compiled
+    const clipped =
+      discs.length > 0 ? clipCompiled(compiled, { discs, regions: [] }, INTERACTIVE_TOLERANCE_MM) : compiled
     const hasShapes = clipped.shapes.length > 0
     // a layer wholly swallowed by a clearance moat is intentional emptiness,
     // not a pending dependency — no placeholder for it
