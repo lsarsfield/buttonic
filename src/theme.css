@@ -6,8 +6,11 @@
   --line: #33363e;
   --text: #d8dade;
   --text-dim: #8b8e98;
-  --accent: #d9a441;
-  --accent-dim: #8a6a2e;
+  /* Monochrome accent: near-white for active/selected/primary (reads brighter
+     than normal text, so the hierarchy survives without colour); mid-grey for
+     dimmer fills, borders and selection outlines. */
+  --accent: #eef0f3;
+  --accent-dim: #565b66;
   --engrave: #e9e7df;
   --face: #24262b;
   --face-edge: #3a3d45;
@@ -153,7 +156,7 @@ button.active {
 }
 .button-primary:hover:not(:disabled) {
   background: var(--accent);
-  color: #1a1405;
+  color: #17181c;
 }
 .button-primary:disabled {
   background: var(--bg2);
@@ -287,7 +290,7 @@ button.active {
 }
 
 .badge-cut {
-  color: #1a1405;
+  color: #17181c;
   background: var(--accent);
   border-color: var(--accent);
 }
