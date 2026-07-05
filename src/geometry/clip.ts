@@ -121,6 +121,20 @@ interface Seg {
 const insideAny = (x: number, y: number, regions: MultiPolygon[]): boolean =>
   regions.some((mp) => pointInMultiPolygon(x, y, mp))
 
+/**
+ * Minimum length for a surviving clipped stroke fragment. A piece shorter than
+ * the stroke is wide reads as a stray dot, not a tick — these grazing slivers
+ * appear where a tick crosses a serif or a faceted halo edge. Floored so
+ * hairline strokes still shed sub-tolerance crumbs.
+ */
+const stubMinLen = (strokeWidthMM: number | undefined): number => Math.max(strokeWidthMM ?? 0, 0.08)
+
+function polylineLen(pts: Pt[]): number {
+  let len = 0
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y)
+  return len
+}
+
 /** t-params in (0,1) where segment a→b crosses any region edge. */
 function segCrossings(ax: number, ay: number, bx: number, by: number, regions: MultiPolygon[]): number[] {
   const ts: number[] = []
@@ -276,7 +290,9 @@ function regionClipShape(
         out.push(shape)
         return
       }
+      const lineMin = stubMinLen(shape.paint.stroke?.widthMM)
       for (const s of clipSegmentOutsideRegions(shape.x1, shape.y1, shape.x2, shape.y2, regions)) {
+        if (Math.hypot(s.bx - s.ax, s.by - s.ay) < lineMin) continue // drop grazing slivers
         out.push({ kind: 'line', x1: s.ax, y1: s.ay, x2: s.bx, y2: s.by, paint: shape.paint })
       }
       return
@@ -314,12 +330,13 @@ function regionClipShape(
         }
       } else {
         // stroked path (warped centreline / halo outline): clip each polyline segment
+        const minLen = stubMinLen(shape.paint.stroke?.widthMM)
         const parts: string[] = []
         for (const sub of flattenSegs(segs, tolMM)) {
           const pts = sub.pts
           let open: Pt[] = []
           const flush = () => {
-            if (open.length >= 2) {
+            if (open.length >= 2 && polylineLen(open) >= minLen) {
               parts.push(`M ${fmt(open[0]!.x)} ${fmt(open[0]!.y)}`)
               for (let i = 1; i < open.length; i++) parts.push(`L ${fmt(open[i]!.x)} ${fmt(open[i]!.y)}`)
             }
