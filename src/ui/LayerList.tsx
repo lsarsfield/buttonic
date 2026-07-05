@@ -119,6 +119,11 @@ function LayerRow({
       <span className="badge" title={LAYER_TYPE_LABELS[layer.type]}>
         {TYPE_BADGES[layer.type]}
       </span>
+      {'booleanRole' in layer && layer.booleanRole === 'subtract' && (
+        <span className="badge badge-cut" title="Cut out — subtracts from filled layers below">
+          CUT
+        </span>
+      )}
       {renaming ? (
         <input
           className="rename-input"

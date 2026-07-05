@@ -24,6 +24,11 @@ export interface CompileCtx {
 export const INTERACTIVE_TOLERANCE_MM = 0.01
 export const EXPORT_TOLERANCE_MM = 0.0025
 
+/** Memo key covering everything that changes a layer's compiled geometry.
+ *  Shared verbatim by keepout.ts so region caches invalidate in lockstep. */
+export const compileCtxKey = (ctx: CompileCtx): string =>
+  `${ctx.diameterMM}|${ctx.toleranceMM}|${ctx.assetsRevision}|${ctx.fontsRevision}`
+
 /**
  * Memoized per-layer compile. Immer keeps unchanged layers referentially
  * identical across store updates, so the WeakMap only recompiles the edited
@@ -32,7 +37,7 @@ export const EXPORT_TOLERANCE_MM = 0.0025
 const cache = new WeakMap<Layer, { key: string; result: CompiledLayer }>()
 
 export function compileLayer(layer: Layer, ctx: CompileCtx): CompiledLayer {
-  const key = `${ctx.diameterMM}|${ctx.toleranceMM}|${ctx.assetsRevision}|${ctx.fontsRevision}`
+  const key = compileCtxKey(ctx)
   const hit = cache.get(layer)
   if (hit && hit.key === key) return hit.result
   const result = compileByType(layer, ctx)

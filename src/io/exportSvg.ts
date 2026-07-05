@@ -1,6 +1,15 @@
 import type { ButtonDoc } from '../model/types'
-import { clearancesAbove, clipCompiled } from '../geometry/clip'
+import { clipCompiled } from '../geometry/clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
+import {
+  castsRegion,
+  haloOf,
+  isSubtractLayer,
+  keepoutsAbove,
+  layerKeepoutRegion,
+  regionOutlineShapes,
+} from '../geometry/keepout'
+import { rotateMultiPolygon } from '../geometry/poly'
 import { expandInstanced, defMatrix } from '../geometry/expand'
 import { fmt } from '../geometry/format'
 import { flattenSegs } from '../geometry/flatten'
@@ -140,9 +149,30 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
 
   doc.layers.forEach((layer, index) => {
     if (!layer.visible) return
+
+    // cut-out layers emit no markup — but still compile so an empty knockout is
+    // a LOUD warning (a silently-missing knockout is a scrapped die)
+    if (castsRegion(layer)) {
+      const { region, warnings: rw } = layerKeepoutRegion(layer, ctx)
+      for (const w of rw) warnings.push(`${layer.name}: ${w}`)
+      if (!region || region.length === 0) {
+        warnings.push(
+          `${layer.name}: ${isSubtractLayer(layer) ? 'cut-out' : 'halo'} produced no geometry — the knockout is MISSING from this export`,
+        )
+      }
+      if (isSubtractLayer(layer)) return
+    }
+
     let compiled = compileLayer(layer, ctx)
-    const discs = clearancesAbove(doc.layers, index)
-    if (discs.length > 0) compiled = clipCompiled(compiled, { discs, regions: [] }, ctx.toleranceMM)
+    const keepouts = keepoutsAbove(doc.layers, index, ctx)
+    const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
+    if (keepouts.discs.length > 0 || regions.length > 0) {
+      compiled = clipCompiled(compiled, { discs: keepouts.discs, regions }, ctx.toleranceMM)
+    }
+    if (haloOf(layer) > 0 && layer.type !== 'bend' && (layer as { haloMode?: string }).haloMode === 'outline') {
+      const own = layerKeepoutRegion(layer, ctx).region
+      if (own) compiled = { shapes: [...compiled.shapes, ...regionOutlineShapes(own, (layer as { haloStrokeMM: number }).haloStrokeMM)], warnings: compiled.warnings }
+    }
     for (const w of compiled.warnings) warnings.push(`${layer.name}: ${w}`)
 
     const body: string[] = []

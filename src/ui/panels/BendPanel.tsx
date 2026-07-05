@@ -4,6 +4,7 @@ import { NumberField } from '../controls/NumberField'
 import { SegmentedControl } from '../controls/SegmentedControl'
 import { SvgAssetPicker } from '../controls/SvgAssetPicker'
 import { Toggle } from '../controls/Toggle'
+import { BooleanModeControl } from './BooleanControls'
 
 export function BendPanel({ layer }: { layer: BendLayer }) {
   const updateLayer = useEngraver((s) => s.updateLayer)
@@ -112,6 +113,10 @@ export function BendPanel({ layer }: { layer: BendLayer }) {
           onChange={(strokeMM) => update({ strokeMM })}
         />
         <div className="readout">Stroked art keeps constant cut width; fills warp their outline.</div>
+      </div>
+      <div className="field-group">
+        <BooleanModeControl role={layer.booleanRole} onChange={(booleanRole) => update({ booleanRole })} />
+        <div className="readout">Cut out knocks the warped art out of filled layers below.</div>
       </div>
     </>
   )

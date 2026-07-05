@@ -286,6 +286,12 @@ button.active {
   padding: 1px 3px;
 }
 
+.badge-cut {
+  color: #1a1405;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 .layer-name {
   flex: 1;
   white-space: nowrap;

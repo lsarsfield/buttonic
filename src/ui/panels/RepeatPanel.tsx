@@ -7,6 +7,7 @@ import { Select } from '../controls/Select'
 import { Slider } from '../controls/Slider'
 import { SvgAssetPicker } from '../controls/SvgAssetPicker'
 import { Toggle } from '../controls/Toggle'
+import { BooleanModeControl } from './BooleanControls'
 
 export function RepeatPanel({ layer }: { layer: RepeatLayer }) {
   const updateLayer = useEngraver((s) => s.updateLayer)
@@ -144,6 +145,10 @@ export function RepeatPanel({ layer }: { layer: RepeatLayer }) {
             <Toggle label="Flip row 2" value={layer.flipRow2} onChange={(flipRow2) => update({ flipRow2 })} />
           </>
         )}
+      </div>
+      <div className="field-group">
+        <BooleanModeControl role={layer.booleanRole} onChange={(booleanRole) => update({ booleanRole })} />
+        <div className="readout">Cut out knocks these motifs out of filled layers below.</div>
       </div>
     </>
   )

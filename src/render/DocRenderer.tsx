@@ -1,9 +1,18 @@
 import { memo, useEffect } from 'react'
 import type { Layer } from '../model/types'
 import { isLocalFontId } from '../model/types'
-import { clearancesAbove, clipCompiled, type ClearanceDisc } from '../geometry/clip'
+import { clipCompiled } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import { annulusPathD } from '../geometry/format'
+import {
+  haloOf,
+  isSubtractLayer,
+  keepoutsAbove,
+  layerKeepoutRegion,
+  regionOutlineShapes,
+  type Keepouts,
+} from '../geometry/keepout'
+import { rotateMultiPolygon } from '../geometry/poly'
 import { ensureFontLoaded, getLoadedFont } from '../io/fonts'
 import { ensureLocalFontsResolved } from '../io/localFonts'
 import { ensureSvgParsed, getSvgAsset } from '../io/svgAssets'
@@ -50,50 +59,70 @@ export function DocRenderer() {
   return (
     <>
       {doc.layers.map((layer, index) => (
-        <LayerGroup
-          key={layer.id}
-          layer={layer}
-          ctx={ctx}
-          discs={clearancesAbove(doc.layers, index)}
-        />
+        <LayerGroup key={layer.id} layer={layer} ctx={ctx} keepouts={keepoutsAbove(doc.layers, index, ctx)} />
       ))}
     </>
   )
 }
 
+const sameKeepouts = (a: Keepouts, b: Keepouts): boolean =>
+  a.discs.length === b.discs.length &&
+  a.discs.every((d, i) => d.rMM === b.discs[i]!.rMM) &&
+  a.contributors.length === b.contributors.length &&
+  a.contributors.every((c, i) => c.layer === b.contributors[i]!.layer)
+
 /**
  * One <g> per layer: a generous transparent hit band for selection plus the
  * compiled geometry (pointer-events off — the band is the only click target).
  * phaseDeg is a render-time rotation; dragging phase never recompiles.
+ *
+ * Cut-out (subtract) layers draw nothing — their geometry is subtracted from
+ * layers below via keepoutsAbove — but stay selectable and show a faint
+ * preview while selected.
  */
 const LayerGroup = memo(
-  function LayerGroup({
-    layer,
-    ctx,
-    discs,
-  }: {
-    layer: Layer
-    ctx: CompileCtx
-    discs: ClearanceDisc[]
-  }) {
+  function LayerGroup({ layer, ctx, keepouts }: { layer: Layer; ctx: CompileCtx; keepouts: Keepouts }) {
+    const selected = useEngraver((s) => s.selection === layer.id)
     if (!layer.visible) return null
     const compiled = compileLayer(layer, ctx)
+
+    if (isSubtractLayer(layer)) {
+      return (
+        <g data-layer-id={layer.id} transform={layer.phaseDeg !== 0 ? `rotate(${layer.phaseDeg})` : undefined}>
+          <HitBand layer={layer} />
+          {selected && compiled.shapes.length > 0 && (
+            <g pointerEvents="none" opacity={0.3}>
+              <ShapesRenderer layerId={layer.id} compiled={compiled} />
+            </g>
+          )}
+        </g>
+      )
+    }
+
+    // regions from contributors above, rotated into this layer's local frame
+    const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
     const clipped =
-      discs.length > 0 ? clipCompiled(compiled, { discs, regions: [] }, INTERACTIVE_TOLERANCE_MM) : compiled
-    const hasShapes = clipped.shapes.length > 0
-    // a layer wholly swallowed by a clearance moat is intentional emptiness,
-    // not a pending dependency — no placeholder for it
-    const swallowedByClearance = !hasShapes && compiled.shapes.length > 0
+      keepouts.discs.length > 0 || regions.length > 0
+        ? clipCompiled(compiled, { discs: keepouts.discs, regions }, INTERACTIVE_TOLERANCE_MM)
+        : compiled
+
+    // halo 'outline': engrave this layer's own halo boundary (pre-phase region
+    // drawn inside this phase-rotated group — correct by construction)
+    const shapes = [...clipped.shapes]
+    if (haloOf(layer) > 0 && (layer as { haloMode?: string }).haloMode === 'outline') {
+      const own = layerKeepoutRegion(layer, ctx).region
+      if (own) shapes.push(...regionOutlineShapes(own, (layer as { haloStrokeMM: number }).haloStrokeMM))
+    }
+
+    const hasShapes = shapes.length > 0
+    const swallowed = !hasShapes && compiled.shapes.length > 0 // wholly clipped away — intentional
     return (
-      <g
-        data-layer-id={layer.id}
-        transform={layer.phaseDeg !== 0 ? `rotate(${layer.phaseDeg})` : undefined}
-      >
+      <g data-layer-id={layer.id} transform={layer.phaseDeg !== 0 ? `rotate(${layer.phaseDeg})` : undefined}>
         <HitBand layer={layer} />
         <g pointerEvents="none">
           {hasShapes ? (
-            <ShapesRenderer layerId={layer.id} compiled={clipped} />
-          ) : swallowedByClearance ? null : (
+            <ShapesRenderer layerId={layer.id} compiled={{ shapes, warnings: clipped.warnings }} />
+          ) : swallowed ? null : (
             <PlaceholderRenderer layer={layer} />
           )}
         </g>
@@ -105,8 +134,7 @@ const LayerGroup = memo(
     prev.ctx.diameterMM === next.ctx.diameterMM &&
     prev.ctx.assetsRevision === next.ctx.assetsRevision &&
     prev.ctx.fontsRevision === next.ctx.fontsRevision &&
-    prev.discs.length === next.discs.length &&
-    prev.discs.every((d, i) => d.rMM === next.discs[i]!.rMM),
+    sameKeepouts(prev.keepouts, next.keepouts),
 )
 
 /** [inner, outer] band a layer occupies, for hit-testing and handles. */

@@ -5,6 +5,7 @@ import { NumberField } from '../controls/NumberField'
 import { SegmentedControl } from '../controls/SegmentedControl'
 import { SvgAssetPicker } from '../controls/SvgAssetPicker'
 import { TextField } from '../controls/TextField'
+import { BooleanModeControl, HaloControls } from './BooleanControls'
 
 export function CenterPanel({ layer }: { layer: CenterLayer }) {
   const updateLayer = useEngraver((s) => s.updateLayer)
@@ -105,7 +106,15 @@ export function CenterPanel({ layer }: { layer: CenterLayer }) {
           unit="mm"
           onChange={(clearanceMM) => update({ clearanceMM })}
         />
-        <div className="readout">Clearance clips hatch lines beneath (final milestone).</div>
+        <div className="readout">Clearance is a simple circle; the halo below follows the shape.</div>
+      </div>
+      <div className="field-group">
+        <BooleanModeControl role={layer.booleanRole} onChange={(booleanRole) => update({ booleanRole })} />
+        <HaloControls
+          values={{ haloMM: layer.haloMM, haloMode: layer.haloMode, haloStrokeMM: layer.haloStrokeMM }}
+          onChange={(patch) => update(patch)}
+        />
+        <div className="readout">Cut out = reversed monogram (raised metal in an engraved field); halo clears a shape-following margin.</div>
       </div>
     </>
   )

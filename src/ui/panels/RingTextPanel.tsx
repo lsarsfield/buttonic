@@ -8,6 +8,7 @@ import { Select } from '../controls/Select'
 import { SvgAssetPicker } from '../controls/SvgAssetPicker'
 import { TextField } from '../controls/TextField'
 import { Toggle } from '../controls/Toggle'
+import { BooleanModeControl, HaloControls } from './BooleanControls'
 
 export function RingTextPanel({ layer }: { layer: RingTextLayer }) {
   const updateLayer = useEngraver((s) => s.updateLayer)
@@ -158,6 +159,14 @@ export function RingTextPanel({ layer }: { layer: RingTextLayer }) {
           </>
         )}
         <div className="readout">Runs repeat at 360°/N; dividers sit at the midpoints.</div>
+      </div>
+      <div className="field-group">
+        <BooleanModeControl role={layer.booleanRole} onChange={(booleanRole) => update({ booleanRole })} />
+        <HaloControls
+          values={{ haloMM: layer.haloMM, haloMode: layer.haloMode, haloStrokeMM: layer.haloStrokeMM }}
+          onChange={(patch) => update(patch)}
+        />
+        <div className="readout">Cut out knocks the text out of filled layers below; halo clears a shape-following margin so text stays readable over a pattern.</div>
       </div>
     </>
   )
