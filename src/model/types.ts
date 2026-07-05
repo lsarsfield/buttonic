@@ -14,10 +14,14 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 5
+export const DOC_VERSION = 6
 
 /** Whether a content layer engraves its geometry or subtracts it from below. */
 export type BooleanRole = 'draw' | 'subtract'
+
+/** Stroke end style (line-cap) and corner style (line-join) for decorative strokes. */
+export type StrokeCap = 'butt' | 'round' | 'square'
+export type StrokeJoin = 'miter' | 'round' | 'bevel'
 /** Halo appearance: clear the pattern only, or also engrave the halo boundary. */
 export type HaloMode = 'clear' | 'outline'
 
@@ -89,7 +93,7 @@ export interface HatchLayer extends LayerBase {
   strokeMM: number
   /** Outer endpoint is skewed by this many degrees relative to the inner one. */
   twistDeg: number
-  cap: 'butt' | 'round'
+  cap: StrokeCap
   /** Arc span each hatch block fills, degrees (360 = the full circle). */
   sweepDeg: number
   /** Number of evenly-spaced copies of the arc around the axis (symmetric fills). */
@@ -125,6 +129,10 @@ export interface RepeatLayer extends LayerBase {
   flipRow2: boolean
   /** Stroke width for stroke-type motifs. */
   strokeMM: number
+  /** End style for stroke-type motifs (line-cap). */
+  cap: StrokeCap
+  /** Corner style for stroke-type motifs (line-join): sharp = miter. */
+  join: StrokeJoin
   /** draw = engrave the motifs; subtract = knock them out of filled layers below. */
   booleanRole: BooleanRole
 }
@@ -296,6 +304,8 @@ export function makeRepeatLayer(patch: Partial<RepeatLayer> = {}): RepeatLayer {
     staggerRow2: true,
     flipRow2: true,
     strokeMM: 0.12,
+    cap: 'round',
+    join: 'miter',
     booleanRole: 'draw',
     ...patch,
   }

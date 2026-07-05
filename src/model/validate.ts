@@ -25,7 +25,7 @@ const REQUIRED: Record<LayerType, Record<string, 'n' | 's' | 'b'>> = {
   repeat: {
     count: 'n', radiusMM: 'n', sizeMM: 'n', align: 's', rotationOffsetDeg: 'n',
     alternateFlip: 'b', rows: 'n', rowGapMM: 'n', staggerRow2: 'b', flipRow2: 'b', strokeMM: 'n',
-    booleanRole: 's',
+    cap: 's', join: 's', booleanRole: 's',
   },
   ringText: {
     text: 's', fontId: 's', sizeMM: 'n', radiusMM: 'n', anchorDeg: 'n', anchorAlign: 's',

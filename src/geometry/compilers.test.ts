@@ -171,4 +171,26 @@ describe('repeat compiler', () => {
       expect(w.paint.stroke).toBeNull()
     }
   })
+
+  it('applies the layer cap and omits join when miter (golden-safe default)', () => {
+    const out = compileRepeat(
+      makeRepeatLayer({ source: { kind: 'builtin', motifId: 'chevron' }, cap: 'round', join: 'miter' }),
+      noAssets,
+    )
+    const s = out.shapes[0]!
+    if (s.kind !== 'instanced') return
+    expect(s.paint.stroke?.cap).toBe('round')
+    expect('join' in (s.paint.stroke as object)).toBe(false) // miter default → no key emitted
+  })
+
+  it('carries a non-miter join and a square cap onto the stroke paint', () => {
+    const out = compileRepeat(
+      makeRepeatLayer({ source: { kind: 'builtin', motifId: 'chevron' }, cap: 'square', join: 'round' }),
+      noAssets,
+    )
+    const s = out.shapes[0]!
+    if (s.kind !== 'instanced') return
+    expect(s.paint.stroke?.cap).toBe('square')
+    expect(s.paint.stroke?.join).toBe('round')
+  })
 })

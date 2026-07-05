@@ -56,8 +56,9 @@ function paintAttrs(paint: Paint): string {
   const parts: string[] = []
   parts.push(`fill="${paint.fill ? '#000000' : 'none'}"`)
   if (paint.stroke) {
+    const join = paint.stroke.join ? ` stroke-linejoin="${paint.stroke.join}"` : ''
     parts.push(
-      `stroke="#000000" stroke-width="${fmt(paint.stroke.widthMM)}" stroke-linecap="${paint.stroke.cap}"`,
+      `stroke="#000000" stroke-width="${fmt(paint.stroke.widthMM)}" stroke-linecap="${paint.stroke.cap}"${join}`,
     )
   }
   return parts.join(' ')

@@ -1,8 +1,8 @@
 import type { HatchLayer } from '../../model/types'
 import { useEngraver } from '../../state/store'
 import { NumberField } from '../controls/NumberField'
-import { SegmentedControl } from '../controls/SegmentedControl'
 import { Slider } from '../controls/Slider'
+import { StrokeStyleControls } from './StrokeControls'
 
 export function HatchPanel({ layer }: { layer: HatchLayer }) {
   const updateLayer = useEngraver((s) => s.updateLayer)
@@ -114,15 +114,7 @@ export function HatchPanel({ layer }: { layer: HatchLayer }) {
           unit="°"
           onChange={(twistDeg) => update({ twistDeg })}
         />
-        <SegmentedControl
-          label="Cap"
-          value={layer.cap}
-          options={[
-            { value: 'butt', label: 'Butt' },
-            { value: 'round', label: 'Round' },
-          ]}
-          onChange={(cap) => update({ cap })}
-        />
+        <StrokeStyleControls cap={layer.cap} onChange={update} />
       </div>
     </>
   )

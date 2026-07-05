@@ -10,9 +10,13 @@
  * Plain structured-cloneable data — zero DOM or React imports.
  */
 
+import type { StrokeCap, StrokeJoin } from '../model/types'
+
 export interface StrokePaint {
   widthMM: number
-  cap: 'butt' | 'round'
+  cap: StrokeCap
+  /** Omitted when 'miter' (the SVG default) so unstyled strokes stay byte-identical. */
+  join?: StrokeJoin
 }
 
 export interface Paint {
@@ -21,9 +25,9 @@ export interface Paint {
 }
 
 export const fillPaint = (): Paint => ({ fill: true, stroke: null })
-export const strokePaint = (widthMM: number, cap: 'butt' | 'round' = 'butt'): Paint => ({
+export const strokePaint = (widthMM: number, cap: StrokeCap = 'butt', join?: StrokeJoin): Paint => ({
   fill: false,
-  stroke: { widthMM, cap },
+  stroke: { widthMM, cap, ...(join && join !== 'miter' ? { join } : {}) },
 })
 
 /**

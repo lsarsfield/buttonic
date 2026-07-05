@@ -8,6 +8,7 @@ import { Slider } from '../controls/Slider'
 import { SvgAssetPicker } from '../controls/SvgAssetPicker'
 import { Toggle } from '../controls/Toggle'
 import { BooleanModeControl } from './BooleanControls'
+import { StrokeStyleControls } from './StrokeControls'
 
 export function RepeatPanel({ layer }: { layer: RepeatLayer }) {
   const updateLayer = useEngraver((s) => s.updateLayer)
@@ -76,15 +77,18 @@ export function RepeatPanel({ layer }: { layer: RepeatLayer }) {
           onChange={(sizeMM) => update({ sizeMM })}
         />
         {motif?.paintType === 'stroke' && (
-          <NumberField
-            label="Stroke"
-            value={layer.strokeMM}
-            min={0.02}
-            max={1}
-            step={0.01}
-            unit="mm"
-            onChange={(strokeMM) => update({ strokeMM })}
-          />
+          <>
+            <NumberField
+              label="Stroke"
+              value={layer.strokeMM}
+              min={0.02}
+              max={1}
+              step={0.01}
+              unit="mm"
+              onChange={(strokeMM) => update({ strokeMM })}
+            />
+            <StrokeStyleControls cap={layer.cap} join={layer.join} onChange={update} />
+          </>
         )}
       </div>
       <div className="field-group">

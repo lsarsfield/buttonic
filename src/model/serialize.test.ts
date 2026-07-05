@@ -131,6 +131,31 @@ describe('migrations', () => {
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.doc).toEqual(doc)
   })
+
+  it('v6: repeat layers gain stroke cap/join defaults without overwriting values', () => {
+    const oldRepeat = makeRepeatLayer() as unknown as Record<string, unknown>
+    for (const k of ['cap', 'join']) delete oldRepeat[k]
+    const keepStyle = makeRepeatLayer({ cap: 'square', join: 'round' }) as unknown as Record<string, unknown>
+    const v5 = { ...makeBlankDoc(), version: 5, layers: [oldRepeat, keepStyle] }
+    const r = parseDoc(JSON.stringify(v5))
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      const a = r.doc.layers[0]!
+      const b = r.doc.layers[1]!
+      if (a.type !== 'repeat' || b.type !== 'repeat') throw new Error('type')
+      expect(a.cap).toBe('round') // absent → default (old hardcoded look)
+      expect(a.join).toBe('miter')
+      expect(b.cap).toBe('square') // present → preserved
+      expect(b.join).toBe('round')
+    }
+  })
+
+  it('a v6 styled repeat layer round-trips unchanged', () => {
+    const doc = { ...makeBlankDoc(), layers: [makeRepeatLayer({ cap: 'butt', join: 'bevel' })] }
+    const r = parseDoc(stringifyDoc(doc))
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.doc).toEqual(doc)
+  })
 })
 
 describe('coerceDoc (plain values, no JSON text)', () => {

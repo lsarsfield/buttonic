@@ -6,6 +6,7 @@ function paintProps(paint: Paint, strokeScale = 1) {
     stroke: paint.stroke ? 'currentColor' : 'none',
     strokeWidth: paint.stroke ? paint.stroke.widthMM / strokeScale : undefined,
     strokeLinecap: paint.stroke?.cap,
+    strokeLinejoin: paint.stroke?.join,
   } as const
 }
 

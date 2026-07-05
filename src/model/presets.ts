@@ -105,7 +105,7 @@ export function presetReferenceB(): ButtonDoc {
         source: { kind: 'builtin', motifId: 'chevron' }, count: 46, radiusMM: 6.55, sizeMM: 0.95,
         align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
         rows: 2, rowGapMM: 1.05, staggerRow2: true, flipRow2: true, strokeMM: 0.15,
-        booleanRole: 'draw',
+        cap: 'round', join: 'miter', booleanRole: 'draw',
       },
       {
         id: 'refB-rim', type: 'ring', name: 'Rim', visible: true, phaseDeg: 0,
@@ -129,7 +129,7 @@ export function presetGroovy(): ButtonDoc {
         id: 'groovy-hero', type: 'repeat', name: 'Sunburst', visible: true, phaseDeg: 0,
         source: { kind: 'builtin', motifId: 'sunburst' }, count: 1, radiusMM: 0, sizeMM: 3.2,
         align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
-        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.18, booleanRole: 'draw',
+        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.18, cap: 'round', join: 'miter', booleanRole: 'draw',
       },
       {
         id: 'groovy-inner', type: 'ring', name: 'Inner ring', visible: true, phaseDeg: 0,
@@ -139,7 +139,7 @@ export function presetGroovy(): ButtonDoc {
         id: 'groovy-daisies', type: 'repeat', name: 'Daisy band', visible: true, phaseDeg: 0,
         source: { kind: 'builtin', motifId: 'daisy' }, count: 9, radiusMM: 5.4, sizeMM: 1.7,
         align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
-        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.12, booleanRole: 'draw',
+        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.12, cap: 'round', join: 'miter', booleanRole: 'draw',
       },
       {
         id: 'groovy-sep', type: 'ring', name: 'Separator', visible: true, phaseDeg: 0,
@@ -174,7 +174,7 @@ export function presetOldBook(): ButtonDoc {
         id: 'oldbook-hero', type: 'repeat', name: 'Fleur-de-lis', visible: true, phaseDeg: 0,
         source: { kind: 'builtin', motifId: 'fleurdelis' }, count: 1, radiusMM: 0, sizeMM: 4.2,
         align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
-        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.12, booleanRole: 'draw',
+        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.12, cap: 'round', join: 'miter', booleanRole: 'draw',
       },
       {
         id: 'oldbook-inner', type: 'ring', name: 'Inner ring', visible: true, phaseDeg: 0,
@@ -184,7 +184,7 @@ export function presetOldBook(): ButtonDoc {
         id: 'oldbook-wreath', type: 'repeat', name: 'Laurel wreath', visible: true, phaseDeg: 0,
         source: { kind: 'builtin', motifId: 'laurel' }, count: 24, radiusMM: 5.3, sizeMM: 1.15,
         align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
-        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.1, booleanRole: 'draw',
+        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.1, cap: 'round', join: 'miter', booleanRole: 'draw',
       },
       {
         id: 'oldbook-sep', type: 'ring', name: 'Separator', visible: true, phaseDeg: 0,

@@ -38,6 +38,16 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
         : layer,
     ),
   }),
+  // v6: per-layer stroke cap + join for repeat motifs (defaults reproduce the
+  // old hardcoded round cap / miter join)
+  6: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) =>
+      typeof layer === 'object' && layer !== null && (layer as { type?: string }).type === 'repeat'
+        ? { cap: 'round', join: 'miter', ...layer }
+        : layer,
+    ),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {
