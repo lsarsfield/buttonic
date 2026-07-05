@@ -25,7 +25,7 @@ export function LayerList() {
     <div className="panel layers-panel">
       <div className="panel-header">
         <span className="panel-title">Layers</span>
-        <span className="panel-hint">centre → rim</span>
+        <span className="panel-hint">top = on top</span>
         <div className="add-layer">
           <button type="button" className="button-primary" onClick={() => setMenuOpen((o) => !o)}>
             + Add
@@ -54,15 +54,21 @@ export function LayerList() {
       </div>
       <div className="layer-rows">
         {layers.length === 0 && <div className="empty-note">No layers yet — add one above.</div>}
-        {layers.map((layer, index) => (
-          <LayerRow
-            key={layer.id}
-            layer={layer}
-            index={index}
-            selected={layer.id === selection}
-            dragId={dragId}
-          />
-        ))}
+        {/* Displayed front-most-first (top of list = painted last = on top), the
+            standard layers-panel convention. The doc.layers array stays in paint
+            order (index 0 = back), so geometry/keepouts are unaffected — each row
+            keeps its TRUE array index for reordering. */}
+        {layers
+          .map((layer, index) => (
+            <LayerRow
+              key={layer.id}
+              layer={layer}
+              index={index}
+              selected={layer.id === selection}
+              dragId={dragId}
+            />
+          ))
+          .reverse()}
       </div>
     </div>
   )
