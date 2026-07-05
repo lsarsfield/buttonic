@@ -864,15 +864,20 @@ button.active {
   align-items: center;
   gap: 8px;
   flex: 1;
+  min-width: 0;
 }
 .field-slider input[type='range'] {
   flex: 1;
+  /* range inputs have a large intrinsic min-width; without this the row can't
+     shrink to fit and the value readout hangs off the side panel */
+  min-width: 0;
   accent-color: var(--accent);
 }
 .field-slider-value {
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
   min-width: 42px;
+  flex-shrink: 0;
   text-align: right;
 }
 
