@@ -1,6 +1,6 @@
 # Buttonic
 
-**Live app: <https://buttonic.liet.co>**
+**Live app: <https://buttonic.app>**
 
 A browser tool for designing the engraved face of metal jean buttons. Its whole premise is
 **true radial geometry from a single axis**: every element is computed from the centre

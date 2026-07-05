@@ -3,8 +3,9 @@
 Parametric radial engraving designer for die-stamped jean buttons. Everything is computed
 from the centre axis outward — counts, radii, angles — never manual duplicate-and-rotate.
 
-- **Live:** https://buttonic.liet.co (GitHub Pages; `buttonic` CNAME → lsarsfield.github.io;
-  DNS lives at Cargo, ns*.cargo.site). Old github.io/buttonic URL 301s here.
+- **Live:** https://buttonic.app (GitHub Pages; apex A records → 185.199.108–111.153;
+  DNS at DreamHost). Old github.io/buttonic URL 301s here. The earlier
+  buttonic.liet.co (Cargo DNS) is retired and no longer served.
 - **Repo:** https://github.com/lsarsfield/buttonic (public; `gh` is authed as `lsarsfield` —
   Liam also owns a separate `LiamSarsfield` account, unused here).
 - **Stack:** React 19 + TS strict + Vite 6 + vitest 3 (Node 18.20.8 locally — do NOT bump
