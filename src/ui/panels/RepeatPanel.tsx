@@ -1,9 +1,9 @@
 import type { RepeatLayer } from '../../model/types'
-import { BUILTIN_MOTIFS, getBuiltinMotif } from '../../geometry/motifs/builtins'
+import { getBuiltinMotif } from '../../geometry/motifs/builtins'
 import { useEngraver } from '../../state/store'
 import { NumberField } from '../controls/NumberField'
 import { SegmentedControl } from '../controls/SegmentedControl'
-import { Select } from '../controls/Select'
+import { MotifPicker } from '../controls/MotifPicker'
 import { Slider } from '../controls/Slider'
 import { SvgAssetPicker } from '../controls/SvgAssetPicker'
 import { Toggle } from '../controls/Toggle'
@@ -35,10 +35,8 @@ export function RepeatPanel({ layer }: { layer: RepeatLayer }) {
           }
         />
         {layer.source.kind === 'builtin' ? (
-          <Select
-            label="Motif"
+          <MotifPicker
             value={motifId}
-            options={BUILTIN_MOTIFS.map((m) => ({ value: m.id, label: m.label }))}
             onChange={(id) => update({ source: { kind: 'builtin', motifId: id } })}
           />
         ) : (

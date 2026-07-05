@@ -8,7 +8,7 @@ import { exportSvg, extractEmbeddedProject } from './io/exportSvg'
 import { exportPng } from './io/exportPng'
 import { loadProjectFile } from './io/project'
 import * as workspace from './io/workspace'
-import { presetBlank, presetReferenceA, presetReferenceB } from './model/presets'
+import { presetBlank, presetGroovy, presetOldBook, presetReferenceA, presetReferenceB } from './model/presets'
 import { parseDoc } from './model/serialize'
 
 // Dev-only console access for debugging and scripted verification.
@@ -25,7 +25,7 @@ if (import.meta.env.DEV) {
       parseDoc,
       loadProjectFile,
       workspace,
-      presets: { presetBlank, presetReferenceA, presetReferenceB },
+      presets: { presetBlank, presetReferenceA, presetReferenceB, presetGroovy, presetOldBook },
     },
   })
 }

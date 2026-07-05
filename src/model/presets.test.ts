@@ -4,7 +4,7 @@ import * as opentype from 'opentype.js'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { clearancesAbove, clipCompiled } from '../geometry/clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
-import { presetReferenceA, presetReferenceB } from './presets'
+import { presetGroovy, presetOldBook, presetReferenceA, presetReferenceB } from './presets'
 import { parseDoc, stringifyDoc } from './serialize'
 
 /**
@@ -24,6 +24,7 @@ beforeAll(() => {
   loadFont('garamond', '../../public/fonts/ebgaramond.ttf')
   loadFont('unifraktur', '../../public/fonts/unifrakturcook-bold.ttf')
   loadFont('cinzel', '../../public/fonts/cinzel.ttf')
+  loadFont('bebas', '../../public/fonts/bebas-neue.ttf')
 })
 
 function compileDoc(doc: ReturnType<typeof presetReferenceA>) {
@@ -71,8 +72,21 @@ describe('reference presets', () => {
     expect(JSON.stringify(compileDoc(presetReferenceB()), null, 1)).toMatchSnapshot()
   })
 
+  it('themed presets compile without warnings', () => {
+    expect(compileDoc(presetGroovy()).flatMap((l) => l.warnings)).toEqual([])
+    expect(compileDoc(presetOldBook()).flatMap((l) => l.warnings)).toEqual([])
+  })
+
+  it('golden: flower-power geometry snapshot', () => {
+    expect(JSON.stringify(compileDoc(presetGroovy()), null, 1)).toMatchSnapshot()
+  })
+
+  it('golden: old-book geometry snapshot', () => {
+    expect(JSON.stringify(compileDoc(presetOldBook()), null, 1)).toMatchSnapshot()
+  })
+
   it('presets survive serialize round-trip', () => {
-    for (const make of [presetReferenceA, presetReferenceB]) {
+    for (const make of [presetReferenceA, presetReferenceB, presetGroovy, presetOldBook]) {
       const doc = make()
       const round = parseDoc(stringifyDoc(doc))
       expect(round.ok).toBe(true)

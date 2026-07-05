@@ -117,6 +117,96 @@ export function presetReferenceB(): ButtonDoc {
   }
 }
 
+/** Flower Power — 1970s groovy: centre sunburst, daisy band, heart-divided text. */
+export function presetGroovy(): ButtonDoc {
+  return {
+    version: DOC_VERSION,
+    name: 'Flower power',
+    diameterMM: 17,
+    finish: 'brass',
+    layers: [
+      {
+        id: 'groovy-hero', type: 'repeat', name: 'Sunburst', visible: true, phaseDeg: 0,
+        source: { kind: 'builtin', motifId: 'sunburst' }, count: 1, radiusMM: 0, sizeMM: 3.2,
+        align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
+        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.18, booleanRole: 'draw',
+      },
+      {
+        id: 'groovy-inner', type: 'ring', name: 'Inner ring', visible: true, phaseDeg: 0,
+        mode: 'stroke', radiusMM: 3.9, strokeMM: 0.12, rInnerMM: 3.8, rOuterMM: 4.0,
+      },
+      {
+        id: 'groovy-daisies', type: 'repeat', name: 'Daisy band', visible: true, phaseDeg: 0,
+        source: { kind: 'builtin', motifId: 'daisy' }, count: 9, radiusMM: 5.4, sizeMM: 1.7,
+        align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
+        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.12, booleanRole: 'draw',
+      },
+      {
+        id: 'groovy-sep', type: 'ring', name: 'Separator', visible: true, phaseDeg: 0,
+        mode: 'stroke', radiusMM: 6.4, strokeMM: 0.1, rInnerMM: 6.3, rOuterMM: 6.5,
+      },
+      {
+        id: 'groovy-text', type: 'ringText', name: 'Groovy text', visible: true, phaseDeg: 0,
+        text: 'GROOVY', fontId: 'bebas', sizeMM: 1.6, radiusMM: 7.1, anchorDeg: 0, anchorAlign: 'center',
+        letterSpacingMM: 0.3, direction: 'outward', mode: 'arc', useKerning: true, repeats: 2,
+        dividerSource: { kind: 'builtin', motifId: 'heart' }, dividerSizeMM: 1.0, dividerStrokeMM: 0.12,
+        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,
+      },
+      {
+        id: 'groovy-rim', type: 'ring', name: 'Rim', visible: true, phaseDeg: 0,
+        mode: 'stroke', radiusMM: 8.3, strokeMM: 0.28, rInnerMM: 8.16, rOuterMM: 8.44,
+      },
+    ],
+    assets: {},
+    localFonts: {},
+  }
+}
+
+/** Old Book — printer's ornaments: centre fleur-de-lis, laurel wreath, fleuron-divided text. */
+export function presetOldBook(): ButtonDoc {
+  return {
+    version: DOC_VERSION,
+    name: 'Old book',
+    diameterMM: 17,
+    finish: 'gunmetal',
+    layers: [
+      {
+        id: 'oldbook-hero', type: 'repeat', name: 'Fleur-de-lis', visible: true, phaseDeg: 0,
+        source: { kind: 'builtin', motifId: 'fleurdelis' }, count: 1, radiusMM: 0, sizeMM: 4.2,
+        align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
+        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.12, booleanRole: 'draw',
+      },
+      {
+        id: 'oldbook-inner', type: 'ring', name: 'Inner ring', visible: true, phaseDeg: 0,
+        mode: 'stroke', radiusMM: 3.9, strokeMM: 0.14, rInnerMM: 3.78, rOuterMM: 4.02,
+      },
+      {
+        id: 'oldbook-wreath', type: 'repeat', name: 'Laurel wreath', visible: true, phaseDeg: 0,
+        source: { kind: 'builtin', motifId: 'laurel' }, count: 24, radiusMM: 5.3, sizeMM: 1.15,
+        align: 'radial-out', rotationOffsetDeg: 0, alternateFlip: false,
+        rows: 1, rowGapMM: 0.8, staggerRow2: true, flipRow2: true, strokeMM: 0.1, booleanRole: 'draw',
+      },
+      {
+        id: 'oldbook-sep', type: 'ring', name: 'Separator', visible: true, phaseDeg: 0,
+        mode: 'stroke', radiusMM: 6.4, strokeMM: 0.1, rInnerMM: 6.3, rOuterMM: 6.5,
+      },
+      {
+        id: 'oldbook-text', type: 'ringText', name: 'Ex libris', visible: true, phaseDeg: 0,
+        text: 'EX LIBRIS', fontId: 'garamond', sizeMM: 1.5, radiusMM: 7.1, anchorDeg: 0, anchorAlign: 'center',
+        letterSpacingMM: 0.2, direction: 'outward', mode: 'arc', useKerning: true, repeats: 2,
+        dividerSource: { kind: 'builtin', motifId: 'fleuron' }, dividerSizeMM: 0.9, dividerStrokeMM: 0.12,
+        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,
+      },
+      {
+        id: 'oldbook-rim', type: 'ring', name: 'Rim', visible: true, phaseDeg: 0,
+        mode: 'stroke', radiusMM: 8.3, strokeMM: 0.26, rInnerMM: 8.17, rOuterMM: 8.43,
+      },
+    ],
+    assets: {},
+    localFonts: {},
+  }
+}
+
 export interface TemplateInfo {
   id: string
   name: string
@@ -142,5 +232,17 @@ export const TEMPLATES: TemplateInfo[] = [
     name: 'Blackletter monogram',
     blurb: 'Ornate blackletter D, circle border, herringbone chevron band.',
     make: presetReferenceB,
+  },
+  {
+    id: 'groovy',
+    name: 'Flower power',
+    blurb: '1970s groovy: a sunburst centre, daisy band, and heart-divided text.',
+    make: presetGroovy,
+  },
+  {
+    id: 'oldBook',
+    name: 'Old book',
+    blurb: "Printer's ornaments: fleur-de-lis centre, laurel wreath, fleuron dividers.",
+    make: presetOldBook,
   },
 ]
