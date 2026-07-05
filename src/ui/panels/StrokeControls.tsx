@@ -26,7 +26,13 @@ export function StrokeStyleControls({
   ]
   return (
     <>
-      <SegmentedControl label="Cap" value={cap} options={capOptions} onChange={(cap) => onChange({ cap })} />
+      <SegmentedControl
+        label="Cap"
+        value={cap}
+        options={capOptions}
+        stack={allowPoint}
+        onChange={(cap) => onChange({ cap })}
+      />
       {join !== undefined && (
         <SegmentedControl
           label="Corners"

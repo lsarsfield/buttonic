@@ -182,6 +182,22 @@ button.active {
   border-radius: 5px;
   overflow: hidden;
 }
+/* Stacked layout: label on its own line so a wide toggle group (e.g. the
+   hatch cap Butt/Round/Square/Point) gets the full panel width instead of
+   being crammed beside the label. */
+.field.field-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+}
+.field.field-stack > .segmented {
+  display: flex;
+}
+.field.field-stack > .segmented button {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+}
 .segmented button.active {
   background: var(--bg3);
   color: var(--accent);

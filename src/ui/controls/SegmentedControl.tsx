@@ -3,6 +3,8 @@ export interface SegmentedControlProps<T extends string> {
   value: T
   options: readonly { value: T; label: string; disabled?: boolean; title?: string }[]
   onChange: (value: T) => void
+  /** Put the label on its own line and let the segments fill the panel width. */
+  stack?: boolean
 }
 
 export function SegmentedControl<T extends string>({
@@ -10,6 +12,7 @@ export function SegmentedControl<T extends string>({
   value,
   options,
   onChange,
+  stack = false,
 }: SegmentedControlProps<T>) {
   const control = (
     <span className="segmented">
@@ -29,7 +32,7 @@ export function SegmentedControl<T extends string>({
   )
   if (!label) return control
   return (
-    <label className="field">
+    <label className={stack ? 'field field-stack' : 'field'}>
       <span className="field-label">{label}</span>
       {control}
     </label>
