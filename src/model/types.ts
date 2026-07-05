@@ -14,14 +14,18 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 6
+export const DOC_VERSION = 7
 
 /** Whether a content layer engraves its geometry or subtracts it from below. */
 export type BooleanRole = 'draw' | 'subtract'
 
-/** Stroke end style (line-cap) and corner style (line-join) for decorative strokes. */
-export type StrokeCap = 'butt' | 'round' | 'square'
+/** SVG-valid stroke end styles — the only caps that reach an actual stroke attribute. */
+export type SvgStrokeCap = 'butt' | 'round' | 'square'
+/** End styles offered in the UI. 'point' is synthesized as filled geometry (hatch only). */
+export type StrokeCap = SvgStrokeCap | 'point'
 export type StrokeJoin = 'miter' | 'round' | 'bevel'
+/** Which end(s) of a pointed hatch tick taper to a point. */
+export type PointEnds = 'outer' | 'both'
 /** Halo appearance: clear the pattern only, or also engrave the halo boundary. */
 export type HaloMode = 'clear' | 'outline'
 
@@ -94,6 +98,10 @@ export interface HatchLayer extends LayerBase {
   /** Outer endpoint is skewed by this many degrees relative to the inner one. */
   twistDeg: number
   cap: StrokeCap
+  /** For cap = 'point': how far the tip projects past the tick end, mm. */
+  capPointMM: number
+  /** For cap = 'point': taper the outer end only (spike) or both ends (spindle). */
+  pointEnds: PointEnds
   /** Arc span each hatch block fills, degrees (360 = the full circle). */
   sweepDeg: number
   /** Number of evenly-spaced copies of the arc around the axis (symmetric fills). */
@@ -279,6 +287,8 @@ export function makeHatchLayer(patch: Partial<HatchLayer> = {}): HatchLayer {
     strokeMM: 0.08,
     twistDeg: 0,
     cap: 'butt',
+    capPointMM: 0.3,
+    pointEnds: 'outer',
     sweepDeg: 360,
     repeats: 1,
     ...patch,

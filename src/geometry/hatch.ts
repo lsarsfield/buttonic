@@ -1,8 +1,8 @@
 import type { HatchLayer } from '../model/types'
 import { polarToXY } from './polar'
 import { fmt } from './format'
-import type { CompiledLayer, InstanceTransform } from './shapes'
-import { strokePaint } from './shapes'
+import type { CompiledLayer, InstanceTransform, Paint } from './shapes'
+import { fillPaint, strokePaint } from './shapes'
 
 /**
  * Radial ticks as one def line + exact rotations. The def is the tick at angle
@@ -36,19 +36,46 @@ export function compileHatch(layer: HatchLayer): CompiledLayer {
     warnings.push(`${repeats} arcs of ${sweepDeg.toFixed(0)}° overlap (total ${(repeats * sweepDeg).toFixed(0)}°).`)
   }
 
+  // A pointed cap has no SVG equivalent, so the tick becomes a filled tapered
+  // polygon: a spike (outer point, flat inner base) or a spindle (both ends).
+  // Built from the tick's own direction so twist just works.
+  let d: string
+  let paint: Paint
+  if (layer.cap === 'point') {
+    const dx = outer.x - inner.x
+    const dy = outer.y - inner.y
+    const len = Math.hypot(dx, dy) || 1
+    const ux = dx / len
+    const uy = dy / len // unit vector inner → outer
+    const px = -uy
+    const py = ux // perpendicular
+    const hw = layer.strokeMM / 2
+    const P = Math.max(0, layer.capPointMM)
+    const pnt = (x: number, y: number) => `${fmt(x)} ${fmt(y)}`
+    const oApex = pnt(outer.x + ux * P, outer.y + uy * P)
+    const oL = pnt(outer.x + px * hw, outer.y + py * hw)
+    const oR = pnt(outer.x - px * hw, outer.y - py * hw)
+    const iL = pnt(inner.x + px * hw, inner.y + py * hw)
+    const iR = pnt(inner.x - px * hw, inner.y - py * hw)
+    if (layer.pointEnds === 'both') {
+      const pi = Math.min(P, rInner) // don't let the inner tip cross the axis
+      const iApex = pnt(inner.x - ux * pi, inner.y - uy * pi)
+      d = `M ${iApex} L ${iL} L ${oL} L ${oApex} L ${oR} L ${iR} Z`
+    } else {
+      d = `M ${iL} L ${oL} L ${oApex} L ${oR} L ${iR} Z`
+    }
+    paint = fillPaint()
+  } else {
+    d = `M ${fmt(inner.x)} ${fmt(inner.y)} L ${fmt(outer.x)} ${fmt(outer.y)}`
+    paint = strokePaint(layer.strokeMM, layer.cap)
+  }
+
   return {
     shapes: [
       {
         kind: 'instanced',
-        def: {
-          d: `M ${fmt(inner.x)} ${fmt(inner.y)} L ${fmt(outer.x)} ${fmt(outer.y)}`,
-          dx: 0,
-          dy: 0,
-          rotateDeg: 0,
-          scale: 1,
-          flipY: 1,
-        },
-        paint: strokePaint(layer.strokeMM, layer.cap),
+        def: { d, dx: 0, dy: 0, rotateDeg: 0, scale: 1, flipY: 1 },
+        paint,
         transforms,
       },
     ],

@@ -1,6 +1,7 @@
 import type { HatchLayer } from '../../model/types'
 import { useEngraver } from '../../state/store'
 import { NumberField } from '../controls/NumberField'
+import { SegmentedControl } from '../controls/SegmentedControl'
 import { Slider } from '../controls/Slider'
 import { StrokeStyleControls } from './StrokeControls'
 
@@ -114,7 +115,38 @@ export function HatchPanel({ layer }: { layer: HatchLayer }) {
           unit="°"
           onChange={(twistDeg) => update({ twistDeg })}
         />
-        <StrokeStyleControls cap={layer.cap} onChange={update} />
+        <StrokeStyleControls cap={layer.cap} allowPoint onChange={update} />
+        {layer.cap === 'point' && (
+          <>
+            <NumberField
+              label="Point"
+              value={layer.capPointMM}
+              min={0.05}
+              max={3}
+              step={0.05}
+              unit="mm"
+              onChange={(capPointMM) => update({ capPointMM })}
+            />
+            <Slider
+              label=""
+              value={layer.capPointMM}
+              min={0.05}
+              max={3}
+              step={0.05}
+              unit="mm"
+              onChange={(capPointMM) => update({ capPointMM })}
+            />
+            <SegmentedControl
+              label="Point at"
+              value={layer.pointEnds}
+              options={[
+                { value: 'outer', label: 'Outer', title: 'Point the outer end only' },
+                { value: 'both', label: 'Both', title: 'Point both ends (spindle)' },
+              ]}
+              onChange={(pointEnds) => update({ pointEnds })}
+            />
+          </>
+        )}
       </div>
     </>
   )

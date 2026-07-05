@@ -102,6 +102,38 @@ describe('hatch compiler', () => {
     const out = compileHatch(makeHatchLayer({ count: 10, sweepDeg: 200, repeats: 3 }))
     expect(out.warnings.some((w) => /overlap/.test(w))).toBe(true)
   })
+
+  it('butt/round/square caps still emit a stroked line def', () => {
+    for (const cap of ['butt', 'round', 'square'] as const) {
+      const out = compileHatch(makeHatchLayer({ cap, count: 4, rInnerMM: 3, rOuterMM: 8 }))
+      const s = out.shapes[0]!
+      if (s.kind !== 'instanced') throw new Error('instanced')
+      expect(s.paint.fill).toBe(false)
+      expect(s.paint.stroke?.cap).toBe(cap)
+      expect(s.def.d).toBe('M 0 -3 L 0 -8') // a plain line, no Z
+    }
+  })
+
+  it('point cap emits a filled tapered polygon (spike vs spindle)', () => {
+    const spike = compileHatch(
+      makeHatchLayer({ cap: 'point', pointEnds: 'outer', capPointMM: 0.5, count: 4, rInnerMM: 3, rOuterMM: 8 }),
+    ).shapes[0]!
+    if (spike.kind !== 'instanced') throw new Error('instanced')
+    expect(spike.paint.fill).toBe(true)
+    expect(spike.paint.stroke).toBeNull()
+    expect(spike.def.d.endsWith('Z')).toBe(true)
+    // pentagon: 1 M + 4 L
+    expect((spike.def.d.match(/[ML]/g) ?? []).length).toBe(5)
+    // outer apex projects capPointMM past rOuter (up = -y), inner base stays at -rInner
+    expect(spike.def.d).toContain('L 0 -8.5 L') // apex at rOuter(8)+0.5
+
+    const spindle = compileHatch(
+      makeHatchLayer({ cap: 'point', pointEnds: 'both', capPointMM: 0.5, count: 4, rInnerMM: 3, rOuterMM: 8 }),
+    ).shapes[0]!
+    if (spindle.kind !== 'instanced') throw new Error('instanced')
+    // hexagon: 1 M + 5 L
+    expect((spindle.def.d.match(/[ML]/g) ?? []).length).toBe(6)
+  })
 })
 
 const noAssets = () => null

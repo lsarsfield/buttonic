@@ -156,6 +156,31 @@ describe('migrations', () => {
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.doc).toEqual(doc)
   })
+
+  it('v7: hatch layers gain pointed-cap defaults without overwriting values', () => {
+    const oldHatch = makeHatchLayer() as unknown as Record<string, unknown>
+    for (const k of ['capPointMM', 'pointEnds']) delete oldHatch[k]
+    const keepPoint = makeHatchLayer({ cap: 'point', capPointMM: 1.2, pointEnds: 'both' }) as unknown as Record<string, unknown>
+    const v6 = { ...makeBlankDoc(), version: 6, layers: [oldHatch, keepPoint] }
+    const r = parseDoc(JSON.stringify(v6))
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      const a = r.doc.layers[0]!
+      const b = r.doc.layers[1]!
+      if (a.type !== 'hatch' || b.type !== 'hatch') throw new Error('type')
+      expect(a.capPointMM).toBe(0.3) // absent → default
+      expect(a.pointEnds).toBe('outer')
+      expect(b.capPointMM).toBe(1.2) // present → preserved
+      expect(b.pointEnds).toBe('both')
+    }
+  })
+
+  it('a v7 pointed hatch round-trips unchanged', () => {
+    const doc = { ...makeBlankDoc(), layers: [makeHatchLayer({ cap: 'point', capPointMM: 0.8, pointEnds: 'both' })] }
+    const r = parseDoc(stringifyDoc(doc))
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.doc).toEqual(doc)
+  })
 })
 
 describe('coerceDoc (plain values, no JSON text)', () => {

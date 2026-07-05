@@ -62,7 +62,7 @@ export function compileRepeat(
       const paint: Paint =
         motifPath.paintType === 'fill'
           ? fillPaint()
-          : strokePaint(layer.strokeMM, layer.cap, layer.join)
+          : strokePaint(layer.strokeMM, layer.cap === 'point' ? 'round' : layer.cap, layer.join)
       shapes.push({
         kind: 'instanced',
         def: {
