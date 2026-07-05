@@ -106,6 +106,31 @@ describe('migrations', () => {
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.doc).toEqual(doc)
   })
+
+  it('v5: hatch layers gain arc/repeat defaults without overwriting values', () => {
+    const oldHatch = makeHatchLayer() as unknown as Record<string, unknown>
+    for (const k of ['sweepDeg', 'repeats']) delete oldHatch[k]
+    const keepSweep = makeHatchLayer({ sweepDeg: 90, repeats: 2 }) as unknown as Record<string, unknown>
+    const v4 = { ...makeBlankDoc(), version: 4, layers: [oldHatch, keepSweep] }
+    const r = parseDoc(JSON.stringify(v4))
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      const a = r.doc.layers[0]!
+      const b = r.doc.layers[1]!
+      if (a.type !== 'hatch' || b.type !== 'hatch') throw new Error('type')
+      expect(a.sweepDeg).toBe(360) // absent → default
+      expect(a.repeats).toBe(1)
+      expect(b.sweepDeg).toBe(90) // present → preserved
+      expect(b.repeats).toBe(2)
+    }
+  })
+
+  it('a v5 partial-arc hatch round-trips unchanged', () => {
+    const doc = { ...makeBlankDoc(), layers: [makeHatchLayer({ sweepDeg: 72, repeats: 5 })] }
+    const r = parseDoc(stringifyDoc(doc))
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.doc).toEqual(doc)
+  })
 })
 
 describe('coerceDoc (plain values, no JSON text)', () => {

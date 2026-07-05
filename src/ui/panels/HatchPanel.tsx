@@ -10,7 +10,9 @@ export function HatchPanel({ layer }: { layer: HatchLayer }) {
   const update = (patch: Partial<HatchLayer>) => updateLayer(layer.id, patch)
 
   const rMid = (layer.rInnerMM + layer.rOuterMM) / 2
-  const density = rMid > 0 ? layer.count / (2 * Math.PI * rMid) : 0
+  const arcLenMM = (layer.sweepDeg / 360) * 2 * Math.PI * rMid
+  const density = arcLenMM > 0 ? layer.count / arcLenMM : 0
+  const coveragePct = Math.min(100, ((layer.sweepDeg * layer.repeats) / 360) * 100)
 
   return (
     <>
@@ -32,8 +34,37 @@ export function HatchPanel({ layer }: { layer: HatchLayer }) {
           onChange={(count) => update({ count })}
         />
         <div className="readout">
-          {density.toFixed(2)} ticks/mm at mid-radius
+          {density.toFixed(2)} ticks/mm · {coveragePct.toFixed(0)}% of ring
         </div>
+      </div>
+      <div className="field-group">
+        <NumberField
+          label="Arc"
+          value={layer.sweepDeg}
+          min={5}
+          max={360}
+          step={1}
+          unit="°"
+          onChange={(sweepDeg) => update({ sweepDeg })}
+        />
+        <Slider
+          label=""
+          value={layer.sweepDeg}
+          min={5}
+          max={360}
+          step={1}
+          unit="°"
+          onChange={(sweepDeg) => update({ sweepDeg })}
+        />
+        <NumberField
+          label="Repeats"
+          value={layer.repeats}
+          min={1}
+          max={24}
+          step={1}
+          onChange={(repeats) => update({ repeats: Math.round(repeats) })}
+        />
+        <div className="readout">Position the arc(s) with the phase handle.</div>
       </div>
       <div className="field-group">
         <NumberField

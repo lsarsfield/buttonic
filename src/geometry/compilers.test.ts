@@ -74,6 +74,34 @@ describe('hatch compiler', () => {
     const s = out.shapes[0]!
     if (s.kind === 'instanced') expect(s.def.d).toBe('M 0 -3 L 0 -8')
   })
+
+  it('partial arc distributes exactly count ticks across sweepDeg', () => {
+    const out = compileHatch(makeHatchLayer({ count: 30, sweepDeg: 90 }))
+    const s = out.shapes[0]!
+    if (s.kind !== 'instanced') return
+    expect(s.transforms).toHaveLength(30)
+    expect(s.transforms[0]!.rotateDeg).toBe(0)
+    expect(s.transforms[1]!.rotateDeg).toBe(90 / 30) // exact 3° pitch
+    expect(s.transforms[29]!.rotateDeg).toBe((29 * 90) / 30) // 87°, still inside the arc
+    expect(s.transforms.every((t) => t.rotateDeg < 90)).toBe(true)
+    expect(out.warnings).toEqual([])
+  })
+
+  it('repeats place the arc block at exact 360/repeats offsets (no drift)', () => {
+    const out = compileHatch(makeHatchLayer({ count: 5, sweepDeg: 40, repeats: 3 }))
+    const s = out.shapes[0]!
+    if (s.kind !== 'instanced') return
+    expect(s.transforms).toHaveLength(15) // count × repeats
+    expect(s.transforms[0]!.rotateDeg).toBe(0)
+    expect(s.transforms[5]!.rotateDeg).toBe(120) // block 1 start
+    expect(s.transforms[10]!.rotateDeg).toBe(240) // block 2 start
+    expect(s.transforms[13]!.rotateDeg).toBe(240 + (3 * 40) / 5) // block 2, tick 3
+  })
+
+  it('warns when repeated arcs overlap', () => {
+    const out = compileHatch(makeHatchLayer({ count: 10, sweepDeg: 200, repeats: 3 }))
+    expect(out.warnings.some((w) => /overlap/.test(w))).toBe(true)
+  })
 })
 
 const noAssets = () => null

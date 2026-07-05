@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 4
+export const DOC_VERSION = 5
 
 /** Whether a content layer engraves its geometry or subtracts it from below. */
 export type BooleanRole = 'draw' | 'subtract'
@@ -90,6 +90,10 @@ export interface HatchLayer extends LayerBase {
   /** Outer endpoint is skewed by this many degrees relative to the inner one. */
   twistDeg: number
   cap: 'butt' | 'round'
+  /** Arc span each hatch block fills, degrees (360 = the full circle). */
+  sweepDeg: number
+  /** Number of evenly-spaced copies of the arc around the axis (symmetric fills). */
+  repeats: number
 }
 
 export type MotifSource =
@@ -267,6 +271,8 @@ export function makeHatchLayer(patch: Partial<HatchLayer> = {}): HatchLayer {
     strokeMM: 0.08,
     twistDeg: 0,
     cap: 'butt',
+    sweepDeg: 360,
+    repeats: 1,
     ...patch,
   }
 }

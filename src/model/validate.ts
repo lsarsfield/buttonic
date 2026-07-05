@@ -21,7 +21,7 @@ const LAYER_TYPES = Object.keys(LAYER_TYPE_LABELS) as LayerType[]
  */
 const REQUIRED: Record<LayerType, Record<string, 'n' | 's' | 'b'>> = {
   ring: { radiusMM: 'n', strokeMM: 'n', rInnerMM: 'n', rOuterMM: 'n', mode: 's' },
-  hatch: { count: 'n', rInnerMM: 'n', rOuterMM: 'n', strokeMM: 'n', twistDeg: 'n', cap: 's' },
+  hatch: { count: 'n', rInnerMM: 'n', rOuterMM: 'n', strokeMM: 'n', twistDeg: 'n', cap: 's', sweepDeg: 'n', repeats: 'n' },
   repeat: {
     count: 'n', radiusMM: 'n', sizeMM: 'n', align: 's', rotationOffsetDeg: 'n',
     alternateFlip: 'b', rows: 'n', rowGapMM: 'n', staggerRow2: 'b', flipRow2: 'b', strokeMM: 'n',

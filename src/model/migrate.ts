@@ -29,6 +29,15 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
       return layer
     }),
   }),
+  // v5: partial-arc hatch (sweepDeg) + symmetric repeats
+  5: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) =>
+      typeof layer === 'object' && layer !== null && (layer as { type?: string }).type === 'hatch'
+        ? { sweepDeg: 360, repeats: 1, ...layer }
+        : layer,
+    ),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

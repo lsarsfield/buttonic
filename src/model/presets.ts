@@ -34,7 +34,7 @@ export function presetReferenceA(): ButtonDoc {
     layers: [
       {
         id: 'refA-band1', type: 'hatch', name: 'Band 1 · fine', visible: true, phaseDeg: 0,
-        count: 140, rInnerMM: 1.3, rOuterMM: 3.6, strokeMM: 0.07, twistDeg: 0, cap: 'butt',
+        count: 140, rInnerMM: 1.3, rOuterMM: 3.6, strokeMM: 0.07, twistDeg: 0, cap: 'butt', sweepDeg: 360, repeats: 1,
       },
       {
         id: 'refA-sep1', type: 'ring', name: 'Separator 1', visible: true, phaseDeg: 0,
@@ -42,7 +42,7 @@ export function presetReferenceA(): ButtonDoc {
       },
       {
         id: 'refA-band2', type: 'hatch', name: 'Band 2 · medium', visible: true, phaseDeg: 0,
-        count: 220, rInnerMM: 3.8, rOuterMM: 5.4, strokeMM: 0.07, twistDeg: 0, cap: 'butt',
+        count: 220, rInnerMM: 3.8, rOuterMM: 5.4, strokeMM: 0.07, twistDeg: 0, cap: 'butt', sweepDeg: 360, repeats: 1,
       },
       {
         id: 'refA-sep2', type: 'ring', name: 'Separator 2', visible: true, phaseDeg: 0,
@@ -50,7 +50,7 @@ export function presetReferenceA(): ButtonDoc {
       },
       {
         id: 'refA-band3', type: 'hatch', name: 'Band 3 · dense', visible: true, phaseDeg: 0,
-        count: 300, rInnerMM: 5.6, rOuterMM: 7.4, strokeMM: 0.07, twistDeg: 0, cap: 'butt',
+        count: 300, rInnerMM: 5.6, rOuterMM: 7.4, strokeMM: 0.07, twistDeg: 0, cap: 'butt', sweepDeg: 360, repeats: 1,
       },
       {
         id: 'refA-sep3', type: 'ring', name: 'Separator 3', visible: true, phaseDeg: 0,
@@ -58,7 +58,7 @@ export function presetReferenceA(): ButtonDoc {
       },
       {
         id: 'refA-outer', type: 'hatch', name: 'Outer reeding', visible: true, phaseDeg: 0,
-        count: 360, rInnerMM: 7.65, rOuterMM: 8.15, strokeMM: 0.06, twistDeg: 0, cap: 'butt',
+        count: 360, rInnerMM: 7.65, rOuterMM: 8.15, strokeMM: 0.06, twistDeg: 0, cap: 'butt', sweepDeg: 360, repeats: 1,
       },
       {
         id: 'refA-rim', type: 'ring', name: 'Rim', visible: true, phaseDeg: 0,
