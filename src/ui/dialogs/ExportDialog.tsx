@@ -8,6 +8,9 @@ import { Select } from '../controls/Select'
 import { SegmentedControl } from '../controls/SegmentedControl'
 import { Toggle } from '../controls/Toggle'
 
+/** Personal PayPal for the voluntary "pay what you can" nudge. Blank = hide it. */
+const PAYPAL_URL = 'https://paypal.me/liamsarsfield01'
+
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const doc = useEngraver((s) => s.doc)
   const lightDeg = useEngraver((s) => s.view.lightDeg)
@@ -62,6 +65,19 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     <div className="modal-backdrop" onPointerDown={onClose}>
       <div className="modal" onPointerDown={(e) => e.stopPropagation()}>
         <div className="modal-title">Export</div>
+
+        {PAYPAL_URL && (
+          <div className="modal-section pwyc">
+            <div className="modal-section-title">Pay what you can</div>
+            <div className="pwyc-note">
+              Buttonic is free. If it saved you time, chip in whatever feels right — it goes
+              straight to my PayPal. Totally optional; your files are ready below.
+            </div>
+            <a className="button-primary pwyc-button" href={PAYPAL_URL} target="_blank" rel="noopener noreferrer">
+              Chip in via PayPal ↗
+            </a>
+          </div>
+        )}
 
         <div className="modal-section">
           <div className="modal-section-title">Die file · SVG ({doc.diameterMM} mm true size)</div>

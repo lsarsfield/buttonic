@@ -485,6 +485,24 @@ button.active {
   letter-spacing: 0.06em;
 }
 
+/* Pay-what-you-can support callout (Export dialog) — a gentle nudge, not a gate. */
+.modal-section.pwyc {
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.pwyc-note {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+a.pwyc-button {
+  display: inline-block;
+  align-self: flex-start;
+  text-decoration: none;
+}
+
 .modal-row {
   display: flex;
   gap: 8px;
