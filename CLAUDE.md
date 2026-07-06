@@ -27,11 +27,14 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **4**), sequential `migrate.ts`
-  (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos — copy this pattern),
-  hand-rolled `validate.ts` (REQUIRED field tables), `presets.ts` (two reference-button
-  templates; **preset literals must carry every schema field** — the round-trip test
-  compares them through parseDoc).
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **7**), sequential `migrate.ts`
+  (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
+  `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`
+  — copy this pattern; defaults spread FIRST so stored values win), hand-rolled
+  `validate.ts` (REQUIRED field tables), `presets.ts` (Reference A/B + Flower-Power +
+  Old-Book templates; **preset literals must carry every schema field** — the round-trip
+  test compares them through parseDoc. New presets add NEW snapshots; existing goldens
+  must stay byte-identical, so new schema fields default to the old behaviour).
 - `src/geometry/` — the pure kernel (NO DOM/React/IO imports; node-tested):
   - `shapes.ts` Shape IR: `circle | line | path | instanced(def + N transforms)`.
     Exact-first: circles stay circles, motifs/glyphs stay beziers under affine;
@@ -43,6 +46,16 @@ param, not an error.)
     (single svg-pathdata wrapper), `mat2d.ts` (no DOMMatrix).
   - `clip.ts` cross-layer subtraction: clearance discs (v1, def-level fast path for
     hatch — keep) + polygon regions (v2). Regions-empty path returns the SAME objects.
+    Stroked ticks clip by centreline; POINTED hatch ticks are filled thin spindles →
+    also clip by centreline (`filledThinTickClip`: keep only the OUTWARD span, drop inner
+    stubs + sub-~3×-stroke nubs), NEVER martinez-differenced against a halo (that hangs
+    for tens of seconds and mangles edges). Real motifs (curved/multi-loop) still use
+    `safeDifference`.
+  - `motifs/builtins.ts` — ~31 built-in motifs grouped Basic/Groovy/Old Book
+    (`{id,label,d,paintType,group?}`, unit-box y-down). Referenced by string `motifId`
+    (repeat bands + ring-text dividers, never stored inline), so adding one is a single-
+    file edit — no schema change. Holes via reversed-winding under nonzero (instanced
+    defs have no evenodd). Rendered as swatches by `ui/controls/MotifPicker`.
   - `poly.ts` polygon-clipping bridge: counter-preserving winding nesting (nonzero),
     xor (evenodd), disc-sweep Minkowski dilation (circumscribed caps — margins never
     undershoot), `safe*` wrappers (martinez can throw; never let it reach React).
@@ -65,6 +78,10 @@ param, not an error.)
    (`polar.ts`, test-locked). Instance angles are exact `k*360/N`, never accumulated.
 2. **Stroke semantics:** stroked geometry = constant-width cut (centreline + strokeMM);
    filled = outline fill. Never `vector-effect`. Line clipping is centreline-based.
+   Per-layer stroke `cap` (butt/round/square, hatch/repeat) + `join` (miter/round/bevel,
+   repeat) via `SvgStrokeCap`/`StrokeJoin`; `join` is OMITTED from paint when miter so
+   goldens stay byte-identical. Hatch `cap: 'point'` synthesizes a filled tapered spindle
+   (SVG has no pointed cap) — kept out of the SVG-valid `SvgStrokeCap`.
 3. **`phaseDeg` never enters compiled geometry or cached regions** — render-time
    rotation only.
 4. **Golden snapshots** (`src/model/__snapshots__/`) are the acceptance contract for
@@ -76,10 +93,11 @@ param, not an error.)
 
 ## Testing & verification culture
 
-159 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+180 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
-regressions, bundled-font smoke tests (parse + outlines + license per manifest entry),
-e2e boolean acceptance (reversed-monogram counter preservation, phase tracking).
+regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
+license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,
+pointed-hatch halo clipping).
 After code changes: typecheck + full suite, then ONE browser acceptance pass via the
 preview tools + `window.__engraver`, then push (CI re-gates).
 
@@ -91,7 +109,11 @@ preview tools + `window.__engraver`, then push (CI re-gates).
 - Local fonts are Chromium-only by design; projects store references (postscript name),
   not bytes; exports always bake outlines. Explicit per-font Embed action exists.
 - Halo dilation is martinez's worst case: disc-sweep capsules (~200ms, memoized).
-  Thin-rect capsules are slower AND crash — don't "optimize" back to them.
+  Thin-rect capsules are slower AND crash — don't "optimize" back to them. Same reason
+  pointed-hatch ticks (thin filled spindles) are halo-clipped by centreline, not martinez.
+- Pointed hatch ticks are filled, so the def-level clearance-disc trim (a stroked-line
+  fast path) doesn't apply — a pointed band is bounded by its own rInner/rOuter, not by a
+  centre clearance moat.
 - Multi-tab workspace = last-write-wins (BroadcastChannel is future work).
 - Deferred: bezier re-fitting of warped polylines, DXF export, three.js relief.
 
@@ -103,3 +125,10 @@ option menus. Session pattern: plan in plan-mode first (sometimes Fable plans /
 Opus executes — plans must then be fully self-contained), lean execution, one browser
 acceptance pass, ship to live. Public repo visibility, commits, and domain changes were
 each explicitly user-approved — keep confirming outward-facing actions of new kinds.
+
+When a visual bug won't reproduce from a screenshot, ask for the exported `.button` JSON
+and load it — the exact layer settings (e.g. a hatch `cap: 'point'`, local font ids) are
+usually the missing clue; guessing a repro wastes rounds. `~/Downloads` is macOS-TCC-
+protected (Read/cp fail even with sandbox off), so have him drop the file into the repo
+folder. Verify panel-UI changes at the REAL inspector width (~272px, fixed), not a wide
+preview window; stack 4-option segmented controls (label above) so they don't overflow.
