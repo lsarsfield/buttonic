@@ -53,15 +53,16 @@ param, not an error.)
     stubs + sub-~3×-stroke nubs), NEVER martinez-differenced against a halo (that hangs
     for tens of seconds and mangles edges). Real motifs (curved/multi-loop) still use
     `safeDifference`.
-  - `motifs/builtins.ts` — ~114 built-in motifs grouped Basic/Celestial/Floral/Bandana/
+  - `motifs/builtins.ts` — ~128 built-in motifs grouped Basic/Celestial/Floral/Bandana/
     Kilim/Groovy/Workwear/Tarot/Old Book (`{id,label,d,paintType,group?}`, unit-box y-down).
     Selection is grounded in the traditional canon per category (kilim = authentic Anatolian:
     elibelinde/scorpion/comb/muska/ram's-horn; tarot = the four suits + Major-Arcana emblems;
-    Old Book = real typographic ornaments: hedera/pilcrow/dagger/asterism/dinkus) AND pruned
-    for render quality — a review cut ~39 that read poorly at swatch size (many botanicals +
-    most figurative crossed-implement military devices + a few celestial/tarot). LESSON:
-    favour clean geometric/parametric forms; intricate hand-drawn silhouettes read as mush at
-    ~36px. Referenced by string `motifId` (repeat bands + ring-text dividers + centre, never
+    Old Book = real typographic ornaments: hedera/pilcrow/dagger/asterism/dinkus). LESSON from
+    a prune-then-rebuild: intricate hand-drawn FIGURATIVE silhouettes read as mush at ~36px, so
+    the figurative motifs are now ADOPTED from open-licensed icon libraries — normalized into
+    the unit box by `scratchpad/find-refs.mjs`+`normalize-files.mjs` (game-icons.net CC BY,
+    Wikimedia CC0), attributed in `CREDITS.md`; geometric/parametric motifs stay original.
+    game-icons author for nonzero winding, so holes adopt as-is (no evenodd fixups needed). Referenced by string `motifId` (repeat bands + ring-text dividers + centre, never
     stored inline), so adding one is a single-file edit — no schema change. Holes via
     reversed-winding under nonzero (instanced defs have no evenodd). Many were authored by
     `scratchpad`-style generators (parametric polygons/stars/suns/rings via a `pt`/`circle`/
