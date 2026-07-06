@@ -154,6 +154,8 @@ describe('text halo over a pattern', () => {
     const verts = filled.map((s) => (s.d.match(/[ML]/g) || []).length)
     expect(verts.some((n) => n === 6)).toBe(true)
     expect(verts.some((n) => n === 4)).toBe(true)
+    // each tick yields at most one shape — no inner-stub clutter under serifs
+    expect(filled.length).toBeLessThanOrEqual(180)
   })
 
   it('halo outline mode emits a stroked L-only boundary', () => {

@@ -172,18 +172,25 @@ function filledThinTickClip(d: string, paint: Shape['paint'], regions: MultiPoly
   if (frags.length === 1 && Math.hypot(frags[0]!.bx - frags[0]!.ax, frags[0]!.by - frags[0]!.ay) >= maxD - 1e-6) {
     return [{ kind: 'path', d, paint }] // untouched by the halo → keep the exact spindle (tips intact)
   }
-  const minLen = stubMinLen(2 * halfW)
-  const out: Shape[] = []
+  // A pointed tick is an outward spike, so keep only its outward span. Inner
+  // fragments trapped between the band's inner edge and the letters — the bits
+  // that survive in the clear gaps under serifs — otherwise clutter the text.
+  let best: { ax: number; ay: number; bx: number; by: number } | null = null
+  let bestR = -1
   for (const s of frags) {
-    if (Math.hypot(s.bx - s.ax, s.by - s.ay) < minLen) continue // drop nubs
-    const quad =
-      `M ${fmt(s.ax + px * halfW)} ${fmt(s.ay + py * halfW)}` +
-      ` L ${fmt(s.bx + px * halfW)} ${fmt(s.by + py * halfW)}` +
-      ` L ${fmt(s.bx - px * halfW)} ${fmt(s.by - py * halfW)}` +
-      ` L ${fmt(s.ax - px * halfW)} ${fmt(s.ay - py * halfW)} Z`
-    out.push({ kind: 'path', d: quad, paint })
+    const rr = Math.max(Math.hypot(s.ax, s.ay), Math.hypot(s.bx, s.by))
+    if (rr > bestR) {
+      bestR = rr
+      best = s
+    }
   }
-  return out
+  if (!best || Math.hypot(best.bx - best.ax, best.by - best.ay) < stubMinLen(2 * halfW)) return []
+  const quad =
+    `M ${fmt(best.ax + px * halfW)} ${fmt(best.ay + py * halfW)}` +
+    ` L ${fmt(best.bx + px * halfW)} ${fmt(best.by + py * halfW)}` +
+    ` L ${fmt(best.bx - px * halfW)} ${fmt(best.by - py * halfW)}` +
+    ` L ${fmt(best.ax - px * halfW)} ${fmt(best.ay - py * halfW)} Z`
+  return [{ kind: 'path', d: quad, paint }]
 }
 
 /** t-params in (0,1) where segment a→b crosses any region edge. */
