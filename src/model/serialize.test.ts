@@ -181,6 +181,30 @@ describe('migrations', () => {
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.doc).toEqual(doc)
   })
+
+  it('v8: centre layers gain a motif id without overwriting values', () => {
+    const oldCenter = makeCenterLayer() as unknown as Record<string, unknown>
+    delete oldCenter.motifId
+    const keepMotif = makeCenterLayer({ sourceType: 'builtin', motifId: 'rosette' }) as unknown as Record<string, unknown>
+    const v7 = { ...makeBlankDoc(), version: 7, layers: [oldCenter, keepMotif] }
+    const r = parseDoc(JSON.stringify(v7))
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      const a = r.doc.layers[0]!
+      const b = r.doc.layers[1]!
+      if (a.type !== 'center' || b.type !== 'center') throw new Error('type')
+      expect(a.motifId).toBe('star') // absent → default
+      expect(b.motifId).toBe('rosette') // present → preserved
+      expect(b.sourceType).toBe('builtin')
+    }
+  })
+
+  it('a v8 builtin-source centre round-trips unchanged', () => {
+    const doc = { ...makeBlankDoc(), layers: [makeCenterLayer({ sourceType: 'builtin', motifId: 'fleurdelis' })] }
+    const r = parseDoc(stringifyDoc(doc))
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.doc).toEqual(doc)
+  })
 })
 
 describe('coerceDoc (plain values, no JSON text)', () => {

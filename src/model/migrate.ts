@@ -57,6 +57,15 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
         : layer,
     ),
   }),
+  // v8: centre layers gain a builtin-motif id (inert unless sourceType === 'builtin')
+  8: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) =>
+      typeof layer === 'object' && layer !== null && (layer as { type?: string }).type === 'center'
+        ? { motifId: 'star', ...layer }
+        : layer,
+    ),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

@@ -70,7 +70,7 @@ export function presetReferenceA(): ButtonDoc {
       },
       {
         id: 'refA-emblem', type: 'center', name: 'Emblem', visible: true, phaseDeg: 0,
-        sourceType: 'glyph', text: 'F', fontId: 'garamond', assetId: null,
+        sourceType: 'glyph', text: 'F', fontId: 'garamond', assetId: null, motifId: 'star',
         sizeMM: 2.1, rotationDeg: 0, offsetXMM: 0, offsetYMM: 0,
         render: 'fill', strokeMM: 0.12, clearanceMM: 2.3,
         booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,
@@ -91,7 +91,7 @@ export function presetReferenceB(): ButtonDoc {
     layers: [
       {
         id: 'refB-monogram', type: 'center', name: 'Monogram D', visible: true, phaseDeg: 0,
-        sourceType: 'glyph', text: 'D', fontId: 'unifraktur', assetId: null,
+        sourceType: 'glyph', text: 'D', fontId: 'unifraktur', assetId: null, motifId: 'star',
         sizeMM: 5.6, rotationDeg: 0, offsetXMM: 0, offsetYMM: 0,
         render: 'fill', strokeMM: 0.12, clearanceMM: 0,
         booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,

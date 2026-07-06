@@ -34,7 +34,7 @@ const REQUIRED: Record<LayerType, Record<string, 'n' | 's' | 'b'>> = {
     booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n',
   },
   center: {
-    sourceType: 's', text: 's', fontId: 's', sizeMM: 'n', rotationDeg: 'n',
+    sourceType: 's', motifId: 's', text: 's', fontId: 's', sizeMM: 'n', rotationDeg: 'n',
     offsetXMM: 'n', offsetYMM: 'n', render: 's', strokeMM: 'n', clearanceMM: 'n',
     booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n',
   },

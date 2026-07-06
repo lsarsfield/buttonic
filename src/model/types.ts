@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 7
+export const DOC_VERSION = 8
 
 /** Whether a content layer engraves its geometry or subtracts it from below. */
 export type BooleanRole = 'draw' | 'subtract'
@@ -179,15 +179,17 @@ export interface RingTextLayer extends LayerBase {
   haloStrokeMM: number
 }
 
-/** Monogram glyph or SVG asset placed at the axis. */
+/** Monogram glyph, built-in motif, or SVG asset placed at the axis. */
 export interface CenterLayer extends LayerBase {
   type: 'center'
-  sourceType: 'glyph' | 'asset'
+  sourceType: 'glyph' | 'asset' | 'builtin'
   /** glyph source */
   text: string
   fontId: FontId
   /** asset source */
   assetId: AssetId | null
+  /** builtin source: an id into geometry/motifs/builtins */
+  motifId: string
   sizeMM: number
   rotationDeg: number
   offsetXMM: number
@@ -361,6 +363,7 @@ export function makeCenterLayer(patch: Partial<CenterLayer> = {}): CenterLayer {
     text: 'D',
     fontId: 'unifraktur',
     assetId: null,
+    motifId: 'star',
     sizeMM: 6,
     rotationDeg: 0,
     offsetXMM: 0,

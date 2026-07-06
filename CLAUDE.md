@@ -27,10 +27,12 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **7**), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **8**), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
-  `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`
-  — copy this pattern; defaults spread FIRST so stored values win), hand-rolled
+  `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
+  v8 centre `motifId` (built-in motif as a third centre source, inert unless
+  `sourceType: 'builtin'`) — copy this pattern; defaults spread FIRST so stored values win),
+  hand-rolled
   `validate.ts` (REQUIRED field tables), `presets.ts` (Reference A/B + Flower-Power +
   Old-Book templates; **preset literals must carry every schema field** — the round-trip
   test compares them through parseDoc. New presets add NEW snapshots; existing goldens

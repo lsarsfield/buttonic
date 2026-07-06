@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { makeHatchLayer, makeRepeatLayer, makeRingLayer } from '../model/types'
+import { makeCenterLayer, makeHatchLayer, makeRepeatLayer, makeRingLayer } from '../model/types'
+import { compileCenter } from './center'
 import { compileHatch } from './hatch'
 import { compileRing } from './ring'
 import { compileRepeat } from './repeat'
@@ -224,5 +225,45 @@ describe('repeat compiler', () => {
     if (s.kind !== 'instanced') return
     expect(s.paint.stroke?.cap).toBe('square')
     expect(s.paint.stroke?.join).toBe('round')
+  })
+})
+
+describe('center compiler (builtin motif)', () => {
+  it('a fill motif → one nonzero fill path scaled to sizeMM at the axis', () => {
+    const out = compileCenter(makeCenterLayer({ sourceType: 'builtin', motifId: 'star', sizeMM: 6 }), null)
+    expect(out.warnings).toEqual([])
+    expect(out.shapes).toHaveLength(1)
+    const s = out.shapes[0]!
+    expect(s.kind).toBe('path')
+    if (s.kind !== 'path') return
+    expect(s.paint.fill).toBe(true)
+    expect(s.paint.stroke).toBeNull()
+    expect(s.fillRule).toBeUndefined() // nonzero — motif holes are reversed-winding, never evenodd
+    expect(s.d.startsWith('M 0 -3')).toBe(true) // unit-box apex (0,−0.5) × sizeMM 6, centred on the axis
+  })
+
+  it('a stroke motif strokes at the layer width; render=stroke outlines a fill motif', () => {
+    const sun = compileCenter(
+      makeCenterLayer({ sourceType: 'builtin', motifId: 'sunburst', strokeMM: 0.2 }),
+      null,
+    ).shapes[0]!
+    if (sun.kind === 'path') {
+      expect(sun.paint.fill).toBe(false)
+      expect(sun.paint.stroke?.widthMM).toBe(0.2)
+    }
+    const outlined = compileCenter(
+      makeCenterLayer({ sourceType: 'builtin', motifId: 'star', render: 'stroke', strokeMM: 0.15 }),
+      null,
+    ).shapes[0]!
+    if (outlined.kind === 'path') {
+      expect(outlined.paint.fill).toBe(false)
+      expect(outlined.paint.stroke?.widthMM).toBe(0.15)
+    }
+  })
+
+  it('warns and emits nothing for an unknown motif id', () => {
+    const out = compileCenter(makeCenterLayer({ sourceType: 'builtin', motifId: 'nope' }), null)
+    expect(out.shapes).toEqual([])
+    expect(out.warnings.some((w) => /Unknown motif/.test(w))).toBe(true)
   })
 })

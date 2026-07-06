@@ -1,6 +1,7 @@
 import type { CenterLayer } from '../../model/types'
 import { useEngraver } from '../../state/store'
 import { FontPicker } from '../controls/FontPicker'
+import { MotifPicker } from '../controls/MotifPicker'
 import { NumberField } from '../controls/NumberField'
 import { SegmentedControl } from '../controls/SegmentedControl'
 import { SvgAssetPicker } from '../controls/SvgAssetPicker'
@@ -17,9 +18,11 @@ export function CenterPanel({ layer }: { layer: CenterLayer }) {
       <div className="field-group">
         <SegmentedControl
           label="Source"
+          stack
           value={layer.sourceType}
           options={[
             { value: 'glyph', label: 'Monogram' },
+            { value: 'builtin', label: 'Motif' },
             { value: 'asset', label: 'SVG' },
           ]}
           onChange={(sourceType) => update({ sourceType })}
@@ -34,6 +37,8 @@ export function CenterPanel({ layer }: { layer: CenterLayer }) {
             />
             <FontPicker value={layer.fontId} onChange={(fontId) => update({ fontId })} />
           </>
+        ) : layer.sourceType === 'builtin' ? (
+          <MotifPicker value={layer.motifId} onChange={(motifId) => update({ motifId })} />
         ) : (
           <SvgAssetPicker value={layer.assetId} onChange={(assetId) => update({ assetId })} />
         )}

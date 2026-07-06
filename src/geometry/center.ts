@@ -2,7 +2,8 @@ import type { Font } from 'opentype.js'
 import type { CenterLayer } from '../model/types'
 import { glyphPathD } from './glyphs'
 import { mul, rotateThenTranslate, scaling, translation } from './mat2d'
-import { segsToD, transformSegs } from './pathData'
+import { getBuiltinMotif } from './motifs/builtins'
+import { parsePathData, segsToD, transformSegs } from './pathData'
 import type { ParsedSvgAsset } from './svgAsset'
 import type { CompiledLayer, Shape } from './shapes'
 import { fillPaint, strokePaint } from './shapes'
@@ -17,6 +18,29 @@ export function compileCenter(
   font: Font | null,
   getSvgAsset: (assetId: string) => ParsedSvgAsset | null = () => null,
 ): CompiledLayer {
+  if (layer.sourceType === 'builtin') {
+    const motif = getBuiltinMotif(layer.motifId)
+    if (!motif) {
+      return { shapes: [], warnings: [`Unknown motif "${layer.motifId}".`] }
+    }
+    // Motifs live in a unit box centred on the origin (height 1 = sizeMM), so a
+    // bare scale places one at the axis — same framing as a repeat band.
+    const m = mul(
+      rotateThenTranslate(layer.rotationDeg, layer.offsetXMM, layer.offsetYMM),
+      scaling(layer.sizeMM, layer.sizeMM),
+    )
+    const stroke = layer.render === 'stroke' || motif.paintType === 'stroke'
+    return {
+      shapes: [
+        {
+          kind: 'path',
+          d: segsToD(transformSegs(parsePathData(motif.d), m)),
+          paint: stroke ? strokePaint(layer.strokeMM, 'round') : fillPaint(),
+        },
+      ],
+      warnings: [],
+    }
+  }
   if (layer.sourceType === 'asset') {
     if (!layer.assetId) {
       return { shapes: [], warnings: ['Choose or upload an SVG for the centre element.'] }
