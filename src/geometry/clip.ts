@@ -122,12 +122,13 @@ const insideAny = (x: number, y: number, regions: MultiPolygon[]): boolean =>
   regions.some((mp) => pointInMultiPolygon(x, y, mp))
 
 /**
- * Minimum length for a surviving clipped stroke fragment. A piece shorter than
- * the stroke is wide reads as a stray dot, not a tick — these grazing slivers
- * appear where a tick crosses a serif or a faceted halo edge. Floored so
- * hairline strokes still shed sub-tolerance crumbs.
+ * Minimum length for a surviving clipped stroke fragment. A piece only as long
+ * as the stroke is wide reads as a stray nub, not a tick — these appear where a
+ * tick grazes a serif or the letter-shaped halo edge. Require a few stroke
+ * widths (floored for hairline strokes) so the fringe around text stays tidy.
  */
-const stubMinLen = (strokeWidthMM: number | undefined): number => Math.max(strokeWidthMM ?? 0, 0.08)
+const stubMinLen = (strokeWidthMM: number | undefined): number =>
+  Math.max(3 * (strokeWidthMM ?? 0), 0.15)
 
 function polylineLen(pts: Pt[]): number {
   let len = 0
