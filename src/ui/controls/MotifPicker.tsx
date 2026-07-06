@@ -13,6 +13,7 @@ const GROUP_ORDER = [
   'Celestial',
   'Floral',
   'Bandana',
+  'Kilim',
   'Groovy',
   'Workwear',
   'Tarot',
