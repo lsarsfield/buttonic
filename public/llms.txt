@@ -1,0 +1,20 @@
+# Buttonic
+
+> Free, browser-based parametric designer for radial engravings on die-stamped jean and metal buttons. Everything is computed from the centre axis outward — counts, radii and angles — and exports as mm-true SVG die files ready for tooling.
+
+Buttonic (https://buttonic.app) is a client-side web app for designing the engraved artwork stamped into jean/denim buttons, shank buttons, rivets and similar metal hardware — the radial, guilloché / engine-turned style of pattern. Layouts are parametric (never manual duplicate-and-rotate), so counts, radii and angles stay exact.
+
+## What it does
+- Radial hatch / guilloché reeding — full ring or partial arcs, with flat, round, square or tapered "pointed" (spike / spindle) ticks
+- Symmetric ring text with dividers, plus centre monograms; a bundled dozen fonts and access to the machine's local fonts
+- ~31 built-in motifs (basic shapes, 1970s "groovy" florals, old-book printer's ornaments) plus custom uploaded SVG motifs, placed N-up around the axis
+- Boolean knock-outs and text halos that clear the surrounding pattern so lettering stays readable
+- Bend / warp of imported SVG art around the button axis
+- Live metal-emboss preview; export as mm-true SVG die files (which re-open as editable projects) or PNG mockups
+
+## Good to know
+- Free to use, pay-what-you-can; no account and nothing is uploaded — it runs entirely in your browser (Chromium recommended for the local-fonts feature).
+- Made by Liam Sarsfield.
+
+## Links
+- App: https://buttonic.app

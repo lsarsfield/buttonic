@@ -3,11 +3,98 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Buttonic</title>
-    <style>html, body { margin: 0; background: #17181c; }</style>
+    <title>Buttonic — parametric engraving designer for jean buttons</title>
+    <meta
+      name="description"
+      content="Free browser tool for designing radial engravings on die-stamped jean and metal buttons — ring text, guilloché hatch, motifs and halos — exported as mm-true SVG die files."
+    />
+    <link rel="canonical" href="https://buttonic.app/" />
+    <meta name="theme-color" content="#17181c" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Buttonic" />
+    <meta property="og:title" content="Buttonic — parametric engraving designer for jean buttons" />
+    <meta
+      property="og:description"
+      content="Free browser tool for designing radial engravings on die-stamped jean and metal buttons, exported as mm-true SVG die files."
+    />
+    <meta property="og:url" content="https://buttonic.app/" />
+    <meta property="og:image" content="https://buttonic.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="An engine-turned button engraving beside the Buttonic wordmark." />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Buttonic — parametric engraving designer for jean buttons" />
+    <meta
+      name="twitter:description"
+      content="Free browser tool for designing radial engravings on die-stamped jean and metal buttons, exported as mm-true SVG die files."
+    />
+    <meta name="twitter:image" content="https://buttonic.app/og-image.png" />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Buttonic",
+        "url": "https://buttonic.app/",
+        "description": "Free, browser-based parametric designer for radial engravings on die-stamped jean and metal buttons — guilloché hatch, ring text, motifs and halos — exported as mm-true SVG die files.",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Web browser (Chromium recommended for local fonts)",
+        "browserRequirements": "Requires JavaScript",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Liam Sarsfield" },
+        "featureList": [
+          "Radial hatch / guilloché reeding",
+          "Symmetric ring text with dividers and centre monograms",
+          "Built-in and custom SVG motifs",
+          "Boolean knock-outs and text halos",
+          "mm-true SVG die-file export",
+          "PNG metal-preview mockups"
+        ]
+      }
+    </script>
+
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #17181c;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div
+        style="max-width: 720px; margin: 8vh auto; padding: 0 24px; font-family: system-ui, -apple-system, sans-serif; color: #dfe2e6; line-height: 1.55;"
+      >
+        <h1 style="font-weight: 600;">Buttonic</h1>
+        <p>
+          Buttonic is a free, browser-based parametric designer for the radial engravings stamped into
+          die-stamped jean and metal buttons — guilloché / engine-turned patterns, ring text, motifs and
+          monograms, all computed from the centre axis outward.
+        </p>
+        <p>
+          It exports mm-true SVG die files (which re-open as editable projects) and PNG mockups. Features
+          include radial hatch reeding, symmetric ring text with dividers, dozens of built-in motifs plus
+          custom SVG, boolean knock-outs and text halos, local and bundled fonts, and a live metal preview.
+        </p>
+        <p>
+          <strong>Buttonic needs JavaScript.</strong> Open
+          <a href="https://buttonic.app/" style="color: #fff;">buttonic.app</a> in a modern browser to use it.
+        </p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

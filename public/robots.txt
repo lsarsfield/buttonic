@@ -1,0 +1,7 @@
+# Buttonic — https://buttonic.app
+# Everyone welcome to crawl and index, including AI / LLM crawlers
+# (GPTBot, ClaudeBot, PerplexityBot, Google-Extended, etc.).
+User-agent: *
+Allow: /
+
+Sitemap: https://buttonic.app/sitemap.xml
