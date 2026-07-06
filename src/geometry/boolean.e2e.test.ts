@@ -134,6 +134,28 @@ describe('text halo over a pattern', () => {
     expect(bottom).toBeDefined()
   })
 
+  it('clips a POINTED (filled) hatch by centreline, not martinez — ticks clear the halo', () => {
+    const layers = [
+      makeHatchLayer({ id: 'h', count: 180, rInnerMM: 4, rOuterMM: 8, cap: 'point', capPointMM: 0.05, pointEnds: 'both', strokeMM: 0.09 }),
+      makeRingTextLayer({ id: 't', text: 'BUTTONIC', fontId: 'cinzel', sizeMM: 1.8, radiusMM: 6.2, anchorDeg: 0, haloMM: 0.6 }),
+    ]
+    const region = layerKeepoutRegion(layers[1]!, ctx()).region!
+    const out = clipLayer(layers, 0)
+    const filled = out.filter((s): s is Extract<Shape, { kind: 'path' }> => s.kind === 'path' && s.paint.fill)
+    expect(filled.length).toBeGreaterThan(0)
+    // no surviving tick's interior sits inside the halo
+    for (const s of filled) {
+      const pts = [...s.d.matchAll(/(-?\d+\.?\d*)\s+(-?\d+\.?\d*)/g)].map((m) => [Number(m[1]), Number(m[2])] as [number, number])
+      const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length
+      const cy = pts.reduce((a, p) => a + p[1], 0) / pts.length
+      expect(pointInMultiPolygon(cx, cy, region)).toBe(false)
+    }
+    // both outcomes present: full spindles (6 verts) away from text, truncated quads (4 verts) at it
+    const verts = filled.map((s) => (s.d.match(/[ML]/g) || []).length)
+    expect(verts.some((n) => n === 6)).toBe(true)
+    expect(verts.some((n) => n === 4)).toBe(true)
+  })
+
   it('halo outline mode emits a stroked L-only boundary', () => {
     const layer = makeRingTextLayer({ text: 'AB', fontId: 'cinzel', haloMM: 0.5, haloMode: 'outline', haloStrokeMM: 0.1 })
     const region = layerKeepoutRegion(layer, ctx()).region!

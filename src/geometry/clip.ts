@@ -136,6 +136,56 @@ function polylineLen(pts: Pt[]): number {
   return len
 }
 
+/**
+ * A thin, straight, single-loop filled polygon is a pointed hatch tick — a
+ * stroke in disguise. Differencing it against a text halo with martinez is its
+ * worst case: hundreds of near-degenerate polygons make the clip crawl (a halo
+ * over a pointed-hatch band could hang for tens of seconds) and mangle edges.
+ * So clip the tick's centre axis instead and re-emit each surviving span as a
+ * filled quad. Returns null for anything that isn't a thin straight tick (real
+ * motifs, curves, multi-loop shapes) so they fall back to polygon difference.
+ */
+function filledThinTickClip(d: string, paint: Shape['paint'], regions: MultiPolygon[]): Shape[] | null {
+  if (/[CAQSTVHcaqstvh]/.test(d)) return null // curved or shorthand → a motif
+  if ((d.match(/M/g) || []).length !== 1) return null // single loop only
+  const nums = d.match(/-?\d*\.?\d+/g)
+  if (!nums || nums.length < 6) return null
+  const pts: Pt[] = []
+  for (let i = 0; i + 1 < nums.length; i += 2) pts.push({ x: +nums[i]!, y: +nums[i + 1]! })
+  // longest chord = the tick axis; perpendicular extent = its width
+  let a = pts[0]!, b = pts[0]!, maxD = 0
+  for (let i = 0; i < pts.length; i++)
+    for (let j = i + 1; j < pts.length; j++) {
+      const dd = Math.hypot(pts[i]!.x - pts[j]!.x, pts[i]!.y - pts[j]!.y)
+      if (dd > maxD) { maxD = dd; a = pts[i]!; b = pts[j]! }
+    }
+  if (maxD < 1e-6) return null
+  const ux = (b.x - a.x) / maxD
+  const uy = (b.y - a.y) / maxD
+  const px = -uy
+  const py = ux
+  let halfW = 0
+  for (const p of pts) halfW = Math.max(halfW, Math.abs((p.x - a.x) * px + (p.y - a.y) * py))
+  if (halfW <= 0 || (2 * halfW) / maxD > 0.25) return null // not thin → treat as a real motif
+
+  const frags = clipSegmentOutsideRegions(a.x, a.y, b.x, b.y, regions)
+  if (frags.length === 1 && Math.hypot(frags[0]!.bx - frags[0]!.ax, frags[0]!.by - frags[0]!.ay) >= maxD - 1e-6) {
+    return [{ kind: 'path', d, paint }] // untouched by the halo → keep the exact spindle (tips intact)
+  }
+  const minLen = stubMinLen(2 * halfW)
+  const out: Shape[] = []
+  for (const s of frags) {
+    if (Math.hypot(s.bx - s.ax, s.by - s.ay) < minLen) continue // drop nubs
+    const quad =
+      `M ${fmt(s.ax + px * halfW)} ${fmt(s.ay + py * halfW)}` +
+      ` L ${fmt(s.bx + px * halfW)} ${fmt(s.by + py * halfW)}` +
+      ` L ${fmt(s.bx - px * halfW)} ${fmt(s.by - py * halfW)}` +
+      ` L ${fmt(s.ax - px * halfW)} ${fmt(s.ay - py * halfW)} Z`
+    out.push({ kind: 'path', d: quad, paint })
+  }
+  return out
+}
+
 /** t-params in (0,1) where segment a→b crosses any region edge. */
 function segCrossings(ax: number, ay: number, bx: number, by: number, regions: MultiPolygon[]): number[] {
   const ts: number[] = []
@@ -317,6 +367,13 @@ function regionClipShape(
         return
       }
       if (shape.paint.fill) {
+        // Pointed hatch ticks are thin filled spindles; clip them by centreline
+        // instead of martinez (which is pathologically slow on such shapes).
+        const thin = filledThinTickClip(shape.d, shape.paint, regions)
+        if (thin !== null) {
+          for (const t of thin) out.push(t)
+          return
+        }
         const subject = pathToMultiPolygon(shape.d, shape.fillRule ?? 'nonzero', tolMM)
         if (subject.length === 0) {
           out.push(shape)
