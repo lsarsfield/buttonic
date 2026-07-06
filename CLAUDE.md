@@ -53,7 +53,7 @@ param, not an error.)
     stubs + sub-~3×-stroke nubs), NEVER martinez-differenced against a halo (that hangs
     for tens of seconds and mangles edges). Real motifs (curved/multi-loop) still use
     `safeDifference`.
-  - `motifs/builtins.ts` — ~95 built-in motifs grouped Basic/Celestial/Floral/Bandana/
+  - `motifs/builtins.ts` — ~140 built-in motifs grouped Basic/Celestial/Floral/Bandana/
     Groovy/Workwear/Tarot/Old Book (`{id,label,d,paintType,group?}`, unit-box y-down).
     Referenced by string `motifId` (repeat bands + ring-text dividers + centre, never
     stored inline), so adding one is a single-file edit — no schema change. Holes via
