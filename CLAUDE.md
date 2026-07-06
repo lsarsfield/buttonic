@@ -53,11 +53,16 @@ param, not an error.)
     stubs + sub-~3×-stroke nubs), NEVER martinez-differenced against a halo (that hangs
     for tens of seconds and mangles edges). Real motifs (curved/multi-loop) still use
     `safeDifference`.
-  - `motifs/builtins.ts` — ~31 built-in motifs grouped Basic/Groovy/Old Book
-    (`{id,label,d,paintType,group?}`, unit-box y-down). Referenced by string `motifId`
-    (repeat bands + ring-text dividers, never stored inline), so adding one is a single-
-    file edit — no schema change. Holes via reversed-winding under nonzero (instanced
-    defs have no evenodd). Rendered as swatches by `ui/controls/MotifPicker`.
+  - `motifs/builtins.ts` — ~95 built-in motifs grouped Basic/Celestial/Floral/Bandana/
+    Groovy/Workwear/Tarot/Old Book (`{id,label,d,paintType,group?}`, unit-box y-down).
+    Referenced by string `motifId` (repeat bands + ring-text dividers + centre, never
+    stored inline), so adding one is a single-file edit — no schema change. Holes via
+    reversed-winding under nonzero (instanced defs have no evenodd). Many were authored by
+    `scratchpad`-style generators (parametric polygons/stars/suns/rings via a `pt`/`circle`/
+    `polarClosed`/`starPoly` toolkit; figurative ones hand-beziered). Rendered as swatches
+    by `ui/controls/MotifPicker`, which is a SEARCH + collapsible-accordion + capped-scroll
+    picker (the flat grid would swamp the ~272px inspector at this count; the group holding
+    the current value auto-expands).
   - `poly.ts` polygon-clipping bridge: counter-preserving winding nesting (nonzero),
     xor (evenodd), disc-sweep Minkowski dilation (circumscribed caps — margins never
     undershoot), `safe*` wrappers (martinez can throw; never let it reach React).
@@ -95,7 +100,7 @@ param, not an error.)
 
 ## Testing & verification culture
 
-180 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+185 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,

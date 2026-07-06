@@ -248,6 +248,70 @@ button.active {
   height: 100%;
   display: block;
 }
+.motif-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 7px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.motif-search::placeholder {
+  color: var(--text-dim);
+}
+.motif-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0 -2px;
+  padding: 0 2px;
+}
+.motif-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.motif-group-head:hover {
+  color: var(--text);
+}
+.motif-chevron {
+  display: inline-block;
+  width: 9px;
+  font-size: 9px;
+  transition: transform 0.12s ease;
+}
+.motif-chevron.open {
+  transform: rotate(90deg);
+}
+.motif-group-name {
+  flex: 1;
+  text-align: left;
+}
+.motif-group-count {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.motif-grid {
+  margin-bottom: 5px;
+}
+.motif-empty {
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 6px 2px;
+}
 
 /* ---------------------------------------------------------------- panels */
 
