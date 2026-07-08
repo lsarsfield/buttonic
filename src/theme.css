@@ -1024,3 +1024,38 @@ a.pwyc-button {
   min-width: 150px;
   text-align: right;
 }
+
+/* Halo recompute indicator: appears only when a rebuild outlives 150ms so
+   fast settles never flash; the spinner is pure CSS (keeps turning even
+   through brief main-thread work). */
+.statusbar-halo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  opacity: 0;
+  animation: halo-fade-in 120ms ease-out 150ms forwards;
+}
+
+.statusbar-halo-spin {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  opacity: 0.8;
+  animation: halo-spin 700ms linear infinite;
+}
+
+@keyframes halo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes halo-fade-in {
+  to {
+    opacity: 1;
+  }
+}

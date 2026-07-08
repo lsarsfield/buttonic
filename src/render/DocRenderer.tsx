@@ -4,15 +4,9 @@ import { isLocalFontId } from '../model/types'
 import { clipCompiled } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import { annulusPathD } from '../geometry/format'
-import {
-  haloOf,
-  isSubtractLayer,
-  keepoutsAbove,
-  layerKeepoutRegion,
-  regionOutlineShapes,
-  type Keepouts,
-} from '../geometry/keepout'
-import { rotateMultiPolygon } from '../geometry/poly'
+import { haloOf, isSubtractLayer, regionOutlineShapes, type Keepouts } from '../geometry/keepout'
+import { getRegionAsync, keepoutsAboveAsync, pruneRegions } from './keepoutAsync'
+import { rotateMultiPolygon, type MultiPolygon } from '../geometry/poly'
 import { ensureFontLoaded, getLoadedFont } from '../io/fonts'
 import { ensureLocalFontsResolved } from '../io/localFonts'
 import { ensureSvgParsed, getSvgAsset } from '../io/svgAssets'
@@ -25,6 +19,7 @@ export function DocRenderer() {
   const doc = useEngraver((s) => s.doc)
   const assetsRevision = useEngraver((s) => s.assetsRevision)
   const fontsRevision = useEngraver((s) => s.fontsRevision)
+  useEngraver((s) => s.regionsRevision) // re-render when an off-thread region lands
 
   // Kick lazy font loads / SVG parses for any layer that needs one; the
   // revision bump on completion recompiles the affected layers. Local-font
@@ -56,20 +51,36 @@ export function DocRenderer() {
     getFont: getLoadedFont,
     getSvgAsset,
   }
+  pruneRegions(new Set(doc.layers.map((l) => l.id)))
   return (
     <>
       {doc.layers.map((layer, index) => (
-        <LayerGroup key={layer.id} layer={layer} ctx={ctx} keepouts={keepoutsAbove(doc.layers, index, ctx)} />
+        <LayerGroup
+          key={layer.id}
+          layer={layer}
+          ctx={ctx}
+          keepouts={keepoutsAboveAsync(doc.layers, index, ctx)}
+          ownRegion={
+            haloOf(layer) > 0 && (layer as { haloMode?: string }).haloMode === 'outline'
+              ? getRegionAsync(layer, ctx).region
+              : null
+          }
+        />
       ))}
     </>
   )
 }
 
+// Contributors compare by REGION identity (the actual clip input) + phase, not
+// by layer ref: while a stale region is held during a scrub, consumers skip
+// recompiling/re-clipping entirely — only the settle re-renders them.
 const sameKeepouts = (a: Keepouts, b: Keepouts): boolean =>
   a.discs.length === b.discs.length &&
   a.discs.every((d, i) => d.rMM === b.discs[i]!.rMM) &&
   a.contributors.length === b.contributors.length &&
-  a.contributors.every((c, i) => c.layer === b.contributors[i]!.layer)
+  a.contributors.every(
+    (c, i) => c.region === b.contributors[i]!.region && c.phaseDeg === b.contributors[i]!.phaseDeg,
+  )
 
 /**
  * One <g> per layer: a generous transparent hit band for selection plus the
@@ -81,7 +92,17 @@ const sameKeepouts = (a: Keepouts, b: Keepouts): boolean =>
  * preview while selected.
  */
 const LayerGroup = memo(
-  function LayerGroup({ layer, ctx, keepouts }: { layer: Layer; ctx: CompileCtx; keepouts: Keepouts }) {
+  function LayerGroup({
+    layer,
+    ctx,
+    keepouts,
+    ownRegion,
+  }: {
+    layer: Layer
+    ctx: CompileCtx
+    keepouts: Keepouts
+    ownRegion: MultiPolygon | null
+  }) {
     const selected = useEngraver((s) => s.selection === layer.id)
     if (!layer.visible) return null
     const compiled = compileLayer(layer, ctx)
@@ -107,11 +128,11 @@ const LayerGroup = memo(
         : compiled
 
     // halo 'outline': engrave this layer's own halo boundary (pre-phase region
-    // drawn inside this phase-rotated group — correct by construction)
+    // drawn inside this phase-rotated group — correct by construction; the
+    // region is a prop so its settle re-renders through the memo comparator)
     const shapes = [...clipped.shapes]
-    if (haloOf(layer) > 0 && (layer as { haloMode?: string }).haloMode === 'outline') {
-      const own = layerKeepoutRegion(layer, ctx).region
-      if (own) shapes.push(...regionOutlineShapes(own, (layer as { haloStrokeMM: number }).haloStrokeMM))
+    if (ownRegion) {
+      shapes.push(...regionOutlineShapes(ownRegion, (layer as { haloStrokeMM: number }).haloStrokeMM))
     }
 
     const hasShapes = shapes.length > 0
@@ -134,6 +155,7 @@ const LayerGroup = memo(
     prev.ctx.diameterMM === next.ctx.diameterMM &&
     prev.ctx.assetsRevision === next.ctx.assetsRevision &&
     prev.ctx.fontsRevision === next.ctx.fontsRevision &&
+    prev.ownRegion === next.ownRegion &&
     sameKeepouts(prev.keepouts, next.keepouts),
 )
 

@@ -93,7 +93,17 @@ param, not an error.)
   in <metadata> so exports re-open as documents), exportPng, thumbnail.
 - `src/render/` — SvgStage (mm-true, `#doc` = export subtree, overlays separate),
   DocRenderer (per-layer memo; comparator: layer refs + disc values + contributor
-  layer REFS — no deep geometry compares), MetalPreview (SVG filters, preview-only).
+  REGION identity — no deep geometry compares), MetalPreview (SVG filters,
+  preview-only). Keepout regions for the CANVAS are stale-while-recomputing
+  (`keepoutAsync.ts` + `keepoutWorker.ts`): edits render immediately with the
+  last-good region while the ~80–190ms union+dilation reruns in a Web Worker
+  (120ms trailing debounce, latest-wins, sync fallback on worker failure);
+  `regionsRevision` bumps on landing and the StatusBar shows a "halo…" pill
+  while pending. Regions are content-keyed (`regionKey`: phaseDeg/name excluded)
+  so phase scrubs and renames never rebuild. The worker bundle imports only
+  `keepoutRegion.ts` (no compile.ts → no opentype). exportSvg stays synchronous
+  and exact. Vite emits the worker URL root-absolute under base './' — fine at
+  the domain root; a 404 would trip the sync fallback.
 - `src/ui/` — panels per layer type, workspace switcher, dialogs.
 
 ## Invariants (violating these breaks real dies)

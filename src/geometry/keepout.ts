@@ -1,19 +1,8 @@
 import type { Layer } from '../model/types'
 import { clearancesAbove, type ClearanceDisc } from './clip'
 import { compileCtxKey, compileLayer, type CompileCtx } from './compile'
-import { expandInstanced } from './expand'
-import { flattenSegs } from './flatten'
-import { parsePathData } from './pathData'
-import {
-  dilateMultiPolygon,
-  dilatePolylines,
-  multiPolygonToPathD,
-  pathToMultiPolygon,
-  ringsToMultiPolygonEvenodd,
-  safeUnion,
-  type MultiPolygon,
-  type Ring,
-} from './poly'
+import { buildKeepoutRegion, keepoutTolerances, regionKey } from './keepoutRegion'
+import { multiPolygonToPathD, type MultiPolygon } from './poly'
 import type { CompiledLayer, Shape } from './shapes'
 import { strokePaint } from './shapes'
 
@@ -23,6 +12,9 @@ import { strokePaint } from './shapes'
  * the contributor's PRE-PHASE frame; consumers rotate them into their own frame
  * at clip time (see DocRenderer / exportSvg). Discs (the circular moat) are the
  * shipped mechanism, collected unchanged via clearancesAbove.
+ *
+ * Region building itself lives in keepoutRegion.ts (pure, worker-safe); this
+ * module composes compileLayer + buildKeepoutRegion and owns the sync caches.
  */
 
 export interface RegionContributor {
@@ -52,90 +44,66 @@ export function castsRegion(l: Layer): boolean {
 
 // ---------------------------------------------------------------------------
 
-function circleRing(rMM: number, n: number): Ring {
-  const ring: Ring = []
-  for (let k = 0; k < n; k++) {
-    const a = (2 * Math.PI * k) / n
-    ring.push([rMM * Math.cos(a), rMM * Math.sin(a)])
-  }
-  return ring
-}
-
-/** One compiled Shape → its filled polygon region. */
-function shapeToRegion(shape: Shape, srcTol: number, arcTol: number): MultiPolygon {
-  switch (shape.kind) {
-    case 'path':
-      if (shape.paint.fill) return pathToMultiPolygon(shape.d, shape.fillRule ?? 'nonzero', srcTol)
-      return dilatePolylines(
-        flattenSegs(parsePathData(shape.d), srcTol),
-        Math.max((shape.paint.stroke?.widthMM ?? 0.1) / 2, 1e-4),
-        arcTol,
-      )
-    case 'line':
-      return dilatePolylines(
-        [{ pts: [{ x: shape.x1, y: shape.y1 }, { x: shape.x2, y: shape.y2 }], closed: false }],
-        Math.max((shape.paint.stroke?.widthMM ?? 0.1) / 2, 1e-4),
-        arcTol,
-      )
-    case 'instanced': {
-      const acc: MultiPolygon[] = []
-      for (const flat of expandInstanced(shape)) {
-        const r = shapeToRegion(flat, srcTol, arcTol)
-        if (r.length > 0) acc.push(r)
-      }
-      return safeUnion(...acc) ?? []
-    }
-    case 'circle': {
-      // defensive — content layers don't emit circles
-      const w = shape.paint.stroke?.widthMM ?? 0
-      if (w > 0) {
-        return ringsToMultiPolygonEvenodd([circleRing(shape.rMM + w / 2, 128), circleRing(shape.rMM - w / 2, 128)])
-      }
-      return [[circleRing(shape.rMM, 128)]]
-    }
-  }
-}
-
 interface RegionCache {
   key: string
   region: MultiPolygon | null
   warnings: string[]
 }
 const cache = new WeakMap<Layer, RegionCache>()
+// Content-keyed fallback: immer creates a new layer object on ANY field edit,
+// but phase scrubs / renames don't change the region — reuse the last entry
+// for the same layer id when its content key still matches.
+const cacheById = new Map<string, RegionCache>()
 
-/** The pre-phase keepout region cast by a single layer (WeakMap-memoized). */
+/** The pre-phase keepout region cast by a single layer (memoized by content). */
 export function layerKeepoutRegion(
   layer: Layer,
   ctx: CompileCtx,
 ): { region: MultiPolygon | null; warnings: string[] } {
-  const key = compileCtxKey(ctx)
+  const key = regionKey(layer, compileCtxKey(ctx))
   const hit = cache.get(layer)
   if (hit && hit.key === key) return { region: hit.region, warnings: hit.warnings }
+  const idHit = cacheById.get(layer.id)
+  if (idHit && idHit.key === key) {
+    cache.set(layer, idHit)
+    return { region: idHit.region, warnings: idHit.warnings }
+  }
 
   const halo = haloOf(layer)
-  // Halo boundaries are VISIBLE: exact tick cuts trace them (clear mode) and
-  // outline mode engraves them — coarse 0.05 flattening read as sawtooth on
-  // every tick cut. 0.005 is the cost/quality knee (Liam-approved trade):
-  // ~9µm peak ripple (5 sagitta + 4 capsule scallop), LIET 44→80ms,
-  // 8-letter worst case ~190ms per edit. Tighter arcs (0.003) cost 2.4× more
-  // for ~1µm. Fixed — not ctx-clamped — so render and export halos are the
-  // same geometry (WYSIWYG).
-  const srcTol = halo > 0 ? 0.005 : ctx.toleranceMM
-  const arcTol = srcTol
-
+  const { srcTol, arcTol } = keepoutTolerances(halo, ctx.toleranceMM)
   const compiled: CompiledLayer = compileLayer(layer, ctx)
-  const parts: MultiPolygon[] = []
-  for (const shape of compiled.shapes) {
-    const r = shapeToRegion(shape, srcTol, arcTol)
-    if (r.length > 0) parts.push(r)
-  }
-  let region = parts.length === 0 ? [] : safeUnion(...parts)
-  if (region !== null && region.length > 0 && halo > 0) {
-    region = dilateMultiPolygon(region, halo, arcTol)
-  }
-  const warnings = region === null ? ['A keepout region could not be computed.'] : []
-  cache.set(layer, { key, region, warnings })
+  const { region, warnings } = buildKeepoutRegion(compiled.shapes, halo, srcTol, arcTol)
+  const entry: RegionCache = { key, region, warnings }
+  cache.set(layer, entry)
+  cacheById.set(layer.id, entry)
   return { region, warnings }
+}
+
+/** Adopt an off-thread result into the sync caches (worker path). */
+export function adoptKeepoutRegion(layer: Layer, key: string, region: MultiPolygon | null, warnings: string[]): void {
+  const entry: RegionCache = { key, region, warnings }
+  cache.set(layer, entry)
+  cacheById.set(layer.id, entry)
+}
+
+/** Cache-only lookup — null when the region isn't already computed. */
+export function peekKeepoutRegion(
+  layer: Layer,
+  ctx: CompileCtx,
+): { region: MultiPolygon | null; warnings: string[] } | null {
+  const key = regionKey(layer, compileCtxKey(ctx))
+  const hit = cache.get(layer)
+  if (hit && hit.key === key) return hit
+  const idHit = cacheById.get(layer.id)
+  if (idHit && idHit.key === key) return idHit
+  return null
+}
+
+/** Drop content-cache entries for layers that no longer exist. */
+export function pruneKeepoutCache(validIds: ReadonlySet<string>): void {
+  for (const id of cacheById.keys()) {
+    if (!validIds.has(id)) cacheById.delete(id)
+  }
 }
 
 /** Discs + region contributors cast by visible layers ABOVE index (paint order). */

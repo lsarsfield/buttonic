@@ -24,6 +24,10 @@ export interface EngraverState {
   /** Bumped when an uploaded SVG/font finishes parsing; layers depending on assets recompile. */
   assetsRevision: number
   fontsRevision: number
+  /** Bumped when an off-thread keepout region lands; consumers re-clip. */
+  regionsRevision: number
+  /** True while any halo region is being recomputed (StatusBar indicator). */
+  haloPending: boolean
 
   setDoc: (doc: ButtonDoc) => void
   updateDocMeta: (patch: Partial<Pick<ButtonDoc, 'name' | 'diameterMM' | 'finish'>>) => void
@@ -41,6 +45,8 @@ export interface EngraverState {
   setView: (patch: Partial<ViewState>) => void
   bumpAssetsRevision: () => void
   bumpFontsRevision: () => void
+  bumpRegionsRevision: () => void
+  setHaloPending: (pending: boolean) => void
 }
 
 export const useEngraver = create<EngraverState>()(
@@ -57,6 +63,8 @@ export const useEngraver = create<EngraverState>()(
       },
       assetsRevision: 0,
       fontsRevision: 0,
+      regionsRevision: 0,
+      haloPending: false,
 
       setDoc: (doc) =>
         set((s) => {
@@ -165,6 +173,16 @@ export const useEngraver = create<EngraverState>()(
       bumpFontsRevision: () =>
         set((s) => {
           s.fontsRevision += 1
+        }),
+
+      bumpRegionsRevision: () =>
+        set((s) => {
+          s.regionsRevision += 1
+        }),
+
+      setHaloPending: (pending) =>
+        set((s) => {
+          s.haloPending = pending
         }),
     })),
     {

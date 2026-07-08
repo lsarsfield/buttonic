@@ -39,13 +39,14 @@ describe('layerKeepoutRegion', () => {
     expect(band.rMax).toBeGreaterThan(6.2 + halo)
   })
 
-  it('memoizes on layer identity + ctx key', () => {
+  it('memoizes on region CONTENT (identity churn and phase edits reuse; geometry edits rebuild)', () => {
     const layer = makeCenterLayer({ text: 'D', fontId: 'unifraktur', booleanRole: 'subtract' })
     const a = layerKeepoutRegion(layer, ctx()).region
     const b = layerKeepoutRegion(layer, ctx()).region
     expect(a).toBe(b) // same object + ctx → cached reference
-    const c = layerKeepoutRegion({ ...layer }, ctx()).region
-    expect(c).not.toBe(a) // new layer object → rebuilt
+    expect(layerKeepoutRegion({ ...layer }, ctx()).region).toBe(a) // immer churn, same content → reused
+    expect(layerKeepoutRegion({ ...layer, phaseDeg: 45 }, ctx()).region).toBe(a) // pre-phase cache → reused
+    expect(layerKeepoutRegion({ ...layer, sizeMM: layer.sizeMM + 1 }, ctx()).region).not.toBe(a) // rebuilt
   })
 
   it('a stroked-glyph centre yields a non-empty region', () => {
