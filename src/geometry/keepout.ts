@@ -113,9 +113,12 @@ export function layerKeepoutRegion(
   if (hit && hit.key === key) return { region: hit.region, warnings: hit.warnings }
 
   const halo = haloOf(layer)
-  const outline = halo > 0 && (layer as { haloMode?: string }).haloMode === 'outline'
-  // margins clear at 0.05; engraved boundaries and cut edges at the fine tol
-  const srcTol = halo > 0 ? (outline ? Math.max(ctx.toleranceMM, 0.01) : 0.05) : ctx.toleranceMM
+  // Halo boundaries are VISIBLE: exact tick cuts trace them (clear mode) and
+  // outline mode engraves them — so flatten the source fine (≤10µm sagitta).
+  // Coarse 0.05 flattening read as sawtooth on every tick cut. The disc-sweep
+  // dilation is spacing-dominated, so the finer source costs ~nothing
+  // (benched 0.05→0.01: ±5% build time).
+  const srcTol = halo > 0 ? Math.max(ctx.toleranceMM, 0.01) : ctx.toleranceMM
   const arcTol = srcTol
 
   const compiled: CompiledLayer = compileLayer(layer, ctx)
