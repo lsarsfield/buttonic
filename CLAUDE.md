@@ -49,9 +49,13 @@ param, not an error.)
   - `clip.ts` cross-layer subtraction: clearance discs (v1, def-level fast path for
     hatch — keep) + polygon regions (v2). Regions-empty path returns the SAME objects.
     Stroked ticks clip by centreline; POINTED hatch ticks are filled thin spindles →
-    also clip by centreline (`filledThinTickClip`: keep only the OUTWARD span, drop inner
-    stubs + sub-~3×-stroke nubs), NEVER martinez-differenced against a halo (that hangs
-    for tens of seconds and mangles edges). Real motifs (curved/multi-loop) still use
+    also clip by centreline (`filledThinTickClip`: derive the true centreline via PCA —
+    NOT the longest chord, which runs corner→tip and doubles the width off-centre — then
+    band-cut the ORIGINAL polygon for EVERY clear span, keeping exact width + pointed tip.
+    A halo is an outline MARGIN, not a wedge knockout: the reeding survives on BOTH sides
+    of the text and through open counters — keep all spans, drop only sub-~3×-stroke nubs;
+    do NOT keep-only-outward), NEVER martinez-differenced against a halo (that hangs for
+    tens of seconds and mangles edges). Real motifs (curved/multi-loop) still use
     `safeDifference`.
   - `motifs/builtins.ts` — ~128 built-in motifs grouped Basic/Celestial/Floral/Bandana/
     Kilim/Groovy/Workwear/Tarot/Old Book (`{id,label,d,paintType,group?}`, unit-box y-down).

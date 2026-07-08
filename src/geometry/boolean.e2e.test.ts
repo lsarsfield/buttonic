@@ -150,12 +150,25 @@ describe('text halo over a pattern', () => {
       const cy = pts.reduce((a, p) => a + p[1], 0) / pts.length
       expect(pointInMultiPolygon(cx, cy, region)).toBe(false)
     }
-    // both outcomes present: full spindles (6 verts) away from text, truncated quads (4 verts) at it
+    // full spindles (6 verts) away from the text; at the text, the ORIGINAL
+    // polygon is band-cut to keep its pointed tip + exact width — a 5-vert body
+    // cut or a 3-vert tip, never a fat re-emitted blunt quad
     const verts = filled.map((s) => (s.d.match(/[ML]/g) || []).length)
     expect(verts.some((n) => n === 6)).toBe(true)
-    expect(verts.some((n) => n === 4)).toBe(true)
-    // each tick yields at most one shape — no inner-stub clutter under serifs
-    expect(filled.length).toBeLessThanOrEqual(180)
+    expect(verts.some((n) => n === 3 || n === 5)).toBe(true)
+    // a halo is a MARGIN around the outline, not a wedge knockout: the reeding
+    // survives on BOTH sides of the letters, so an inner run (well inside the
+    // text radius, near 12 o'clock) persists — a whole radial section is never
+    // deleted. Ticks therefore split into inner + outer pieces (> one per tick).
+    const innerRun = filled.some((s) => {
+      const pts = [...s.d.matchAll(/(-?\d+\.?\d*)\s+(-?\d+\.?\d*)/g)].map((m) => [Number(m[1]), Number(m[2])] as [number, number])
+      const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length
+      const cy = pts.reduce((a, p) => a + p[1], 0) / pts.length
+      return cy < -3.5 && Math.hypot(cx, cy) < 5.8
+    })
+    expect(innerRun).toBe(true)
+    expect(filled.length).toBeGreaterThan(180) // splits ⇒ more pieces than ticks
+    expect(filled.length).toBeLessThan(180 * 3) // but bounded — no nub clutter
   })
 
   it('halo outline mode emits a stroked L-only boundary', () => {

@@ -141,9 +141,10 @@ function polylineLen(pts: Pt[]): number {
  * stroke in disguise. Differencing it against a text halo with martinez is its
  * worst case: hundreds of near-degenerate polygons make the clip crawl (a halo
  * over a pointed-hatch band could hang for tens of seconds) and mangle edges.
- * So clip the tick's centre axis instead and re-emit each surviving span as a
- * filled quad. Returns null for anything that isn't a thin straight tick (real
- * motifs, curves, multi-loop shapes) so they fall back to polygon difference.
+ * So clip the tick's centre axis instead, then re-emit the surviving OUTWARD
+ * piece of the ORIGINAL polygon (exact width + pointed tip preserved). Returns
+ * null for anything that isn't a thin straight tick (real motifs, curves,
+ * multi-loop shapes) so they fall back to polygon difference.
  */
 function filledThinTickClip(d: string, paint: Shape['paint'], regions: MultiPolygon[]): Shape[] | null {
   if (/[CAQSTVHcaqstvh]/.test(d)) return null // curved or shorthand → a motif
@@ -152,45 +153,80 @@ function filledThinTickClip(d: string, paint: Shape['paint'], regions: MultiPoly
   if (!nums || nums.length < 6) return null
   const pts: Pt[] = []
   for (let i = 0; i + 1 < nums.length; i += 2) pts.push({ x: +nums[i]!, y: +nums[i + 1]! })
-  // longest chord = the tick axis; perpendicular extent = its width
-  let a = pts[0]!, b = pts[0]!, maxD = 0
-  for (let i = 0; i < pts.length; i++)
-    for (let j = i + 1; j < pts.length; j++) {
-      const dd = Math.hypot(pts[i]!.x - pts[j]!.x, pts[i]!.y - pts[j]!.y)
-      if (dd > maxD) { maxD = dd; a = pts[i]!; b = pts[j]! }
-    }
-  if (maxD < 1e-6) return null
-  const ux = (b.x - a.x) / maxD
-  const uy = (b.y - a.y) / maxD
-  const px = -uy
-  const py = ux
-  let halfW = 0
-  for (const p of pts) halfW = Math.max(halfW, Math.abs((p.x - a.x) * px + (p.y - a.y) * py))
-  if (halfW <= 0 || (2 * halfW) / maxD > 0.25) return null // not thin → treat as a real motif
 
-  const frags = clipSegmentOutsideRegions(a.x, a.y, b.x, b.y, regions)
-  if (frags.length === 1 && Math.hypot(frags[0]!.bx - frags[0]!.ax, frags[0]!.by - frags[0]!.ay) >= maxD - 1e-6) {
+  // Principal axis through the centroid = the tick's TRUE centreline. (The
+  // longest chord runs corner→tip on a diagonal, so it skews the width to a full
+  // stroke and the axis off-centre — that produced fat, shifted, blunt stubs.)
+  const n = pts.length
+  let cx = 0, cy = 0
+  for (const p of pts) { cx += p.x; cy += p.y }
+  cx /= n; cy /= n
+  let sxx = 0, syy = 0, sxy = 0
+  for (const p of pts) {
+    const dx = p.x - cx, dy = p.y - cy
+    sxx += dx * dx; syy += dy * dy; sxy += dx * dy
+  }
+  const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy)
+  let ux = Math.cos(theta), uy = Math.sin(theta)
+  if (ux * cx + uy * cy < 0) { ux = -ux; uy = -uy } // orient outward (increasing radius)
+  const px = -uy, py = ux
+  const axialOf = (x: number, y: number) => (x - cx) * ux + (y - cy) * uy
+  let sMin = Infinity, sMax = -Infinity, wMin = Infinity, wMax = -Infinity
+  for (const p of pts) {
+    const s = axialOf(p.x, p.y)
+    const w = (p.x - cx) * px + (p.y - cy) * py
+    sMin = Math.min(sMin, s); sMax = Math.max(sMax, s)
+    wMin = Math.min(wMin, w); wMax = Math.max(wMax, w)
+  }
+  const halfW = (wMax - wMin) / 2
+  const axialLen = sMax - sMin
+  if (halfW <= 0 || axialLen < 1e-6 || (2 * halfW) / axialLen > 0.25) return null // not thin → real motif
+
+  const wMid = (wMax + wMin) / 2
+  const A = { x: cx + ux * sMin + px * wMid, y: cy + uy * sMin + py * wMid }
+  const B = { x: cx + ux * sMax + px * wMid, y: cy + uy * sMax + py * wMid }
+  const frags = clipSegmentOutsideRegions(A.x, A.y, B.x, B.y, regions)
+  if (frags.length === 1 && Math.hypot(frags[0]!.bx - frags[0]!.ax, frags[0]!.by - frags[0]!.ay) >= axialLen - 1e-6) {
     return [{ kind: 'path', d, paint }] // untouched by the halo → keep the exact spindle (tips intact)
   }
-  // A pointed tick is an outward spike, so keep only its outward span. Inner
-  // fragments trapped between the band's inner edge and the letters — the bits
-  // that survive in the clear gaps under serifs — otherwise clutter the text.
-  let best: { ax: number; ay: number; bx: number; by: number } | null = null
-  let bestR = -1
+  // Keep EVERY clear span, not just the outward one: a halo is a margin around
+  // the text OUTLINE, so the reeding must survive on both sides of the letters
+  // (and through open counters) — never a whole radial run deleted. Each span is
+  // a band cut of the ORIGINAL polygon (exact width, tips intact); only sub-few-
+  // stroke nubs (tight concavities between serifs) drop out. This matches how
+  // stroked ticks already clip.
+  const min = stubMinLen(2 * halfW)
+  const out: Shape[] = []
   for (const s of frags) {
-    const rr = Math.max(Math.hypot(s.ax, s.ay), Math.hypot(s.bx, s.by))
-    if (rr > bestR) {
-      bestR = rr
-      best = s
-    }
+    const lo = Math.min(axialOf(s.ax, s.ay), axialOf(s.bx, s.by))
+    const hi = Math.max(axialOf(s.ax, s.ay), axialOf(s.bx, s.by))
+    if (hi - lo < min) continue
+    const kept = clipPolyBand(pts, axialOf, lo, hi) // hi ≈ sMax keeps the point; a buried tip cuts flat
+    if (kept.length < 3) continue
+    out.push({ kind: 'path', d: 'M ' + kept.map((p, i) => `${i ? 'L ' : ''}${fmt(p.x)} ${fmt(p.y)}`).join(' ') + ' Z', paint })
   }
-  if (!best || Math.hypot(best.bx - best.ax, best.by - best.ay) < stubMinLen(2 * halfW)) return []
-  const quad =
-    `M ${fmt(best.ax + px * halfW)} ${fmt(best.ay + py * halfW)}` +
-    ` L ${fmt(best.bx + px * halfW)} ${fmt(best.by + py * halfW)}` +
-    ` L ${fmt(best.bx - px * halfW)} ${fmt(best.by - py * halfW)}` +
-    ` L ${fmt(best.ax - px * halfW)} ${fmt(best.ay - py * halfW)} Z`
-  return [{ kind: 'path', d: quad, paint }]
+  return out
+}
+
+/** Sutherland–Hodgman clip of a polygon to the slab lo ≤ axial(pt) ≤ hi. */
+function clipPolyBand(pts: Pt[], axial: (x: number, y: number) => number, lo: number, hi: number): Pt[] {
+  const half = (poly: Pt[], bound: number, sign: number): Pt[] => {
+    const out: Pt[] = []
+    const n = poly.length
+    for (let i = 0; i < n; i++) {
+      const cur = poly[i]!, nxt = poly[(i + 1) % n]!
+      const ca = sign * (axial(cur.x, cur.y) - bound)
+      const na = sign * (axial(nxt.x, nxt.y) - bound)
+      if (ca >= 0) out.push(cur)
+      if (ca >= 0 !== na >= 0) {
+        const t = ca / (ca - na)
+        out.push({ x: cur.x + t * (nxt.x - cur.x), y: cur.y + t * (nxt.y - cur.y) })
+      }
+    }
+    return out
+  }
+  const lower = half(pts, lo, 1) // keep axial ≥ lo
+  return lower.length < 3 ? [] : half(lower, hi, -1) // keep axial ≤ hi
 }
 
 /** t-params in (0,1) where segment a→b crosses any region edge. */
