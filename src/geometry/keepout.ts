@@ -114,11 +114,13 @@ export function layerKeepoutRegion(
 
   const halo = haloOf(layer)
   // Halo boundaries are VISIBLE: exact tick cuts trace them (clear mode) and
-  // outline mode engraves them — so flatten the source fine (≤10µm sagitta).
-  // Coarse 0.05 flattening read as sawtooth on every tick cut. The disc-sweep
-  // dilation is spacing-dominated, so the finer source costs ~nothing
-  // (benched 0.05→0.01: ±5% build time).
-  const srcTol = halo > 0 ? Math.max(ctx.toleranceMM, 0.01) : ctx.toleranceMM
+  // outline mode engraves them — coarse 0.05 flattening read as sawtooth on
+  // every tick cut. 0.005 is the cost/quality knee (Liam-approved trade):
+  // ~9µm peak ripple (5 sagitta + 4 capsule scallop), LIET 44→80ms,
+  // 8-letter worst case ~190ms per edit. Tighter arcs (0.003) cost 2.4× more
+  // for ~1µm. Fixed — not ctx-clamped — so render and export halos are the
+  // same geometry (WYSIWYG).
+  const srcTol = halo > 0 ? 0.005 : ctx.toleranceMM
   const arcTol = srcTol
 
   const compiled: CompiledLayer = compileLayer(layer, ctx)
