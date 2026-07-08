@@ -35,6 +35,7 @@ export function RingTextPanel({ layer }: { layer: RingTextLayer }) {
         <NumberField
           label="Radius"
           value={layer.radiusMM}
+          diameter
           min={0.5}
           max={maxR}
           step={0.05}

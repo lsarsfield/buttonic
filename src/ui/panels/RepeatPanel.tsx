@@ -61,6 +61,7 @@ export function RepeatPanel({ layer }: { layer: RepeatLayer }) {
         <NumberField
           label="Radius"
           value={layer.radiusMM}
+          diameter
           min={0.1}
           max={maxR}
           step={0.05}

@@ -71,6 +71,7 @@ export function HatchPanel({ layer }: { layer: HatchLayer }) {
         <NumberField
           label="Inner r"
           value={layer.rInnerMM}
+          diameter
           min={0}
           max={maxR}
           step={0.05}
@@ -80,6 +81,7 @@ export function HatchPanel({ layer }: { layer: HatchLayer }) {
         <NumberField
           label="Outer r"
           value={layer.rOuterMM}
+          diameter
           min={0.1}
           max={maxR}
           step={0.05}

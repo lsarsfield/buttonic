@@ -26,6 +26,7 @@ export function RingPanel({ layer }: { layer: RingLayer }) {
           <NumberField
             label="Radius"
             value={layer.radiusMM}
+            diameter
             min={0.2}
             max={maxR}
             step={0.05}
@@ -47,6 +48,7 @@ export function RingPanel({ layer }: { layer: RingLayer }) {
           <NumberField
             label="Inner r"
             value={layer.rInnerMM}
+            diameter
             min={0}
             max={maxR}
             step={0.05}
@@ -56,6 +58,7 @@ export function RingPanel({ layer }: { layer: RingLayer }) {
           <NumberField
             label="Outer r"
             value={layer.rOuterMM}
+            diameter
             min={0.1}
             max={maxR}
             step={0.05}

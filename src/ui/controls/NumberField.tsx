@@ -9,6 +9,8 @@ export interface NumberFieldProps {
   max?: number
   step?: number
   unit?: string
+  /** Show a live "⌀ 2×value mm" caption below the field (for radius inputs). */
+  diameter?: boolean
 }
 
 const decimalsOf = (step: number) => {
@@ -23,7 +25,7 @@ const decimalsOf = (step: number) => {
  *  - ↑/↓ nudge by step, Shift = ×10, Alt = ×0.1
  *  - dragging the label scrubs the value (one undo step for the whole scrub)
  */
-export function NumberField({ label, value, onChange, min, max, step = 1, unit }: NumberFieldProps) {
+export function NumberField({ label, value, onChange, min, max, step = 1, unit, diameter }: NumberFieldProps) {
   const [draft, setDraft] = useState<string | null>(null)
   const scrub = useRef<{ startX: number; startValue: number } | null>(null)
   const decimals = Math.min(4, decimalsOf(step) + 1)
@@ -89,7 +91,7 @@ export function NumberField({ label, value, onChange, min, max, step = 1, unit }
   }
 
   return (
-    <label className="field">
+    <label className={'field' + (diameter ? ' field--dia' : '')}>
       <span
         className="field-label scrubbable"
         onPointerDown={onLabelPointerDown}
@@ -115,6 +117,7 @@ export function NumberField({ label, value, onChange, min, max, step = 1, unit }
         />
         {unit && <span className="field-unit">{unit}</span>}
       </span>
+      {diameter && <span className="field-dia" aria-hidden="true">{`⌀ ${round(value * 2)} mm`}</span>}
     </label>
   )
 }
