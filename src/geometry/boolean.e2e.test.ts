@@ -143,29 +143,37 @@ describe('text halo over a pattern', () => {
     const out = clipLayer(layers, 0)
     const filled = out.filter((s): s is Extract<Shape, { kind: 'path' }> => s.kind === 'path' && s.paint.fill)
     expect(filled.length).toBeGreaterThan(0)
-    // no surviving tick intrudes into the halo — not its centroid, and (swath
-    // semantics) not any vertex or edge midpoint either, nudged 0.1% inward so
-    // exactly-on-boundary cut ends don't flicker the point-in test
+    // no surviving tick intrudes into the halo: each piece's edge midpoints,
+    // nudged 1e-3 toward the piece's LOCAL interior (edge normal — a centroid
+    // pull is wrong for notched pieces), sit outside the region. Skip pieces
+    // thinner than the nudge (exact slivers) — their AREA is already bounded.
     for (const s of filled) {
       const pts = [...s.d.matchAll(/(-?\d+\.?\d*)\s+(-?\d+\.?\d*)/g)].map((m) => [Number(m[1]), Number(m[2])] as [number, number])
-      const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length
-      const cy = pts.reduce((a, p) => a + p[1], 0) / pts.length
-      expect(pointInMultiPolygon(cx, cy, region)).toBe(false)
-      const probe = (x: number, y: number) =>
-        expect(pointInMultiPolygon(x + (cx - x) * 1e-3, y + (cy - y) * 1e-3, region)).toBe(false)
+      if (s.d.includes('M ') && (s.d.match(/M /g) || []).length > 1) continue // hole-carrying piece: probe geometry is ambiguous
+      let a2 = 0
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i]!
+        const q = pts[(i + 1) % pts.length]!
+        a2 += p[0] * q[1] - q[0] * p[1]
+      }
+      const sgn = a2 >= 0 ? 1 : -1
+      if (Math.abs(a2 / 2) < 4e-3) continue // sliver thinner than the probe nudge
       for (let i = 0; i < pts.length; i++) {
         const a = pts[i]!
         const b = pts[(i + 1) % pts.length]!
-        probe(a[0], a[1])
-        probe((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1])
+        if (len < 1e-6) continue
+        const nx = (-(b[1] - a[1]) / len) * sgn
+        const ny = ((b[0] - a[0]) / len) * sgn
+        expect(pointInMultiPolygon((a[0] + b[0]) / 2 + nx * 1e-3, (a[1] + b[1]) / 2 + ny * 1e-3, region)).toBe(false)
       }
     }
-    // full spindles (6 verts) away from the text; at the text, the ORIGINAL
-    // polygon is band-cut to keep its pointed tip + exact width — a 5-vert body
-    // cut or a 3-vert tip, never a fat re-emitted blunt quad
+    // full spindles (6 verts) away from the text; at the text, the exact
+    // difference cuts the ORIGINAL polygon along the halo boundary — cut pieces
+    // exist and are not pristine hexagons
     const verts = filled.map((s) => (s.d.match(/[ML]/g) || []).length)
     expect(verts.some((n) => n === 6)).toBe(true)
-    expect(verts.some((n) => n === 3 || n === 5)).toBe(true)
+    expect(verts.some((n) => n !== 6)).toBe(true)
     // a halo is a MARGIN around the outline, not a wedge knockout: the reeding
     // survives on BOTH sides of the letters, so an inner run (well inside the
     // text radius, near 12 o'clock) persists — a whole radial section is never

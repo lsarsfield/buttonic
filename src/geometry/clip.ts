@@ -157,6 +157,40 @@ interface REdge {
   maxY: number
 }
 
+interface RegionRing {
+  pts: Pt[] // consecutive duplicates (incl. martinez's closing repeat) stripped
+  regionIdx: number
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+/** Region rings with identity + bbox (built once per clipCompiled) — the exact walk needs ring connectivity, not loose edges. */
+function collectRegionRings(regions: MultiPolygon[]): RegionRing[] {
+  const out: RegionRing[] = []
+  regions.forEach((mp, regionIdx) => {
+    for (const poly of mp) {
+      for (const ring of poly) {
+        const pts: Pt[] = []
+        for (const [x, y] of ring) {
+          const last = pts[pts.length - 1]
+          if (!last || Math.hypot(x - last.x, y - last.y) > 1e-9) pts.push({ x, y })
+        }
+        while (pts.length > 1 && Math.hypot(pts[0]!.x - pts[pts.length - 1]!.x, pts[0]!.y - pts[pts.length - 1]!.y) <= 1e-9) pts.pop()
+        if (pts.length < 3) continue
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const p of pts) {
+          minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
+          maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
+        }
+        out.push({ pts, regionIdx, minX, minY, maxX, maxY })
+      }
+    }
+  })
+  return out
+}
+
 /** Flatten all region rings into one edge list (built once per clipCompiled). */
 function collectRegionEdges(regions: MultiPolygon[]): REdge[] {
   const edges: REdge[] = []
@@ -181,49 +215,69 @@ function collectRegionEdges(regions: MultiPolygon[]): REdge[] {
 
 const CONVEX_EPS = 1e-9
 
-/**
- * Cyrus–Beck: clip a region edge to the inside of the convex polygon `poly`
- * (shrunk by CONVEX_EPS so pure boundary tangency does not count as blocking).
- * Returns the surviving sub-segment's axial extent, or null if it misses.
- */
-function clipSegToConvex(
-  e: REdge,
-  poly: Pt[],
-  axialOf: (x: number, y: number) => number,
-): [number, number] | null {
-  const n = poly.length
+function polyOrient(poly: Pt[]): number {
   let area2 = 0 // shoelace → orientation → inward-normal side
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < poly.length; i++) {
     const a = poly[i]!
-    const b = poly[(i + 1) % n]!
+    const b = poly[(i + 1) % poly.length]!
     area2 += a.x * b.y - b.x * a.y
   }
-  const sgn = area2 >= 0 ? 1 : -1
-  const dx = e.x2 - e.x1
-  const dy = e.y2 - e.y1
-  let t0 = 0
-  let t1 = 1
+  return area2 >= 0 ? 1 : -1
+}
+
+interface SegClip {
+  t0: number
+  t1: number
+  e0: number // convex-poly edge index bounding at t0 (-1 = segment start already inside)
+  e1: number // edge index bounding at t1 (-1 = segment end already inside)
+}
+
+/**
+ * Cyrus–Beck core: clip segment (x1,y1)→(x2,y2) to the inside of the convex
+ * polygon (shrunk by eps ≥ 0 so tangency can be excluded), tracking WHICH poly
+ * edge bounds each end. Returns null if nothing survives.
+ */
+function segClipConvexCore(
+  x1: number, y1: number, x2: number, y2: number,
+  poly: Pt[], sgn: number, eps: number,
+): SegClip | null {
+  const n = poly.length
+  const dx = x2 - x1
+  const dy = y2 - y1
+  let t0 = 0, t1 = 1, e0 = -1, e1 = -1
   for (let i = 0; i < n; i++) {
     const a = poly[i]!
     const b = poly[(i + 1) % n]!
     const nx = -(b.y - a.y) * sgn // inward normal (unnormalized)
     const ny = (b.x - a.x) * sgn
-    const num = nx * (e.x1 - a.x) + ny * (e.y1 - a.y) // >0 ⇒ inside this side
+    const num = nx * (x1 - a.x) + ny * (y1 - a.y) // >0 ⇒ inside this side
     const den = nx * dx + ny * dy
     if (Math.abs(den) < 1e-12) {
-      if (num < CONVEX_EPS) return null // parallel and outside (or tangent)
+      if (num < eps) return null // parallel and outside (or tangent)
       continue
     }
-    const t = (CONVEX_EPS - num) / den
+    const t = (eps - num) / den
     if (den > 0) {
-      if (t > t0) t0 = t
-    } else if (t < t1) {
-      t1 = t
-    }
+      if (t > t0) { t0 = t; e0 = i }
+    } else if (t < t1) { t1 = t; e1 = i }
     if (t0 > t1) return null
   }
-  const s0 = axialOf(e.x1 + dx * t0, e.y1 + dy * t0)
-  const s1 = axialOf(e.x1 + dx * t1, e.y1 + dy * t1)
+  if (t1 - t0 < 1e-12) return null // grazing a corner — measure zero
+  return { t0, t1, e0, e1 }
+}
+
+/** Swath variant: the surviving sub-segment's axial extent (tangency excluded). */
+function clipSegToConvex(
+  e: REdge,
+  poly: Pt[],
+  axialOf: (x: number, y: number) => number,
+): [number, number] | null {
+  const c = segClipConvexCore(e.x1, e.y1, e.x2, e.y2, poly, polyOrient(poly), CONVEX_EPS)
+  if (!c) return null
+  const dx = e.x2 - e.x1
+  const dy = e.y2 - e.y1
+  const s0 = axialOf(e.x1 + dx * c.t0, e.y1 + dy * c.t0)
+  const s1 = axialOf(e.x1 + dx * c.t1, e.y1 + dy * c.t1)
   return s0 <= s1 ? [s0, s1] : [s1, s0]
 }
 
@@ -276,6 +330,310 @@ function swathClearSpans(
   return out
 }
 
+// --- exact difference: convex tick ∖ regions (boundary walk) -----------------
+// "Cuts only that which is the halo and nothing more": the die keeps EXACTLY
+// tick ∖ regions — oblique region edges cut ticks obliquely, a corner graze
+// shaves only the corner, a partial-width overlap leaves the rest standing.
+// The tick is convex and the regions are flattened polylines, so the boolean
+// reduces to a robust local boundary walk (never martinez): region-ring chains
+// inside the tick + tick-boundary arcs outside the regions, stitched at their
+// shared crossings. Any degenerate configuration (tangency, vertex-on-edge,
+// overlapping contributor regions) fails validation and the caller falls back
+// to the conservative swath cut.
+
+const EPS_T = 1e-9
+
+const loopArea = (pts: Pt[]): number => {
+  let a = 0
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]!
+    const q = pts[(i + 1) % pts.length]!
+    a += p.x * q.y - q.x * p.y
+  }
+  return a / 2
+}
+
+/** Even-odd raycast against an arbitrary simple loop. */
+function pointInLoop(x: number, y: number, loop: Pt[]): boolean {
+  let inside = false
+  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+    const a = loop[i]!
+    const b = loop[j]!
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside
+  }
+  return inside
+}
+
+/** Vertex average, verified interior (null if the loop is too contorted). */
+function interiorPoint(loop: Pt[]): Pt | null {
+  let x = 0
+  let y = 0
+  for (const p of loop) {
+    x += p.x
+    y += p.y
+  }
+  x /= loop.length
+  y /= loop.length
+  return pointInLoop(x, y, loop) ? { x, y } : null
+}
+
+const outsideConvex = (x: number, y: number, poly: Pt[], sgn: number): boolean => {
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]!
+    const b = poly[(i + 1) % poly.length]!
+    if ((-(b.y - a.y) * (x - a.x) + (b.x - a.x) * (y - a.y)) * sgn < -1e-9) return true
+  }
+  return false
+}
+
+interface WalkChain {
+  pts: Pt[] // entry point … interior ring vertices … exit point
+  entry: WalkCrossing
+  exit: WalkCrossing
+  used: boolean
+}
+interface WalkCrossing {
+  pos: number // edge index + param — cyclic coordinate along the tick boundary
+  pt: Pt
+  chain: WalkChain
+  isEntry: boolean
+  arcOut: WalkArc | null
+}
+interface WalkArc {
+  pts: Pt[]
+  end: WalkCrossing
+  keep: boolean
+  used: boolean
+}
+interface Piece {
+  outer: Pt[]
+  holes: Pt[][]
+}
+
+const appendPts = (loop: Pt[], pts: Pt[], dropLast: boolean): void => {
+  const end = dropLast ? pts.length - 1 : pts.length
+  for (let i = 0; i < end; i++) {
+    const p = pts[i]!
+    const last = loop[loop.length - 1]
+    if (!last || Math.hypot(p.x - last.x, p.y - last.y) > 1e-9) loop.push(p)
+  }
+}
+
+const midPointOf = (pts: Pt[]): Pt => {
+  let L = 0
+  for (let i = 0; i + 1 < pts.length; i++) L += Math.hypot(pts[i + 1]!.x - pts[i]!.x, pts[i + 1]!.y - pts[i]!.y)
+  if (L < 1e-12) return pts[0]!
+  let t = L / 2
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i]!
+    const b = pts[i + 1]!
+    const d = Math.hypot(b.x - a.x, b.y - a.y)
+    if (t <= d) {
+      const f = d > 0 ? t / d : 0
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }
+    }
+    t -= d
+  }
+  return pts[pts.length - 1]!
+}
+
+/**
+ * Exact difference of the convex polygon P minus all regions.
+ * Returns 'identity' (untouched), pieces (possibly []), or null → caller must
+ * fall back to the conservative swath cut.
+ */
+function convexDifference(P: Pt[], rings: RegionRing[], regions: MultiPolygon[]): Piece[] | 'identity' | null {
+  const n = P.length
+  const sgn = polyOrient(P)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const p of P) {
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
+    maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
+  }
+  const crossingAt = (edge: number, pt: Pt): WalkCrossing => {
+    const a = P[edge]!
+    const b = P[(edge + 1) % n]!
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const u = Math.max(0, Math.min(1, ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / (dx * dx + dy * dy || 1)))
+    return { pos: edge + u, pt, chain: null as unknown as WalkChain, isEntry: false, arcOut: null }
+  }
+  const insideOtherRegion = (p: Pt, own: number): boolean => {
+    if (regions.length < 2) return false
+    for (let ri = 0; ri < regions.length; ri++) {
+      if (ri !== own && pointInMultiPolygon(p.x, p.y, regions[ri]!)) return true
+    }
+    return false
+  }
+
+  // 1. clip every candidate region ring to the tick: open chains + closed islands
+  const chains: WalkChain[] = []
+  const islands: Array<{ pts: Pt[]; regionIdx: number }> = []
+  for (const ring of rings) {
+    if (ring.minX > maxX || ring.maxX < minX || ring.minY > maxY || ring.maxY < minY) continue
+    const R = ring.pts
+    let start = -1
+    for (let i = 0; i < R.length; i++) {
+      if (outsideConvex(R[i]!.x, R[i]!.y, P, sgn)) {
+        start = i
+        break
+      }
+    }
+    if (start === -1) {
+      // every ring vertex inside the tick → a closed island
+      if (!insideOtherRegion(R[Math.floor(R.length / 2)]!, ring.regionIdx)) islands.push({ pts: R, regionIdx: ring.regionIdx })
+      continue
+    }
+    let cur: { pts: Pt[]; entryEdge: number; entryPt: Pt } | null = null
+    for (let k = 0; k < R.length; k++) {
+      const a = R[(start + k) % R.length]!
+      const b = R[(start + k + 1) % R.length]!
+      if (Math.max(a.x, b.x) < minX || Math.min(a.x, b.x) > maxX || Math.max(a.y, b.y) < minY || Math.min(a.y, b.y) > maxY) {
+        if (cur) return null // chain open across a fully-outside segment → vertex-on-boundary degeneracy
+        continue
+      }
+      const c = segClipConvexCore(a.x, a.y, b.x, b.y, P, sgn, 0)
+      if (!c) {
+        if (cur) return null
+        continue
+      }
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      if (c.t0 > EPS_T) {
+        if (cur || c.e0 < 0) return null
+        const q = { x: a.x + dx * c.t0, y: a.y + dy * c.t0 }
+        cur = { pts: [q], entryEdge: c.e0, entryPt: q }
+      } else if (!cur) {
+        return null // continuation without an open chain (start vertex was outside)
+      }
+      if (c.t1 < 1 - EPS_T) {
+        if (c.e1 < 0) return null
+        const q = { x: a.x + dx * c.t1, y: a.y + dy * c.t1 }
+        cur.pts.push(q)
+        const mid = cur.pts[Math.floor(cur.pts.length / 2)]!
+        if (!insideOtherRegion(mid, ring.regionIdx)) {
+          const entry = crossingAt(cur.entryEdge, cur.entryPt)
+          const exit = crossingAt(c.e1, q)
+          const chain: WalkChain = { pts: cur.pts, entry, exit, used: false }
+          entry.chain = chain
+          entry.isEntry = true
+          exit.chain = chain
+          chains.push(chain)
+        }
+        cur = null
+      } else {
+        cur.pts.push(b)
+      }
+    }
+    if (cur) return null // unclosed chain after a full ring lap
+  }
+
+  // 2. no boundary crossings → coverage is uniform (islands aside)
+  const crossings: WalkCrossing[] = []
+  for (const ch of chains) crossings.push(ch.entry, ch.exit)
+  if (crossings.length === 0) {
+    let cx = 0, cy = 0
+    for (const p of P) { cx += p.x; cy += p.y }
+    cx /= n; cy /= n
+    const covered = insideAny(cx, cy, regions)
+    // nesting guard: island-inside-island is beyond this walk
+    for (const a of islands) {
+      for (const b of islands) {
+        if (a !== b && pointInLoop(a.pts[0]!.x, a.pts[0]!.y, b.pts)) return null
+      }
+    }
+    if (covered) {
+      // body cut away; an island whose interior is CLEAR (a counter) survives whole
+      const pieces: Piece[] = []
+      for (const isl of islands) {
+        const ip = interiorPoint(isl.pts)
+        if (!ip) return null
+        if (!insideAny(ip.x, ip.y, regions)) pieces.push({ outer: isl.pts, holes: [] })
+      }
+      return pieces
+    }
+    if (islands.length === 0) return 'identity'
+    const holes: Pt[][] = []
+    for (const isl of islands) {
+      const ip = interiorPoint(isl.pts)
+      if (!ip) return null
+      if (!insideAny(ip.x, ip.y, regions)) return null // clear island in clear body — inconsistent
+      holes.push(isl.pts)
+    }
+    return [{ outer: P.slice(), holes }]
+  }
+  if (crossings.length % 2 !== 0) return null
+
+  // 3. tick-boundary arcs between consecutive crossings; keep the clear ones
+  const sorted = crossings.slice().sort((a, b) => a.pos - b.pos)
+  const m = sorted.length
+  const arcs: WalkArc[] = []
+  for (let i = 0; i < m; i++) {
+    const c0 = sorted[i]!
+    const c1 = sorted[(i + 1) % m]!
+    const endPos = c1.pos + (i === m - 1 ? n : 0)
+    const pts: Pt[] = [c0.pt]
+    for (let v = Math.floor(c0.pos) + 1; v < endPos - EPS_T; v++) pts.push(P[v % n]!)
+    pts.push(c1.pt)
+    const mid = midPointOf(pts)
+    const arc: WalkArc = { pts, end: c1, keep: !insideAny(mid.x, mid.y, regions), used: false }
+    c0.arcOut = arc
+    arcs.push(arc)
+  }
+
+  // 4. stitch loops: kept arc → chain at its end crossing → next kept arc → …
+  const loops: Pt[][] = []
+  for (const a0 of arcs) {
+    if (!a0.keep || a0.used) continue
+    const loop: Pt[] = []
+    let a = a0
+    let guard = 0
+    for (;;) {
+      if (++guard > m + chains.length + 4) return null
+      a.used = true
+      appendPts(loop, a.pts, true)
+      const c = a.end
+      const ch = c.chain
+      if (ch.used) return null
+      ch.used = true
+      appendPts(loop, c.isEntry ? ch.pts : [...ch.pts].reverse(), true)
+      const next = (c.isEntry ? ch.exit : ch.entry).arcOut
+      if (!next || !next.keep) return null
+      if (next === a0) break
+      if (next.used) return null
+      a = next
+    }
+    if (loop.length >= 3) loops.push(loop)
+  }
+  if (arcs.some((a) => a.keep && !a.used)) return null
+  if (chains.some((ch) => !ch.used)) return null
+
+  // 5. islands: holes in surviving material, or standalone pieces in cut zones
+  const pieces: Piece[] = loops.map((outer) => ({ outer, holes: [] }))
+  for (const isl of islands) {
+    const ip = interiorPoint(isl.pts)
+    if (!ip) return null
+    const container = pieces.find((p) => pointInLoop(ip.x, ip.y, p.outer))
+    if (insideAny(ip.x, ip.y, regions)) {
+      if (container) container.holes.push(isl.pts)
+    } else {
+      if (container) return null // clear island inside surviving material — inconsistent
+      pieces.push({ outer: isl.pts, holes: [] })
+    }
+  }
+
+  // 6. validate: never create area
+  const areaP = Math.abs(loopArea(P))
+  let total = 0
+  for (const p of pieces) {
+    const a = Math.abs(loopArea(p.outer)) - p.holes.reduce((s, h) => s + Math.abs(loopArea(h)), 0)
+    if (a < -1e-9) return null
+    total += a
+  }
+  if (total > areaP + 1e-6) return null
+  return pieces
+}
+
 /**
  * Straight constant-width stroke (a hatch tick) minus regions, full-width
  * semantics: the tool must not pass wherever any part of the stroke's width
@@ -326,17 +684,19 @@ function strokeSwathSegments(
  * stroke in disguise. Differencing it against a text halo with martinez is its
  * worst case: hundreds of near-degenerate polygons make the clip crawl (a halo
  * over a pointed-hatch band could hang for tens of seconds) and mangle edges.
- * Instead, compute the exact swath shadow on the tick's axis and band-cut the
- * ORIGINAL polygon per clear span — every span survives (a halo is an outline
- * MARGIN: the reeding continues on both sides of the letters and through open
- * counters), exact width, pointed tips intact. Returns null for anything that
- * isn't a thin straight tick (real motifs, curves, multi-loop shapes) so they
- * fall back to polygon difference.
+ * Instead, compute the EXACT difference tick ∖ regions with the convex
+ * boundary walk — the cut is precisely the halo, nothing more: oblique region
+ * edges cut obliquely, corner grazes shave only the corner, partial-width
+ * overlaps leave the rest standing, and counters survive. A degenerate
+ * configuration falls back to the conservative swath cut. Returns null for
+ * anything that isn't a thin straight CONVEX tick (real motifs, curves,
+ * multi-loop or warped shapes) so it takes the generic polygon difference.
  */
 function filledThinTickClip(
   shape: Extract<Shape, { kind: 'path' }>,
   regions: MultiPolygon[],
   edges: REdge[],
+  rings: RegionRing[],
 ): Shape[] | null {
   const d = shape.d
   if (/[CAQSTVHcaqstvh]/.test(d)) return null // curved or shorthand → a motif
@@ -375,6 +735,37 @@ function filledThinTickClip(
   const axialLen = sMax - sMin
   if (halfW <= 0 || axialLen < 1e-6 || (2 * halfW) / axialLen > 0.25) return null // not thin → real motif
 
+  // Convexity gate: both the walk and the swath assume a convex tick. A thin
+  // NON-convex L-only fill (a warped shape) takes the generic difference.
+  let cvPos = false
+  let cvNeg = false
+  for (let i = 0; i < n; i++) {
+    const a = pts[i]!
+    const b = pts[(i + 1) % n]!
+    const c = pts[(i + 2) % n]!
+    const cr = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+    if (cr > 1e-12) cvPos = true
+    else if (cr < -1e-12) cvNeg = true
+  }
+  if (cvPos && cvNeg) return null
+
+  // EXACT: cut only what the halo covers, nothing more.
+  const exact = convexDifference(pts, rings, regions)
+  if (exact === 'identity') return [shape] // untouched — the same object
+  if (exact !== null) {
+    const loopD = (loop: Pt[]) => 'M ' + loop.map((p, i) => `${i ? 'L ' : ''}${fmt(p.x)} ${fmt(p.y)}`).join(' ') + ' Z'
+    const out: Shape[] = []
+    for (const piece of exact) {
+      const area = Math.abs(loopArea(piece.outer)) - piece.holes.reduce((s, h) => s + Math.abs(loopArea(h)), 0)
+      if (area < 1e-5) continue // numerical dust (≲ 3µm sliver) — nothing visible is dropped
+      const dd = [piece.outer, ...piece.holes].map(loopD).join(' ')
+      if (piece.holes.length > 0) out.push({ kind: 'path', d: dd, fillRule: 'evenodd', paint: shape.paint })
+      else out.push({ kind: 'path', d: dd, paint: shape.paint })
+    }
+    return out
+  }
+
+  // FALLBACK (degenerate walk): conservative swath cut — never intrudes.
   // Swath = the original convex polygon itself (not its bounding rectangle), so
   // a region passing within halfW of the APEX but outside the taper is a miss.
   const wMid = (wMax + wMin) / 2
@@ -560,6 +951,7 @@ function regionClipShape(
   shape: Shape,
   regions: MultiPolygon[],
   edges: REdge[],
+  rings: RegionRing[],
   band: Band | null,
   box: { minX: number; minY: number; maxX: number; maxY: number } | null,
   tolMM: number,
@@ -599,9 +991,9 @@ function regionClipShape(
         return
       }
       if (shape.paint.fill) {
-        // Pointed hatch ticks are thin filled spindles; clip them by their
-        // exact swath shadow instead of martinez (pathologically slow on them).
-        const thin = filledThinTickClip(shape, regions, edges)
+        // Pointed hatch ticks are thin filled spindles; take the exact convex
+        // difference instead of martinez (pathologically slow on them).
+        const thin = filledThinTickClip(shape, regions, edges, rings)
         if (thin !== null) {
           for (const t of thin) out.push(t)
           return
@@ -664,7 +1056,7 @@ function regionClipShape(
         out.push(shape) // whole instanced band misses every region
         return
       }
-      for (const flat of expandInstanced(shape)) regionClipShape(flat, regions, edges, band, box, tolMM, out, warnings)
+      for (const flat of expandInstanced(shape)) regionClipShape(flat, regions, edges, rings, band, box, tolMM, out, warnings)
       return
     }
   }
@@ -749,8 +1141,9 @@ export function clipCompiled(
   const band = regionsBand(regions)
   const box = regionsBox(regions)
   const edges = collectRegionEdges(regions)
+  const rings = collectRegionRings(regions)
   const out: Shape[] = []
-  for (const shape of discClipped) regionClipShape(shape, regions, edges, band, box, tolMM, out, warnings)
+  for (const shape of discClipped) regionClipShape(shape, regions, edges, rings, band, box, tolMM, out, warnings)
   return { shapes: out, warnings }
 }
 
