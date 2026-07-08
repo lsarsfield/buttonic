@@ -48,15 +48,19 @@ param, not an error.)
     (single svg-pathdata wrapper), `mat2d.ts` (no DOMMatrix).
   - `clip.ts` cross-layer subtraction: clearance discs (v1, def-level fast path for
     hatch — keep) + polygon regions (v2). Regions-empty path returns the SAME objects.
-    Stroked ticks clip by centreline; POINTED hatch ticks are filled thin spindles →
-    also clip by centreline (`filledThinTickClip`: derive the true centreline via PCA —
-    NOT the longest chord, which runs corner→tip and doubles the width off-centre — then
-    band-cut the ORIGINAL polygon for EVERY clear span, keeping exact width + pointed tip.
-    A halo is an outline MARGIN, not a wedge knockout: the reeding survives on BOTH sides
-    of the text and through open counters — keep all spans, drop only sub-~3×-stroke nubs;
-    do NOT keep-only-outward), NEVER martinez-differenced against a halo (that hangs for
-    tens of seconds and mangles edges). Real motifs (curved/multi-loop) still use
-    `safeDifference`.
+    Hatch ticks (stroked lines AND pointed filled spindles) clip by their SWATH SHADOW,
+    not the centreline: a tick is a constant-width tool pass, cut wherever ANY part of
+    its width enters a region (`swathClearSpans`: Cyrus–Beck each region edge against
+    the convex tick → union of blocked axial intervals → a gap midpoint classifies
+    interior-only coverage; pointed ticks use the polygon itself so the taper is exact;
+    PCA gives the symmetry axis — never the longest chord, which runs corner→tip).
+    Every clear span survives as a band cut of the ORIGINAL polygon (exact width +
+    pointed tips; a halo is an outline MARGIN, not a wedge knockout — reeding continues
+    on BOTH sides of the text; only sub-~3×-stroke nubs drop). Centreline-only clipping
+    was wrong by strokeMM/2 on oblique edges and missed corner grazes entirely — don't
+    regress to it. NEVER martinez-difference ticks against a halo (hangs tens of
+    seconds, mangles edges). Real motifs (curved/multi-loop) still use `safeDifference`;
+    warped multi-segment strokes still clip by centreline (known limit).
   - `motifs/builtins.ts` — ~128 built-in motifs grouped Basic/Celestial/Floral/Bandana/
     Kilim/Groovy/Workwear/Tarot/Old Book (`{id,label,d,paintType,group?}`, unit-box y-down).
     Selection is grounded in the traditional canon per category (kilim = authentic Anatolian:

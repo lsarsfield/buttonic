@@ -136,17 +136,209 @@ function polylineLen(pts: Pt[]): number {
   return len
 }
 
+// --- swath-shadow clipping ---------------------------------------------------
+// A hatch tick is a constant-width TOOL PASS: it must be cut wherever ANY part
+// of its width would enter a keepout region, not just where its centreline
+// does. Centreline-only clipping left two errors of order strokeMM/2: oblique
+// region edges reached the tick's leading corner before the centreline (late
+// cuts, corners overlapping letter ink), and corner grazes that never crossed
+// the centreline weren't detected at all. The swath shadow is exact: project
+// every region edge crossing the (convex) tick onto its axis, union the blocked
+// intervals, and keep the fully-clear spans.
+
+interface REdge {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+/** Flatten all region rings into one edge list (built once per clipCompiled). */
+function collectRegionEdges(regions: MultiPolygon[]): REdge[] {
+  const edges: REdge[] = []
+  for (const mp of regions) {
+    for (const poly of mp) {
+      for (const ring of poly) {
+        const n = ring.length
+        for (let i = 0; i < n; i++) {
+          const [x1, y1] = ring[i]!
+          const [x2, y2] = ring[(i + 1) % n]!
+          edges.push({
+            x1, y1, x2, y2,
+            minX: Math.min(x1, x2), minY: Math.min(y1, y2),
+            maxX: Math.max(x1, x2), maxY: Math.max(y1, y2),
+          })
+        }
+      }
+    }
+  }
+  return edges
+}
+
+const CONVEX_EPS = 1e-9
+
+/**
+ * Cyrus–Beck: clip a region edge to the inside of the convex polygon `poly`
+ * (shrunk by CONVEX_EPS so pure boundary tangency does not count as blocking).
+ * Returns the surviving sub-segment's axial extent, or null if it misses.
+ */
+function clipSegToConvex(
+  e: REdge,
+  poly: Pt[],
+  axialOf: (x: number, y: number) => number,
+): [number, number] | null {
+  const n = poly.length
+  let area2 = 0 // shoelace → orientation → inward-normal side
+  for (let i = 0; i < n; i++) {
+    const a = poly[i]!
+    const b = poly[(i + 1) % n]!
+    area2 += a.x * b.y - b.x * a.y
+  }
+  const sgn = area2 >= 0 ? 1 : -1
+  const dx = e.x2 - e.x1
+  const dy = e.y2 - e.y1
+  let t0 = 0
+  let t1 = 1
+  for (let i = 0; i < n; i++) {
+    const a = poly[i]!
+    const b = poly[(i + 1) % n]!
+    const nx = -(b.y - a.y) * sgn // inward normal (unnormalized)
+    const ny = (b.x - a.x) * sgn
+    const num = nx * (e.x1 - a.x) + ny * (e.y1 - a.y) // >0 ⇒ inside this side
+    const den = nx * dx + ny * dy
+    if (Math.abs(den) < 1e-12) {
+      if (num < CONVEX_EPS) return null // parallel and outside (or tangent)
+      continue
+    }
+    const t = (CONVEX_EPS - num) / den
+    if (den > 0) {
+      if (t > t0) t0 = t
+    } else if (t < t1) {
+      t1 = t
+    }
+    if (t0 > t1) return null
+  }
+  const s0 = axialOf(e.x1 + dx * t0, e.y1 + dy * t0)
+  const s1 = axialOf(e.x1 + dx * t1, e.y1 + dy * t1)
+  return s0 <= s1 ? [s0, s1] : [s1, s0]
+}
+
+/**
+ * Axial spans of the convex swath `poly` fully clear of every region. Blocked =
+ * union of the axial shadows of region edges crossing the swath; a gap between
+ * shadows contains no boundary, so its inside/outside status is uniform — one
+ * axis-point sample classifies it (same argument as splitCircleOutsideRegions).
+ */
+function swathClearSpans(
+  poly: Pt[],
+  axialOf: (x: number, y: number) => number,
+  sToPoint: (s: number) => Pt,
+  sMin: number,
+  sMax: number,
+  edges: REdge[],
+  regions: MultiPolygon[],
+): Array<[number, number]> {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const p of poly) {
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
+    maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
+  }
+  const blocked: Array<[number, number]> = []
+  for (const e of edges) {
+    if (e.minX > maxX || e.maxX < minX || e.minY > maxY || e.maxY < minY) continue
+    const ext = clipSegToConvex(e, poly, axialOf)
+    if (ext) blocked.push(ext)
+  }
+  blocked.sort((a, b) => a[0] - b[0])
+  const merged: Array<[number, number]> = []
+  for (const b of blocked) {
+    const last = merged[merged.length - 1]
+    if (last && b[0] <= last[1] + 1e-9) last[1] = Math.max(last[1], b[1])
+    else merged.push([b[0], b[1]])
+  }
+  const gaps: Array<[number, number]> = []
+  let cursor = sMin
+  for (const [lo, hi] of merged) {
+    if (lo > cursor + 1e-9) gaps.push([cursor, Math.min(lo, sMax)])
+    cursor = Math.max(cursor, hi)
+    if (cursor >= sMax) break
+  }
+  if (cursor < sMax - 1e-9) gaps.push([cursor, sMax])
+  const out: Array<[number, number]> = []
+  for (const g of gaps) {
+    const p = sToPoint((g[0] + g[1]) / 2)
+    if (!insideAny(p.x, p.y, regions)) out.push(g)
+  }
+  return out
+}
+
+/**
+ * Straight constant-width stroke (a hatch tick) minus regions, full-width
+ * semantics: the tool must not pass wherever any part of the stroke's width
+ * would enter a region. Returns the surviving sub-segments (stub-filtered);
+ * an untouched tick returns its exact original endpoints.
+ */
+function strokeSwathSegments(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  widthMM: number | undefined,
+  edges: REdge[],
+  regions: MultiPolygon[],
+): Seg[] {
+  const len = Math.hypot(x2 - x1, y2 - y1)
+  if (len < 1e-9) return []
+  const ux = (x2 - x1) / len
+  const uy = (y2 - y1) / len
+  const hw = Math.max((widthMM ?? 0.1) / 2, 1e-6)
+  const px = -uy
+  const py = ux
+  const rect: Pt[] = [
+    { x: x1 + px * hw, y: y1 + py * hw },
+    { x: x2 + px * hw, y: y2 + py * hw },
+    { x: x2 - px * hw, y: y2 - py * hw },
+    { x: x1 - px * hw, y: y1 - py * hw },
+  ]
+  const axialOf = (x: number, y: number) => (x - x1) * ux + (y - y1) * uy
+  const sToPoint = (s: number): Pt => ({ x: x1 + ux * s, y: y1 + uy * s })
+  const spans = swathClearSpans(rect, axialOf, sToPoint, 0, len, edges, regions)
+  if (spans.length === 1 && spans[0]![0] <= 1e-9 && spans[0]![1] >= len - 1e-9) {
+    return [{ ax: x1, ay: y1, bx: x2, by: y2 }] // untouched — exact endpoints
+  }
+  const minLen = stubMinLen(widthMM)
+  const out: Seg[] = []
+  for (const [lo, hi] of spans) {
+    if (hi - lo < minLen) continue
+    const a = sToPoint(lo)
+    const b = sToPoint(hi)
+    out.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y })
+  }
+  return out
+}
+
 /**
  * A thin, straight, single-loop filled polygon is a pointed hatch tick — a
  * stroke in disguise. Differencing it against a text halo with martinez is its
  * worst case: hundreds of near-degenerate polygons make the clip crawl (a halo
  * over a pointed-hatch band could hang for tens of seconds) and mangle edges.
- * So clip the tick's centre axis instead, then re-emit the surviving OUTWARD
- * piece of the ORIGINAL polygon (exact width + pointed tip preserved). Returns
- * null for anything that isn't a thin straight tick (real motifs, curves,
- * multi-loop shapes) so they fall back to polygon difference.
+ * Instead, compute the exact swath shadow on the tick's axis and band-cut the
+ * ORIGINAL polygon per clear span — every span survives (a halo is an outline
+ * MARGIN: the reeding continues on both sides of the letters and through open
+ * counters), exact width, pointed tips intact. Returns null for anything that
+ * isn't a thin straight tick (real motifs, curves, multi-loop shapes) so they
+ * fall back to polygon difference.
  */
-function filledThinTickClip(d: string, paint: Shape['paint'], regions: MultiPolygon[]): Shape[] | null {
+function filledThinTickClip(
+  shape: Extract<Shape, { kind: 'path' }>,
+  regions: MultiPolygon[],
+  edges: REdge[],
+): Shape[] | null {
+  const d = shape.d
   if (/[CAQSTVHcaqstvh]/.test(d)) return null // curved or shorthand → a motif
   if ((d.match(/M/g) || []).length !== 1) return null // single loop only
   const nums = d.match(/-?\d*\.?\d+/g)
@@ -155,8 +347,9 @@ function filledThinTickClip(d: string, paint: Shape['paint'], regions: MultiPoly
   for (let i = 0; i + 1 < nums.length; i += 2) pts.push({ x: +nums[i]!, y: +nums[i + 1]! })
 
   // Principal axis through the centroid = the tick's TRUE centreline. (The
-  // longest chord runs corner→tip on a diagonal, so it skews the width to a full
-  // stroke and the axis off-centre — that produced fat, shifted, blunt stubs.)
+  // spindle is mirror-symmetric about its axis, so the PCA axis IS the symmetry
+  // axis exactly; the longest chord runs corner→tip on a diagonal and skewed
+  // both width and centre — that produced fat, shifted, blunt stubs.)
   const n = pts.length
   let cx = 0, cy = 0
   for (const p of pts) { cx += p.x; cy += p.y }
@@ -182,28 +375,25 @@ function filledThinTickClip(d: string, paint: Shape['paint'], regions: MultiPoly
   const axialLen = sMax - sMin
   if (halfW <= 0 || axialLen < 1e-6 || (2 * halfW) / axialLen > 0.25) return null // not thin → real motif
 
+  // Swath = the original convex polygon itself (not its bounding rectangle), so
+  // a region passing within halfW of the APEX but outside the taper is a miss.
   const wMid = (wMax + wMin) / 2
-  const A = { x: cx + ux * sMin + px * wMid, y: cy + uy * sMin + py * wMid }
-  const B = { x: cx + ux * sMax + px * wMid, y: cy + uy * sMax + py * wMid }
-  const frags = clipSegmentOutsideRegions(A.x, A.y, B.x, B.y, regions)
-  if (frags.length === 1 && Math.hypot(frags[0]!.bx - frags[0]!.ax, frags[0]!.by - frags[0]!.ay) >= axialLen - 1e-6) {
-    return [{ kind: 'path', d, paint }] // untouched by the halo → keep the exact spindle (tips intact)
+  const sToPoint = (s: number): Pt => ({ x: cx + ux * s + px * wMid, y: cy + uy * s + py * wMid })
+  const spans = swathClearSpans(pts, axialOf, sToPoint, sMin, sMax, edges, regions)
+  if (spans.length === 1 && spans[0]![0] <= sMin + 1e-9 && spans[0]![1] >= sMax - 1e-9) {
+    return [shape] // untouched by the halo → keep the exact spindle (tips intact)
   }
-  // Keep EVERY clear span, not just the outward one: a halo is a margin around
-  // the text OUTLINE, so the reeding must survive on both sides of the letters
-  // (and through open counters) — never a whole radial run deleted. Each span is
-  // a band cut of the ORIGINAL polygon (exact width, tips intact); only sub-few-
-  // stroke nubs (tight concavities between serifs) drop out. This matches how
-  // stroked ticks already clip.
   const min = stubMinLen(2 * halfW)
   const out: Shape[] = []
-  for (const s of frags) {
-    const lo = Math.min(axialOf(s.ax, s.ay), axialOf(s.bx, s.by))
-    const hi = Math.max(axialOf(s.ax, s.ay), axialOf(s.bx, s.by))
-    if (hi - lo < min) continue
+  for (const [lo, hi] of spans) {
+    if (hi - lo < min) continue // sub-few-stroke nubs (tight concavities) drop
     const kept = clipPolyBand(pts, axialOf, lo, hi) // hi ≈ sMax keeps the point; a buried tip cuts flat
     if (kept.length < 3) continue
-    out.push({ kind: 'path', d: 'M ' + kept.map((p, i) => `${i ? 'L ' : ''}${fmt(p.x)} ${fmt(p.y)}`).join(' ') + ' Z', paint })
+    out.push({
+      kind: 'path',
+      d: 'M ' + kept.map((p, i) => `${i ? 'L ' : ''}${fmt(p.x)} ${fmt(p.y)}`).join(' ') + ' Z',
+      paint: shape.paint,
+    })
   }
   return out
 }
@@ -369,6 +559,7 @@ const bandOverlaps = (a: Band | null, r0: number, r1: number, pad = 0.02): boole
 function regionClipShape(
   shape: Shape,
   regions: MultiPolygon[],
+  edges: REdge[],
   band: Band | null,
   box: { minX: number; minY: number; maxX: number; maxY: number } | null,
   tolMM: number,
@@ -384,9 +575,7 @@ function regionClipShape(
         out.push(shape)
         return
       }
-      const lineMin = stubMinLen(shape.paint.stroke?.widthMM)
-      for (const s of clipSegmentOutsideRegions(shape.x1, shape.y1, shape.x2, shape.y2, regions)) {
-        if (Math.hypot(s.bx - s.ax, s.by - s.ay) < lineMin) continue // drop grazing slivers
+      for (const s of strokeSwathSegments(shape.x1, shape.y1, shape.x2, shape.y2, shape.paint.stroke?.widthMM, edges, regions)) {
         out.push({ kind: 'line', x1: s.ax, y1: s.ay, x2: s.bx, y2: s.by, paint: shape.paint })
       }
       return
@@ -410,9 +599,9 @@ function regionClipShape(
         return
       }
       if (shape.paint.fill) {
-        // Pointed hatch ticks are thin filled spindles; clip them by centreline
-        // instead of martinez (which is pathologically slow on such shapes).
-        const thin = filledThinTickClip(shape.d, shape.paint, regions)
+        // Pointed hatch ticks are thin filled spindles; clip them by their
+        // exact swath shadow instead of martinez (pathologically slow on them).
+        const thin = filledThinTickClip(shape, regions, edges)
         if (thin !== null) {
           for (const t of thin) out.push(t)
           return
@@ -435,6 +624,13 @@ function regionClipShape(
         const parts: string[] = []
         for (const sub of flattenSegs(segs, tolMM)) {
           const pts = sub.pts
+          if (!sub.closed && pts.length === 2) {
+            // a straight hatch tick — clip its full-width swath, not just the centreline
+            for (const s of strokeSwathSegments(pts[0]!.x, pts[0]!.y, pts[1]!.x, pts[1]!.y, shape.paint.stroke?.widthMM, edges, regions)) {
+              parts.push(`M ${fmt(s.ax)} ${fmt(s.ay)} L ${fmt(s.bx)} ${fmt(s.by)}`)
+            }
+            continue
+          }
           let open: Pt[] = []
           const flush = () => {
             if (open.length >= 2 && polylineLen(open) >= minLen) {
@@ -468,7 +664,7 @@ function regionClipShape(
         out.push(shape) // whole instanced band misses every region
         return
       }
-      for (const flat of expandInstanced(shape)) regionClipShape(flat, regions, band, box, tolMM, out, warnings)
+      for (const flat of expandInstanced(shape)) regionClipShape(flat, regions, edges, band, box, tolMM, out, warnings)
       return
     }
   }
@@ -552,8 +748,9 @@ export function clipCompiled(
   // ---- phase 2: polygon region clipping ----
   const band = regionsBand(regions)
   const box = regionsBox(regions)
+  const edges = collectRegionEdges(regions)
   const out: Shape[] = []
-  for (const shape of discClipped) regionClipShape(shape, regions, band, box, tolMM, out, warnings)
+  for (const shape of discClipped) regionClipShape(shape, regions, edges, band, box, tolMM, out, warnings)
   return { shapes: out, warnings }
 }
 
