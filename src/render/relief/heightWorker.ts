@@ -29,8 +29,7 @@ scope.onmessage = (e) => {
     scope.postMessage({ jobId, field }, [
       field.disp.buffer,
       field.normal.buffer,
-      field.surface.buffer,
-      field.albedo.buffer,
+      field.occl.buffer,
     ])
   } catch (err) {
     scope.postMessage({ jobId, error: String(err) })

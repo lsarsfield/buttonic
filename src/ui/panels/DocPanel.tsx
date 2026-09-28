@@ -7,6 +7,7 @@ import { Toggle } from '../controls/Toggle'
 
 const FINISHES: readonly { value: Finish; label: string }[] = [
   { value: 'nickel', label: 'Nickel' },
+  { value: 'antique-brass', label: 'Antique brass' },
   { value: 'gunmetal', label: 'Gunmetal' },
   { value: 'steel', label: 'Steel' },
   { value: 'brass', label: 'Brass' },

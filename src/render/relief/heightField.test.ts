@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { METAL_FINISHES } from './finishes'
 import {
   baseProfile,
   buildHeightField,
+  finishMaps,
   RELIEF_DEFAULTS,
   signedDistance,
   wallProfile,
@@ -124,7 +126,21 @@ describe('height field', () => {
     const c = discCoverage(2.1)
     for (let i = 0; i < N * N; i++) ring[i] = Math.min(1, Math.max(0, a[i]! - b[i]! + c[i]!))
     const f = buildHeightField(ring, N, SPAN, params())
-    const ao = (i: number) => f.surface[i * 4]!
+    const { surface } = finishMaps(f, METAL_FINISHES.nickel.patina)
+    const ao = (i: number) => surface[i * 4]!
     expect(ao(px(2.22, 0.05))).toBeLessThan(ao(px(6, 6)) - 20)
+  })
+
+  it('antique brass fills the whole low ground with oxide; the high points stay burnished', () => {
+    const f = buildHeightField(discCoverage(2), N, SPAN, params())
+    const nickel = finishMaps(f, METAL_FINISHES.nickel.patina).albedo
+    const antique = finishMaps(f, METAL_FINISHES['antique-brass'].patina).albedo
+    const field = px(5, 3) // open low ground, far from the raised disc
+    const top = px(0, 0) // on the raised disc
+    expect(antique[field * 4]!).toBeLessThan(nickel[field * 4]! - 80)
+    expect(antique[field * 4]!).toBeLessThan(140)
+    expect(antique[top * 4]!).toBe(255)
+    // the patina is a finish choice over the SAME field — no rebuild
+    expect(finishMaps(f, METAL_FINISHES.nickel.patina).albedo).toEqual(nickel)
   })
 })

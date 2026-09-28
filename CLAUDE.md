@@ -35,7 +35,8 @@ param, not an error.)
   `sourceType: 'builtin'`), v9 text/centre `invertOverBare` (migrates FALSE = old
   vanish behaviour; new layers default true), v10 doc-level physical product
   `holeDiameterMM` (donut/tack cap; 0 = solid) + `relief` ('raised' = die-struck: the
-  die's cut stands proud) + finish `'nickel'` (new-doc default) — copy this pattern; defaults spread FIRST
+  die's cut stands proud) + finish `'nickel'` (new-doc default); `'antique-brass'` added
+  later with no migration (finish is a validated enum string) — copy this pattern; defaults spread FIRST
   so stored values win). Factory defaults may differ from migration defaults: new
   text/centre layers get `haloMM = NEW_TEXT_GAP_MM` (0.15, the Engrave "Gap") while
   stored docs keep theirs. Hand-rolled `validate.ts` (REQUIRED field tables), `presets.ts` (Reference A/B + Flower-Power +
@@ -131,8 +132,12 @@ param, not an error.)
     Felzenszwalb EDT signed distance (sub-pixel on boundary px, ~1.6 px blur against
     diagonal terracing — the blur is in PIXELS, tuned for the live 2048² over the face)
     → wall-profiled design height (raised/recessed) → cavity (blurred high-ground vs
-    local height) → OBJECT-SPACE normals of cap profile + relief, AO/roughness (RG) and
-    oxide-albedo maps, plus a 1024² displacement. `baseProfile` = flat face (optional
+    local height) + lowness → OBJECT-SPACE normals of cap profile + relief, a raw
+    `occl` map (R cavity, G lowness) and a 1024² displacement. PATINA IS PER FINISH:
+    `finishMaps(field, finish.patina)` composes AO/roughness + oxide-albedo on the main
+    thread (~50 ms) — nickel greys only tight recesses, antique brass fills the whole
+    low ground with brown-black oxide (burnished highs). Finish switches never re-run
+    the EDT. `baseProfile` = flat face (optional
     dome), quarter-round rolled shoulder, rolled hole lip.
   - `heightAsync.ts` rasterizes the EXACT `exportSvg` die (halos/cut-outs/inverts
     included) on the main thread (~25 ms), EDT in `heightWorker.ts` (~1 s at 2048²),
@@ -177,13 +182,13 @@ param, not an error.)
 
 ## Testing & verification culture
 
-216 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+217 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,
 pointed-hatch halo clipping), invert-over-bare analytic areas (`invert.test.ts`),
 3D height-field kernel (`relief/heightField.test.ts`: EDT vs analytic disc, polarity,
-normals, cavity, cap profile), schema v10 + centre-hole export warnings.
+normals, cavity, per-finish patina, cap profile), schema v10 + centre-hole export warnings.
 After code changes: typecheck + full suite, then ONE browser acceptance pass via the
 preview tools + `window.__engraver`, then push (CI re-gates).
 

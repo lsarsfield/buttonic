@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { Finish } from '../../model/types'
 import { makeDenim, TILE_MM, type DenimKind } from './denim'
 import { COPPER, finishOf, type MetalFinish } from './finishes'
-import { baseProfile, ROUGH_HEADROOM, RELIEF_DEFAULTS, type HeightField, type ReliefParams } from './heightField'
+import { baseProfile, finishMaps, ROUGH_HEADROOM, RELIEF_DEFAULTS, type HeightField, type ReliefParams } from './heightField'
 
 /**
  * The struck button as a three.js scene, in millimetres. three is Y-up; the
@@ -251,6 +251,9 @@ export class ButtonScene {
   private depthMat: THREE.MeshDepthMaterial | null = null
   private field: HeightField | null = null
   private fieldTex: THREE.Texture[] = []
+  /** Finish-dependent patina maps (rebuilt on a new field or a finish change). */
+  private patinaTex: THREE.Texture[] = []
+  private patinaKey = ''
   private geoKey = ''
   private spec: ButtonSpec | null = null
 
@@ -383,15 +386,40 @@ export class ButtonScene {
       this.holeMat.envMapIntensity = 0.12 // it sees mostly the inside of the cap
     }
     if (this.faceMat && this.field) {
+      this.applyPatina()
       this.faceMat.roughness = Math.min(1, f.roughness * ROUGH_HEADROOM)
       this.faceMat.aoMapIntensity = f.oxide
     }
   }
 
+  /** (Re)compose the finish's patina over the current field — ~tens of ms, no EDT. */
+  private applyPatina(): void {
+    const m = this.faceMat
+    const field = this.field
+    if (!m || !field) return
+    const f = finishOf(this.spec!.finish)
+    const key = JSON.stringify(f.patina)
+    if (key === this.patinaKey && this.patinaTex.length > 0) return
+    for (const t of this.patinaTex) t.dispose()
+    const { surface, albedo } = finishMaps(field, f.patina)
+    const st = dataTexture(surface, field.n, THREE.RGBAFormat, THREE.UnsignedByteType, true)
+    const at = dataTexture(albedo, field.n, THREE.RGBAFormat, THREE.UnsignedByteType, true)
+    st.anisotropy = at.anisotropy = 8
+    this.patinaTex = [st, at]
+    this.patinaKey = key
+    const first = !m.map
+    m.map = at
+    m.roughnessMap = st
+    m.aoMap = st
+    if (first) m.needsUpdate = true
+  }
+
   setHeightField(field: HeightField | null): void {
     this.field = field
-    for (const t of this.fieldTex) t.dispose()
+    for (const t of [...this.fieldTex, ...this.patinaTex]) t.dispose()
     this.fieldTex = []
+    this.patinaTex = []
+    this.patinaKey = ''
     const m = this.faceMat
     if (!m || !this.depthMat) return
     if (!field) {
@@ -401,15 +429,11 @@ export class ButtonScene {
       const disp = dataTexture(field.disp, field.dispN, THREE.RedFormat, THREE.FloatType, false)
       disp.minFilter = disp.magFilter = THREE.NearestFilter // float32 linear filtering isn't universal
       const normal = dataTexture(field.normal, field.n, THREE.RGBAFormat, THREE.UnsignedByteType, true)
-      const surface = dataTexture(field.surface, field.n, THREE.RGBAFormat, THREE.UnsignedByteType, true)
-      const albedo = dataTexture(field.albedo, field.n, THREE.RGBAFormat, THREE.UnsignedByteType, true)
-      for (const t of [normal, surface, albedo]) t.anisotropy = 8
-      this.fieldTex = [disp, normal, surface, albedo]
-      m.map = albedo
+      normal.anisotropy = 8
+      this.fieldTex = [disp, normal]
+      m.map = null // applyFinish → applyPatina attaches the finish's maps
       m.normalMap = normal
       m.normalMapType = THREE.ObjectSpaceNormalMap
-      m.roughnessMap = surface
-      m.aoMap = surface
       m.displacementMap = disp
       m.displacementScale = 1
       this.depthMat.displacementMap = disp
@@ -487,7 +511,7 @@ export class ButtonScene {
   }
 
   dispose(): void {
-    for (const t of this.fieldTex) t.dispose()
+    for (const t of [...this.fieldTex, ...this.patinaTex]) t.dispose()
     this.button.traverse((o) => {
       const m = o as THREE.Mesh
       if (m.geometry) m.geometry.dispose()

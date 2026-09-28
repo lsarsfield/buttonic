@@ -11,7 +11,10 @@ import type { Relief } from '../../model/types'
  *  2. design height = depth · smoothstep over a finite wall — raised (die-
  *     struck: what's cut into the die stands proud) or recessed
  *  3. cavity = how enclosed a point is by higher ground (blurred coverage vs
- *     local height) → oxide + rougher metal in the low, narrow places
+ *     local height), plus plain lowness — raw inputs; each FINISH turns them
+ *     into its own patina (finishMaps: nickel greys only tight recesses,
+ *     antique brass fills the whole low ground with brown oxide) so switching
+ *     finish never re-runs the EDT
  *  4. object-space normals of the WHOLE surface: cap profile (flat face,
  *     optional dome, rolled outer edge, rolled hole lip) + design relief
  */
@@ -44,10 +47,18 @@ export interface HeightField {
   dispN: number
   /** Object-space normals of the full surface, RGBA8 (xyz·0.5+0.5), n². */
   normal: Uint8Array
-  /** R = ambient occlusion, G = roughness multiplier (÷ ROUGH_HEADROOM), B = unused, n². */
-  surface: Uint8Array
-  /** Oxide darkening multiplier as grey RGBA8 (sRGB-agnostic albedo map), n². */
-  albedo: Uint8Array
+  /** R = cavity (enclosed by higher ground), G = lowness (1 − high-ground occupancy), RGBA8 n². */
+  occl: Uint8Array
+}
+
+/** How a finish weathers: where oxide settles and how dark it gets. */
+export interface Patina {
+  /** Oxide in tight recesses (cavity), 0..1. */
+  cavity: number
+  /** Oxide over all low ground (antiquing fills the field), 0..1. */
+  field: number
+  /** How dark full oxide is (albedo multiplier = 1 − darken·patina). */
+  darken: number
 }
 
 /** Recess roughness can reach this multiple of the finish's base roughness. */
@@ -229,8 +240,7 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
   boxBlur(nb, n, rb)
 
   const normal = new Uint8Array(n * n * 4)
-  const surface = new Uint8Array(n * n * 4)
-  const albedo = new Uint8Array(n * n * 4)
+  const occl = new Uint8Array(n * n * 4)
   const at = (x: number, y: number) => h[(y < 0 ? 0 : y >= n ? n - 1 : y) * n + (x < 0 ? 0 : x >= n ? n - 1 : x)]!
   for (let y = 0; y < n; y++) {
     const wy = -V + (y + 0.5) * mmPerPx
@@ -257,18 +267,9 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
       normal[o + 2] = Math.round(((nz / len) * 0.5 + 0.5) * 255)
       normal[o + 3] = 255
 
-      const low = 1 - F[i]!
-      const cav = Math.min(1, Math.max(0, (nb[i]! - F[i]!) * 1.6))
-      const patina = Math.min(1, cav + 0.12 * low)
-      surface[o] = Math.round((1 - 0.7 * patina) * 255) // AO
-      surface[o + 1] = Math.round(((1 + (ROUGH_HEADROOM - 1) * patina) / ROUGH_HEADROOM) * 255) // roughness
-      surface[o + 2] = 0
-      surface[o + 3] = 255
-      const g = Math.round((1 - 0.62 * patina) * 255) // oxide darkening
-      albedo[o] = g
-      albedo[o + 1] = g
-      albedo[o + 2] = g
-      albedo[o + 3] = 255
+      occl[o] = Math.round(Math.min(1, Math.max(0, (nb[i]! - F[i]!) * 1.6)) * 255) // cavity
+      occl[o + 1] = Math.round((1 - F[i]!) * 255) // lowness
+      occl[o + 3] = 255
     }
   }
 
@@ -289,5 +290,30 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
     }
   }
 
-  return { n, spanMM, disp, dispN: DISP_N, normal, surface, albedo }
+  return { n, spanMM, disp, dispN: DISP_N, normal, occl }
+}
+
+/**
+ * A finish's patina over the field's cavity/lowness: surface = R ambient
+ * occlusion, G roughness multiplier (÷ ROUGH_HEADROOM); albedo = grey oxide
+ * darkening. Cheap per-pixel pass (main thread, on field landing / finish change).
+ */
+export function finishMaps(field: HeightField, p: Patina): { surface: Uint8Array; albedo: Uint8Array } {
+  const n = field.n
+  const surface = new Uint8Array(n * n * 4)
+  const albedo = new Uint8Array(n * n * 4)
+  const occl = field.occl
+  for (let i = 0; i < n * n; i++) {
+    const o = i * 4
+    const patina = Math.min(1, p.cavity * (occl[o]! / 255) + p.field * (occl[o + 1]! / 255))
+    surface[o] = Math.round((1 - 0.7 * patina) * 255)
+    surface[o + 1] = Math.round(((1 + (ROUGH_HEADROOM - 1) * patina) / ROUGH_HEADROOM) * 255)
+    surface[o + 3] = 255
+    const g = Math.round((1 - p.darken * patina) * 255)
+    albedo[o] = g
+    albedo[o + 1] = g
+    albedo[o + 2] = g
+    albedo[o + 3] = 255
+  }
+  return { surface, albedo }
 }

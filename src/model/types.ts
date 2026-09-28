@@ -53,8 +53,8 @@ export interface Asset {
   dataBase64: string
 }
 
-export type Finish = 'nickel' | 'gunmetal' | 'steel' | 'brass'
-export const FINISH_IDS: readonly Finish[] = ['nickel', 'gunmetal', 'steel', 'brass']
+export type Finish = 'nickel' | 'antique-brass' | 'gunmetal' | 'steel' | 'brass'
+export const FINISH_IDS: readonly Finish[] = ['nickel', 'antique-brass', 'gunmetal', 'steel', 'brass']
 
 /** Which way the die's cut (black in the export) comes out on the struck button. */
 export type Relief = 'raised' | 'recessed'
