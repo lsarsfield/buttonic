@@ -18,6 +18,8 @@ function docWithEverything(): ButtonDoc {
     name: 'Kitchen sink',
     diameterMM: 17,
     finish: 'gunmetal',
+    holeDiameterMM: 0,
+    relief: 'raised',
     layers: [
       makeCenterLayer(),
       makeRingTextLayer(),
@@ -268,5 +270,35 @@ describe('parseDoc failure modes', () => {
     const r = parseDoc(JSON.stringify(doc))
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/dup/)
+  })
+})
+
+describe('schema v10: centre hole + relief + nickel', () => {
+  it('v9 documents become solid, raised caps without touching anything else', () => {
+    const v9 = { ...makeBlankDoc(), version: 9 } as Record<string, unknown>
+    delete v9.holeDiameterMM
+    delete v9.relief
+    v9.finish = 'brass'
+    const r = parseDoc(JSON.stringify(v9))
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.doc.version).toBe(DOC_VERSION)
+    expect(r.doc.holeDiameterMM).toBe(0)
+    expect(r.doc.relief).toBe('raised')
+    expect(r.doc.finish).toBe('brass')
+  })
+
+  it('round-trips a donut, recessed, nickel cap', () => {
+    const doc: ButtonDoc = { ...makeBlankDoc(), finish: 'nickel', holeDiameterMM: 7, relief: 'recessed' }
+    const r = parseDoc(stringifyDoc(doc))
+    expect(r.ok && r.doc).toEqual(doc)
+  })
+
+  it('an unknown finish degrades to steel; a bad relief or hole is rejected', () => {
+    const base = JSON.parse(stringifyDoc(makeBlankDoc())) as Record<string, unknown>
+    const odd = parseDoc(JSON.stringify({ ...base, finish: 'unobtainium' }))
+    expect(odd.ok && odd.doc.finish).toBe('steel')
+    expect(parseDoc(JSON.stringify({ ...base, relief: 'sideways' })).ok).toBe(false)
+    expect(parseDoc(JSON.stringify({ ...base, holeDiameterMM: -1 })).ok).toBe(false)
   })
 })

@@ -11,6 +11,7 @@ import { useViewport } from '../../state/viewport'
 export function Guides() {
   const showGuides = useEngraver((s) => s.view.showGuides)
   const diameterMM = useEngraver((s) => s.doc.diameterMM)
+  const holeR = useEngraver((s) => s.doc.holeDiameterMM / 2)
   const scale = useViewport((s) => s.scale)
   const selected = useEngraver((s) => s.doc.layers.find((l) => l.id === s.selection) ?? null)
 
@@ -58,6 +59,10 @@ export function Guides() {
           ))}
           {/* button edge */}
           <circle r={R} strokeWidth={px(1)} strokeOpacity={0.55} />
+          {/* donut centre hole */}
+          {holeR > 0 && (
+            <circle r={holeR} strokeWidth={px(1)} strokeOpacity={0.55} strokeDasharray={`${px(3)} ${px(3)}`} />
+          )}
           {/* degree ticks */}
           {ticks.map((t, i) => (
             <line

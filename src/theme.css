@@ -868,6 +868,39 @@ a.pwyc-button {
   color: var(--accent);
 }
 
+/* ---------------------------------------------------------- 3D stage */
+
+.relief-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(ellipse at center, #1b1d22 0%, var(--bg0) 75%);
+  touch-action: none;
+  cursor: grab;
+}
+.relief-stage > canvas {
+  display: block;
+}
+.relief-poses {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+  z-index: 1;
+}
+.stage-loading {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-dim);
+}
+
 /* -------------------------------------------------------------- inspector */
 
 .inspector-body {

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useEngraver } from '../state/store'
 import { screenToMM, useViewport } from '../state/viewport'
 import { xyToPolar } from '../geometry/polar'
+import { annulusPathD } from '../geometry/format'
 import { DocRenderer } from './DocRenderer'
-import { FINISHES, MetalDefs } from './MetalPreview'
 import { Guides } from './overlays/Guides'
 import { Handles } from './overlays/Handles'
 
@@ -11,7 +11,8 @@ import { Handles } from './overlays/Handles'
  * The mm-true stage: one <svg> filling the pane, a zoom/pan group in screen
  * px, and inside it the document in millimetre coordinates centred on the
  * button axis. `<g id="doc">` stays pristine — the export subtree — while
- * guides and handles live in a sibling overlay group.
+ * guides and handles live in a sibling overlay group. (The realistic view is
+ * a separate 3D stage — see relief/ReliefStage.)
  */
 export function SvgStage() {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -20,10 +21,8 @@ export function SvgStage() {
 
   const { scale, tx, ty } = useViewport()
   const diameterMM = useEngraver((s) => s.doc.diameterMM)
-  const finish = useEngraver((s) => s.doc.finish)
+  const holeDiameterMM = useEngraver((s) => s.doc.holeDiameterMM)
   const artboardLight = useEngraver((s) => s.view.artboardLight)
-  const metal = useEngraver((s) => s.view.mode === 'metal')
-  const lightDeg = useEngraver((s) => s.view.lightDeg)
   const select = useEngraver((s) => s.select)
 
   // Track pane size; fit the button on first layout.
@@ -131,37 +130,22 @@ export function SvgStage() {
       onPointerUp={onPointerUp}
       onPointerLeave={() => useViewport.getState().setCursor(null)}
     >
-      {metal && <MetalDefs finish={finish} lightDeg={lightDeg} faceR={faceR} />}
       <g transform={`translate(${tx} ${ty}) scale(${scale})`}>
-        {/* Backdrop: the physical button blank. Not part of the export subtree. */}
+        {/* Backdrop: the physical button blank (a donut when it has a centre
+            hole). Not part of the export subtree. */}
         <g id="backdrop">
-          {metal ? (
-            <g
-              onPointerDown={(e) => {
-                if (e.button === 0 && !spaceDown) select(null)
-              }}
-            >
-              <circle r={faceR} fill="url(#metal-plate)" />
-              <circle r={faceR} filter="url(#metal-grain)" opacity={FINISHES[finish].grainOpacity} />
-              <circle r={faceR} fill="url(#metal-sheen)" />
-            </g>
-          ) : (
-            <circle
-              r={faceR}
-              fill={artboardLight ? '#e9e7e2' : 'var(--face)'}
-              stroke={artboardLight ? '#c9c6bf' : 'var(--face-edge)'}
-              strokeWidth={1.5 / scale}
-              onPointerDown={(e) => {
-                if (e.button === 0 && !spaceDown) select(null)
-              }}
-            />
-          )}
+          <path
+            d={holeDiameterMM > 0 ? annulusPathD(faceR, Math.min(holeDiameterMM / 2, faceR * 0.95)) : annulusPathD(faceR, 0)}
+            fillRule="evenodd"
+            fill={artboardLight ? '#e9e7e2' : 'var(--face)'}
+            stroke={artboardLight ? '#c9c6bf' : 'var(--face-edge)'}
+            strokeWidth={1.5 / scale}
+            onPointerDown={(e) => {
+              if (e.button === 0 && !spaceDown) select(null)
+            }}
+          />
         </g>
-        <g
-          id="doc"
-          style={{ color: metal ? FINISHES[finish].engrave : artboardLight ? '#2a2b30' : 'var(--engrave)' }}
-          filter={metal ? 'url(#engrave-cut)' : undefined}
-        >
+        <g id="doc" style={{ color: artboardLight ? '#2a2b30' : 'var(--engrave)' }}>
           <DocRenderer />
         </g>
         <g id="overlays">

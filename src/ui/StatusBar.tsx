@@ -4,6 +4,8 @@ import { useViewport } from '../state/viewport'
 export function StatusBar() {
   const layerCount = useEngraver((s) => s.doc.layers.length)
   const haloPending = useEngraver((s) => s.haloPending)
+  const reliefPending = useEngraver((s) => s.reliefPending)
+  const mode3d = useEngraver((s) => s.view.mode === '3d')
   const cursor = useViewport((s) => s.cursor)
   const scale = useViewport((s) => s.scale)
 
@@ -17,6 +19,12 @@ export function StatusBar() {
         <span className="statusbar-halo" role="status" aria-label="Recomputing halo">
           <span className="statusbar-halo-spin" aria-hidden="true" />
           halo…
+        </span>
+      )}
+      {mode3d && reliefPending && (
+        <span className="statusbar-halo" role="status" aria-label="Rebuilding 3D relief">
+          <span className="statusbar-halo-spin" aria-hidden="true" />
+          3D…
         </span>
       )}
       <span className="statusbar-readout">

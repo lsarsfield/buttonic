@@ -172,3 +172,18 @@ describe('schema v9', () => {
     expect(c.haloMM).toBe(0.2)
   })
 })
+
+describe('export: centre hole', () => {
+  it('adds the hole to the blank outline and warns when art enters it', () => {
+    const doc: ButtonDoc = {
+      ...makeBlankDoc(),
+      holeDiameterMM: 4,
+      layers: [makeRingLayer({ id: 'r', mode: 'stroke', radiusMM: 1.5, strokeMM: 0.2 })],
+    }
+    const { svg, warnings } = exportSvg(doc, { expandInstances: true, mirrorForDie: false, includeBlankOutline: true })
+    expect(svg).toMatch(/<circle r="2" [^>]*data-name="centre hole"/)
+    expect(warnings.some((w) => /centre hole/.test(w))).toBe(true)
+    const clear = exportSvg({ ...doc, holeDiameterMM: 2 }, { expandInstances: true, mirrorForDie: false, includeBlankOutline: true })
+    expect(clear.warnings.some((w) => /centre hole/.test(w))).toBe(false)
+  })
+})

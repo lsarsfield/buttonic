@@ -13,7 +13,7 @@ import { bareInvertRegion, invertsBare } from '../geometry/invert'
 import { multiPolygonToPathD, rotateMultiPolygon } from '../geometry/poly'
 import { expandInstanced, defMatrix } from '../geometry/expand'
 import { fmt } from '../geometry/format'
-import { flattenSegs } from '../geometry/flatten'
+import { distToSegment, flattenSegs } from '../geometry/flatten'
 import { parsePathData, transformSegs } from '../geometry/pathData'
 import { fillPaint, type Paint, type Shape } from '../geometry/shapes'
 import { stringifyDoc } from '../model/serialize'
@@ -134,9 +134,40 @@ function shapeMaxRadius(shape: Shape): number {
   }
 }
 
+/** Nearest approach of a shape to the axis in mm (stroke included), for the centre-hole warning. */
+function shapeMinRadius(shape: Shape): number {
+  const half = (shape.paint.stroke?.widthMM ?? 0) / 2
+  const O = { x: 0, y: 0 }
+  const polyMin = (subs: ReturnType<typeof flattenSegs>): number => {
+    let min = Infinity
+    for (const sub of subs) {
+      const pts = sub.pts
+      if (pts.length === 1) min = Math.min(min, Math.hypot(pts[0]!.x, pts[0]!.y))
+      for (let i = 0; i + 1 < pts.length; i++) min = Math.min(min, distToSegment(O, pts[i]!, pts[i + 1]!))
+      if (sub.closed && pts.length > 2) min = Math.min(min, distToSegment(O, pts[pts.length - 1]!, pts[0]!))
+    }
+    return min
+  }
+  switch (shape.kind) {
+    case 'circle':
+      return Math.max(0, shape.rMM - half)
+    case 'line':
+      return Math.max(0, distToSegment(O, { x: shape.x1, y: shape.y1 }, { x: shape.x2, y: shape.y2 }) - half)
+    case 'path':
+      return Math.max(0, polyMin(flattenSegs(parsePathData(shape.d), 0.05)) - half)
+    case 'instanced':
+      // pure rotations keep radii — only translated instances need expanding
+      if (shape.transforms.every((t) => t.dx === 0 && t.dy === 0)) {
+        return Math.max(0, polyMin(flattenSegs(transformSegs(parsePathData(shape.def.d), defMatrix(shape.def)), 0.05)) - half)
+      }
+      return expandInstanced(shape).reduce((m, s) => Math.min(m, shapeMinRadius(s)), Infinity)
+  }
+}
+
 export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SVG_OPTIONS): SvgExportResult {
   const warnings: string[] = []
   const R = doc.diameterMM / 2
+  const holeR = doc.holeDiameterMM / 2
   const ctx: CompileCtx = {
     diameterMM: doc.diameterMM,
     toleranceMM: EXPORT_TOLERANCE_MM,
@@ -194,6 +225,9 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
       if (shapeMaxRadius(shape) > R + 0.01) {
         warnings.push(`${layer.name}: geometry extends beyond the button face`)
       }
+      if (holeR > 0 && shapeMinRadius(shape) < holeR - 0.01) {
+        warnings.push(`${layer.name}: geometry extends into the centre hole`)
+      }
       if (shape.kind === 'instanced' && options.expandInstances) {
         for (const flat of expandInstanced(shape)) shapeToMarkup(flat, '', body, defs)
       } else {
@@ -209,7 +243,10 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
   })
 
   const outline = options.includeBlankOutline
-    ? `<circle r="${fmt(R)}" fill="none" stroke="#000000" stroke-width="0.02" data-name="blank outline"/>`
+    ? `<circle r="${fmt(R)}" fill="none" stroke="#000000" stroke-width="0.02" data-name="blank outline"/>` +
+      (holeR > 0
+        ? `\n<circle r="${fmt(holeR)}" fill="none" stroke="#000000" stroke-width="0.02" data-name="centre hole"/>`
+        : '')
     : ''
   const mirror = options.mirrorForDie ? ` transform="scale(-1 1)"` : ''
   const defsBlock = defs.length > 0 ? `<defs>\n${defs.join('\n')}\n</defs>\n` : ''

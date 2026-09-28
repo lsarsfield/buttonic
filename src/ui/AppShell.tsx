@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { loadProjectFile, saveProject } from '../io/project'
 import {
   boot as workspaceBoot,
@@ -17,6 +17,9 @@ import { LayerList } from './LayerList'
 import { StatusBar } from './StatusBar'
 import { Toolbar } from './Toolbar'
 
+// three.js loads only when the 3D view is first switched on
+const ReliefStage = lazy(() => import('../render/relief/ReliefStage'))
+
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement &&
   (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
@@ -31,6 +34,7 @@ const STATUS_MESSAGES: Record<WorkspaceStatus['kind'], string | null> = {
 
 export function AppShell() {
   const [dialog, setDialog] = useState<Dialog>('none')
+  const mode3d = useEngraver((s) => s.view.mode === '3d')
   const [statusNote, setStatusNote] = useState<string | null>(STATUS_MESSAGES[getStatus().kind])
   const [flash, setFlash] = useState<string | null>(null)
   const [dropDepth, setDropDepth] = useState(0)
@@ -140,7 +144,7 @@ export function AppShell() {
           break
         case 'm':
         case 'M':
-          state.setView({ mode: state.view.mode === 'metal' ? 'flat' : 'metal' })
+          state.setView({ mode: state.view.mode === '3d' ? 'flat' : '3d' })
           break
       }
     }
@@ -180,7 +184,13 @@ export function AppShell() {
           void loadFiles(e.dataTransfer.files)
         }}
       >
-        <SvgStage />
+        {mode3d ? (
+          <Suspense fallback={<div className="stage-loading">Loading 3D…</div>}>
+            <ReliefStage />
+          </Suspense>
+        ) : (
+          <SvgStage />
+        )}
         {dropDepth > 0 && <div className="drop-overlay">Drop to open</div>}
         {banner && (
           <div className="stage-banner">

@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 9
+export const DOC_VERSION = 10
 
 /** Whether a content layer engraves its geometry or subtracts it from below. */
 export type BooleanRole = 'draw' | 'subtract'
@@ -53,7 +53,11 @@ export interface Asset {
   dataBase64: string
 }
 
-export type Finish = 'gunmetal' | 'steel' | 'brass'
+export type Finish = 'nickel' | 'gunmetal' | 'steel' | 'brass'
+export const FINISH_IDS: readonly Finish[] = ['nickel', 'gunmetal', 'steel', 'brass']
+
+/** Which way the die's cut (black in the export) comes out on the struck button. */
+export type Relief = 'raised' | 'recessed'
 
 export interface ButtonDoc {
   version: number
@@ -61,6 +65,10 @@ export interface ButtonDoc {
   diameterMM: number
   /** Metal preview finish; has no effect on exported geometry. */
   finish: Finish
+  /** Centre hole of a donut / tack button (0 = solid cap). Physical product, not geometry. */
+  holeDiameterMM: number
+  /** Die cut → raised (die-struck convention) or recessed on the button; drives the 3D render. */
+  relief: Relief
   layers: Layer[]
   assets: Record<AssetId, Asset>
   /** Machine-local fonts used by layers, keyed by their `local:` font id. */
@@ -430,7 +438,9 @@ export function makeBlankDoc(): ButtonDoc {
     version: DOC_VERSION,
     name: 'Untitled button',
     diameterMM: 17,
-    finish: 'steel',
+    finish: 'nickel',
+    holeDiameterMM: 0,
+    relief: 'raised',
     layers: [makeRingLayer({ name: 'Rim', radiusMM: 8.2, strokeMM: 0.3 })],
     assets: {},
     localFonts: {},

@@ -1,5 +1,5 @@
 import { memo, useEffect } from 'react'
-import type { Layer } from '../model/types'
+import type { ButtonDoc, Layer } from '../model/types'
 import { isLocalFontId } from '../model/types'
 import { clipCompiled } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
@@ -23,27 +23,7 @@ export function DocRenderer() {
   const fontsRevision = useEngraver((s) => s.fontsRevision)
   useEngraver((s) => s.regionsRevision) // re-render when an off-thread region lands
 
-  // Kick lazy font loads / SVG parses for any layer that needs one; the
-  // revision bump on completion recompiles the affected layers. Local-font
-  // references get one silent resolution attempt (works without a prompt
-  // once permission was granted in a past session).
-  useEffect(() => {
-    const wantFont = (fontId: string) => {
-      if (isLocalFontId(fontId)) ensureLocalFontsResolved(doc)
-      else ensureFontLoaded(fontId, doc)
-    }
-    for (const layer of doc.layers) {
-      if (layer.type === 'ringText') wantFont(layer.fontId)
-      if (layer.type === 'center' && layer.sourceType === 'glyph') wantFont(layer.fontId)
-      if (layer.type === 'center' && layer.sourceType === 'asset' && layer.assetId) {
-        ensureSvgParsed(layer.assetId, doc)
-      }
-      if (layer.type === 'bend' && layer.assetId) ensureSvgParsed(layer.assetId, doc)
-      if (layer.type === 'repeat' && layer.source.kind === 'asset') {
-        ensureSvgParsed(layer.source.assetId, doc)
-      }
-    }
-  }, [doc, fontsRevision, assetsRevision])
+  useDocResources(doc, fontsRevision, assetsRevision)
 
   const ctx: CompileCtx = {
     diameterMM: doc.diameterMM,
@@ -75,6 +55,33 @@ export function DocRenderer() {
       ))}
     </>
   )
+}
+
+/**
+ * Kick lazy font loads / SVG parses for any layer that needs one; the
+ * revision bump on completion recompiles the affected layers. Shared by the
+ * 2D stage and the 3D stage (which never mounts DocRenderer).
+ */
+export function useDocResources(doc: ButtonDoc, fontsRevision: number, assetsRevision: number): void {
+  // Local-font references get one silent resolution attempt (works without a
+  // prompt once permission was granted in a past session).
+  useEffect(() => {
+    const wantFont = (fontId: string) => {
+      if (isLocalFontId(fontId)) ensureLocalFontsResolved(doc)
+      else ensureFontLoaded(fontId, doc)
+    }
+    for (const layer of doc.layers) {
+      if (layer.type === 'ringText') wantFont(layer.fontId)
+      if (layer.type === 'center' && layer.sourceType === 'glyph') wantFont(layer.fontId)
+      if (layer.type === 'center' && layer.sourceType === 'asset' && layer.assetId) {
+        ensureSvgParsed(layer.assetId, doc)
+      }
+      if (layer.type === 'bend' && layer.assetId) ensureSvgParsed(layer.assetId, doc)
+      if (layer.type === 'repeat' && layer.source.kind === 'asset') {
+        ensureSvgParsed(layer.source.assetId, doc)
+      }
+    }
+  }, [doc, fontsRevision, assetsRevision])
 }
 
 // Contributors compare by REGION identity (the actual clip input) + phase, not

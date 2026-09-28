@@ -76,6 +76,8 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
       return t === 'ringText' || t === 'center' ? { invertOverBare: false, ...layer } : layer
     }),
   }),
+  // v10: physical product — donut centre hole + relief polarity (solid, raised cap)
+  10: (doc) => ({ holeDiameterMM: 0, relief: 'raised', ...doc }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

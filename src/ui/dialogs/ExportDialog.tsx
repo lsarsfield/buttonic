@@ -14,9 +14,10 @@ const PAYPAL_URL = 'https://paypal.me/liamsarsfield01'
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const doc = useEngraver((s) => s.doc)
   const lightDeg = useEngraver((s) => s.view.lightDeg)
+  const backdrop = useEngraver((s) => s.view.backdrop)
   const [svgOptions, setSvgOptions] = useState<SvgExportOptions>(DEFAULT_SVG_OPTIONS)
   const [pngPx, setPngPx] = useState('2048')
-  const [pngMode, setPngMode] = useState<'metal' | 'flat'>('metal')
+  const [pngMode, setPngMode] = useState<'3d' | 'flat'>('3d')
   const [pngTransparent, setPngTransparent] = useState(false)
   const [pngError, setPngError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -39,13 +40,14 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         px: Number(pngPx),
         mode: pngMode,
         lightDeg,
+        backdrop,
         transparent: pngTransparent,
+        fontsRevision: useEngraver.getState().fontsRevision,
+        assetsRevision: useEngraver.getState().assetsRevision,
       })
       downloadBlob(blob, `${safeFilename(doc.name)}-${pngPx}px.png`)
     } catch (e) {
-      setPngError(
-        `${e instanceof Error ? e.message : e} — try the flat mode if your browser can't rasterize SVG filters.`,
-      )
+      setPngError(`${e instanceof Error ? e.message : e}${pngMode === '3d' ? ' — try the flat style if 3D is unavailable here.' : ''}`)
     } finally {
       setBusy(false)
     }
@@ -126,13 +128,18 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             label="Style"
             value={pngMode}
             options={[
-              { value: 'metal', label: 'Metal' },
+              { value: '3d', label: '3D' },
               { value: 'flat', label: 'Flat' },
             ]}
             onChange={setPngMode}
           />
-          {pngMode === 'flat' && (
-            <Toggle label="Transparent" value={pngTransparent} onChange={setPngTransparent} />
+          <Toggle
+            label={pngMode === '3d' ? 'No backdrop' : 'Transparent'}
+            value={pngTransparent}
+            onChange={setPngTransparent}
+          />
+          {pngMode === '3d' && (
+            <div className="readout">Rendered like the 3D view: its camera, light and backdrop.</div>
           )}
           {pngError && <div className="warning-note">{pngError}</div>}
           <button type="button" className="button-primary" disabled={busy} onClick={downloadPng}>

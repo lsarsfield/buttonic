@@ -10,7 +10,8 @@ from the centre axis outward — counts, radii, angles — never manual duplicat
   Liam also owns a separate `LiamSarsfield` account, unused here).
 - **Stack:** React 19 + TS strict + Vite 6 + vitest 3 (Node 18.20.8 locally — do NOT bump
   vite to 7). Runtime deps are deliberately minimal (zustand+zundo+immer, opentype.js,
-  svg-pathdata, polygon-clipping). Justify any addition.
+  svg-pathdata, polygon-clipping, three — LAZY: only the 3D view / 3D PNG import it, so
+  it stays out of the main chunk; keep it that way). Justify any addition.
 
 ## Commands
 
@@ -27,12 +28,14 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **9**), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **10**), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
   `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
   v8 centre `motifId` (built-in motif as a third centre source, inert unless
   `sourceType: 'builtin'`), v9 text/centre `invertOverBare` (migrates FALSE = old
-  vanish behaviour; new layers default true) — copy this pattern; defaults spread FIRST
+  vanish behaviour; new layers default true), v10 doc-level physical product
+  `holeDiameterMM` (donut/tack cap; 0 = solid) + `relief` ('raised' = die-struck: the
+  die's cut stands proud) + finish `'nickel'` (new-doc default) — copy this pattern; defaults spread FIRST
   so stored values win). Factory defaults may differ from migration defaults: new
   text/centre layers get `haloMM = NEW_TEXT_GAP_MM` (0.15, the Engrave "Gap") while
   stored docs keep theirs. Hand-rolled `validate.ts` (REQUIRED field tables), `presets.ts` (Reference A/B + Flower-Power +
@@ -110,8 +113,7 @@ param, not an error.)
   in <metadata> so exports re-open as documents), exportPng, thumbnail.
 - `src/render/` — SvgStage (mm-true, `#doc` = export subtree, overlays separate),
   DocRenderer (per-layer memo; comparator: layer refs + disc values + contributor
-  REGION identity — no deep geometry compares), MetalPreview (SVG filters,
-  preview-only). Keepout regions for the CANVAS are stale-while-recomputing
+  REGION identity — no deep geometry compares). Keepout regions for the CANVAS are stale-while-recomputing
   (`keepoutAsync.ts` + `keepoutWorker.ts`): edits render immediately with the
   last-good region while the ~80–190ms union+dilation reruns in a Web Worker
   (120ms trailing debounce, latest-wins, sync fallback on worker failure);
@@ -121,6 +123,37 @@ param, not an error.)
   `keepoutRegion.ts` (no compile.ts → no opentype). exportSvg stays synchronous
   and exact. Vite emits the worker URL root-absolute under base './' — fine at
   the domain root; a 404 would trip the sync fallback.
+- `src/render/relief/` — the **3D view** (toolbar `Flat | 3D`, `M`; replaced the old
+  SVG-filter Metal mode) and the 3D PNG mockup. Acceptance reference: Liam's photo of
+  Stevenson Overall Co. tack buttons on raw selvedge (satin nickel, raised lettering,
+  rolled edge, copper post in a donut hole, ~34° product-shot angle).
+  - `heightField.ts` (pure, node-tested, worker-safe): die raster coverage → exact
+    Felzenszwalb EDT signed distance (sub-pixel on boundary px, ~1.6 px blur against
+    diagonal terracing — the blur is in PIXELS, tuned for the live 2048² over the face)
+    → wall-profiled design height (raised/recessed) → cavity (blurred high-ground vs
+    local height) → OBJECT-SPACE normals of cap profile + relief, AO/roughness (RG) and
+    oxide-albedo maps, plus a 1024² displacement. `baseProfile` = flat face (optional
+    dome), quarter-round rolled shoulder, rolled hole lip.
+  - `heightAsync.ts` rasterizes the EXACT `exportSvg` die (halos/cut-outs/inverts
+    included) on the main thread (~25 ms), EDT in `heightWorker.ts` (~1 s at 2048²),
+    content-key cached (layers/diameter/hole/relief + font/asset revisions; finish,
+    light, camera excluded) so the PNG export reuses the canvas's field.
+  - `scene.ts` `ButtonScene` (shared by stage + PNG): polar-grid face mesh (dense
+    rings on the rolled curves) with displacementMap + `ObjectSpaceNormalMap` +
+    roughness/ao/map from the field; `customDepthMaterial` carries the displacement
+    into shadows. Lathed body (side wall + curled base, dark low-env hole wall), lathed
+    copper post + bore. Lighting = a PROCEDURAL product studio through PMREM (dark
+    room + key softbox + overhead diffuser + strip fill; `environmentRotation` follows
+    the key light's azimuth) + a shadow-casting key DirectionalLight. The stock
+    RoomEnvironment made nickel read as porcelain — metals need contrast to reflect.
+    `NeutralToneMapping` (AgX greyed the indigo). Procedural denim (`denim.ts`, 3/1
+    twill, slub, ring-dyed flecks, raw/ecru) with low envMapIntensity.
+  - `ReliefStage.tsx` (React.lazy): render-on-demand, OrbitControls (≤65° polar),
+    Photo/Top poses, 250 ms debounced latest-wins relief rebuild (StatusBar "3D…"),
+    `lastPose` shared with `renderPng.ts`. `useDocResources` (exported from
+    DocRenderer) kicks font/asset loads since DocRenderer isn't mounted in 3D.
+  - Browser gotcha: the preview pane throttles rAF to ~1 fps when backgrounded —
+    measure main-thread stalls with a setInterval probe, not rAF.
 - `src/ui/` — panels per layer type, workspace switcher, dialogs.
 
 ## Invariants (violating these breaks real dies)
@@ -144,11 +177,13 @@ param, not an error.)
 
 ## Testing & verification culture
 
-206 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+216 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,
-pointed-hatch halo clipping), invert-over-bare analytic areas (`invert.test.ts`).
+pointed-hatch halo clipping), invert-over-bare analytic areas (`invert.test.ts`),
+3D height-field kernel (`relief/heightField.test.ts`: EDT vs analytic disc, polarity,
+normals, cavity, cap profile), schema v10 + centre-hole export warnings.
 After code changes: typecheck + full suite, then ONE browser acceptance pass via the
 preview tools + `window.__engraver`, then push (CI re-gates).
 
@@ -166,7 +201,10 @@ preview tools + `window.__engraver`, then push (CI re-gates).
   fast path) doesn't apply — a pointed band is bounded by its own rInner/rOuter, not by a
   centre clearance moat.
 - Multi-tab workspace = last-write-wins (BroadcastChannel is future work).
-- Deferred: bezier re-fitting of warped polylines, DXF export, three.js relief.
+- 3D: the face relief is a height field at 2048² over the diameter (~8 µm/px); deep
+  zoom past that softens. Dome is supported by `baseProfile` but not exposed. Denim is
+  procedural (a CC0 scan would look more real — needs Liam's OK to download).
+- Deferred: bezier re-fitting of warped polylines, DXF export.
 
 ## Working with Liam
 

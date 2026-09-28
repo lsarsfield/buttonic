@@ -73,11 +73,11 @@ export function Toolbar({
         value={view.mode}
         options={[
           { value: 'flat', label: 'Flat' },
-          { value: 'metal', label: 'Metal', title: 'Embossed metal preview (M)' },
+          { value: '3d', label: '3D', title: 'Photo-real 3D button (M)' },
         ]}
         onChange={(mode) => setView({ mode })}
       />
-      {view.mode === 'metal' && (
+      {view.mode === '3d' && (
         <span className="light-control" title="Light angle">
           <span className="light-icon">☀</span>
           <input

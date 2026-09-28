@@ -1,5 +1,5 @@
-import type { Asset, ButtonDoc, Layer, LayerType, LocalFontRef } from './types'
-import { LAYER_TYPE_LABELS } from './types'
+import type { Asset, ButtonDoc, Finish, Layer, LayerType, LocalFontRef } from './types'
+import { FINISH_IDS, LAYER_TYPE_LABELS } from './types'
 
 export type ValidationResult =
   | { ok: true; doc: ButtonDoc }
@@ -98,6 +98,12 @@ export function validateDoc(value: unknown): ValidationResult {
     return { ok: false, error: 'document has an invalid diameter' }
   }
   if (!isStr(value.finish)) return { ok: false, error: 'document has no finish' }
+  if (!isNum(value.holeDiameterMM) || value.holeDiameterMM < 0) {
+    return { ok: false, error: 'document has an invalid centre hole' }
+  }
+  if (value.relief !== 'raised' && value.relief !== 'recessed') {
+    return { ok: false, error: 'document has an invalid relief' }
+  }
   if (!Array.isArray(value.layers)) return { ok: false, error: 'document has no layer list' }
 
   const seen = new Set<string>()
@@ -130,7 +136,10 @@ export function validateDoc(value: unknown): ValidationResult {
       version: value.version,
       name: value.name,
       diameterMM: value.diameterMM,
-      finish: value.finish as ButtonDoc['finish'],
+      // an unknown finish (e.g. from a newer app) degrades to steel instead of crashing a renderer
+      finish: (FINISH_IDS as readonly string[]).includes(value.finish) ? (value.finish as Finish) : 'steel',
+      holeDiameterMM: value.holeDiameterMM,
+      relief: value.relief,
       layers: value.layers as Layer[],
       assets: assets as Record<string, Asset>,
       localFonts: localFonts as Record<string, LocalFontRef>,

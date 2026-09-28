@@ -5,12 +5,15 @@ import { immer } from 'zustand/middleware/immer'
 import type { Asset, AssetId, ButtonDoc, FontId, Layer, LayerId, LayerType, LocalFontRef } from '../model/types'
 import { LAYER_FACTORIES, makeBlankDoc, newId } from '../model/types'
 
-export type ViewMode = 'flat' | 'metal'
+export type ViewMode = 'flat' | '3d'
+/** Ground under the 3D button: raw indigo denim, ecru denim, or nothing (transparent). */
+export type Backdrop = 'raw' | 'ecru' | 'none'
 
 export interface ViewState {
   mode: ViewMode
-  /** Azimuth of the metal-preview light. */
+  /** Azimuth of the 3D key light (0° = 12 o'clock, clockwise). */
   lightDeg: number
+  backdrop: Backdrop
   showGuides: boolean
   /** Light artboard behind the button in flat mode (proofing on white). */
   artboardLight: boolean
@@ -28,9 +31,11 @@ export interface EngraverState {
   regionsRevision: number
   /** True while any halo region is being recomputed (StatusBar indicator). */
   haloPending: boolean
+  /** True while the 3D view's height field is being rebuilt (StatusBar indicator). */
+  reliefPending: boolean
 
   setDoc: (doc: ButtonDoc) => void
-  updateDocMeta: (patch: Partial<Pick<ButtonDoc, 'name' | 'diameterMM' | 'finish'>>) => void
+  updateDocMeta: (patch: Partial<Pick<ButtonDoc, 'name' | 'diameterMM' | 'finish' | 'holeDiameterMM' | 'relief'>>) => void
   addLayer: (type: LayerType) => void
   removeLayer: (id: LayerId) => void
   duplicateLayer: (id: LayerId) => void
@@ -47,6 +52,7 @@ export interface EngraverState {
   bumpFontsRevision: () => void
   bumpRegionsRevision: () => void
   setHaloPending: (pending: boolean) => void
+  setReliefPending: (pending: boolean) => void
 }
 
 export const useEngraver = create<EngraverState>()(
@@ -57,6 +63,7 @@ export const useEngraver = create<EngraverState>()(
       view: {
         mode: 'flat' as ViewMode,
         lightDeg: 315,
+        backdrop: 'raw' as Backdrop,
         showGuides: true,
         artboardLight: false,
         snapping: true,
@@ -65,6 +72,7 @@ export const useEngraver = create<EngraverState>()(
       fontsRevision: 0,
       regionsRevision: 0,
       haloPending: false,
+      reliefPending: false,
 
       setDoc: (doc) =>
         set((s) => {
@@ -183,6 +191,11 @@ export const useEngraver = create<EngraverState>()(
       setHaloPending: (pending) =>
         set((s) => {
           s.haloPending = pending
+        }),
+
+      setReliefPending: (pending) =>
+        set((s) => {
+          s.reliefPending = pending
         }),
     })),
     {
