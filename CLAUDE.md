@@ -27,13 +27,15 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **8**), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **9**), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
   `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
   v8 centre `motifId` (built-in motif as a third centre source, inert unless
-  `sourceType: 'builtin'`) — copy this pattern; defaults spread FIRST so stored values win),
-  hand-rolled
-  `validate.ts` (REQUIRED field tables), `presets.ts` (Reference A/B + Flower-Power +
+  `sourceType: 'builtin'`), v9 text/centre `invertOverBare` (migrates FALSE = old
+  vanish behaviour; new layers default true) — copy this pattern; defaults spread FIRST
+  so stored values win). Factory defaults may differ from migration defaults: new
+  text/centre layers get `haloMM = NEW_TEXT_GAP_MM` (0.15, the Engrave "Gap") while
+  stored docs keep theirs. Hand-rolled `validate.ts` (REQUIRED field tables), `presets.ts` (Reference A/B + Flower-Power +
   Old-Book templates; **preset literals must carry every schema field** — the round-trip
   test compares them through parseDoc. New presets add NEW snapshots; existing goldens
   must stay byte-identical, so new schema fields default to the old behaviour).
@@ -85,6 +87,21 @@ param, not an error.)
     undershoot), `safe*` wrappers (martinez can throw; never let it reach React).
   - `keepout.ts` per-layer knockout/halo regions, WeakMap-memoized, cached PRE-PHASE;
     consumers rotate by `contributor.phaseDeg − consumer.phaseDeg` at clip time.
+  - `invert.ts` — text over other layers, Cut out half. UI model (ringText + centre,
+    `OverlayControls`): **Engrave** = engraved on top, kept clear of what's beneath by
+    the Gap (= halo); **Cut out** = knocked out of what's beneath (Grow = halo) and, with
+    `invertOverBare` ("Over bare: Engrave"), ENGRAVED where it crosses bare metal
+    (stamp reversal): `T ∖ coverage`, emitted as the cut-out layer's own filled geometry
+    and clipped by keepouts above like any engraving. Coverage is built bottom-up in the
+    absolute frame: each layer's real engraved outline (disc moats applied), minus any
+    halo/knockout between it and the cut-out, plus lower cut-outs' own inverts —
+    EXCEPT hatch, which counts as its whole band (`hatchBand`: annulus, or first→last
+    tick ±½ stroke per arc block, twisted, moat-raised). Literal XOR over hatch would
+    engrave the gaps between ticks (inverse duty cycle, illegible) — don't "fix" it.
+    Without a halo, T IS the knockout region (shared flattening → no seam slivers);
+    pieces thinner than 0.025 mm mean width are dropped. Memo key = content of layers
+    0..i + discs above + identity of the consumed regions (the canvas passes
+    stale-while-recomputing regions, export passes exact ones). ~10–30 ms per export.
 - `src/io/` — fonts (bundled dozen in public/fonts + uploads + Local Font Access API
   with TTC extraction in `ttc.ts`), svgImport (capability whitelist, warn-and-skip),
   workspace (IndexedDB multi-button store; saver captures (id, doc) pairs at schedule
@@ -127,11 +144,11 @@ param, not an error.)
 
 ## Testing & verification culture
 
-185 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+206 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,
-pointed-hatch halo clipping).
+pointed-hatch halo clipping), invert-over-bare analytic areas (`invert.test.ts`).
 After code changes: typecheck + full suite, then ONE browser acceptance pass via the
 preview tools + `window.__engraver`, then push (CI re-gates).
 

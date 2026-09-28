@@ -31,12 +31,12 @@ const REQUIRED: Record<LayerType, Record<string, 'n' | 's' | 'b'>> = {
     text: 's', fontId: 's', sizeMM: 'n', radiusMM: 'n', anchorDeg: 'n', anchorAlign: 's',
     letterSpacingMM: 'n', direction: 's', mode: 's', useKerning: 'b',
     repeats: 'n', dividerSizeMM: 'n', dividerStrokeMM: 'n',
-    booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n',
+    booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n', invertOverBare: 'b',
   },
   center: {
     sourceType: 's', motifId: 's', text: 's', fontId: 's', sizeMM: 'n', rotationDeg: 'n',
     offsetXMM: 'n', offsetYMM: 'n', render: 's', strokeMM: 'n', clearanceMM: 'n',
-    booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n',
+    booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n', invertOverBare: 'b',
   },
   bend: {
     rInnerMM: 'n', rOuterMM: 'n', startDeg: 'n', sweepMode: 's', sweepDeg: 'n',

@@ -99,9 +99,13 @@ export function buildKeepoutRegion(
 /**
  * Content key for a layer's keepout region. Regions are cached PRE-PHASE
  * (consumers rotate by phase at clip time) and names are cosmetic, so neither
- * invalidates — phase scrubs and renames cost nothing. `ctxKey` is
- * compileCtxKey(ctx), passed in so this module stays compile-free.
+ * invalidates — phase scrubs and renames cost nothing (nor does toggling a
+ * cut-out's invert-over-bare, which changes what it engraves, not its
+ * region). `ctxKey` is compileCtxKey(ctx), passed in so this module stays
+ * compile-free.
  */
 export function regionKey(layer: Layer, ctxKey: string): string {
-  return ctxKey + '|' + JSON.stringify({ ...layer, phaseDeg: 0, name: '' })
+  // invertOverBare decides what a cut-out engraves, never the region it casts
+  const norm = 'invertOverBare' in layer ? { ...layer, invertOverBare: false } : layer
+  return ctxKey + '|' + JSON.stringify({ ...norm, phaseDeg: 0, name: '' })
 }

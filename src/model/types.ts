@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 8
+export const DOC_VERSION = 9
 
 /** Whether a content layer engraves its geometry or subtracts it from below. */
 export type BooleanRole = 'draw' | 'subtract'
@@ -177,6 +177,8 @@ export interface RingTextLayer extends LayerBase {
   haloMode: HaloMode
   /** Stroke width of the engraved halo boundary (haloMode 'outline'). */
   haloStrokeMM: number
+  /** Cut-out only: engrave the shape where it crosses bare metal (stamp reversal) instead of letting it vanish. */
+  invertOverBare: boolean
 }
 
 /** Monogram glyph, built-in motif, or SVG asset placed at the axis. */
@@ -206,6 +208,8 @@ export interface CenterLayer extends LayerBase {
   haloMode: HaloMode
   /** Stroke width of the engraved halo boundary (haloMode 'outline'). */
   haloStrokeMM: number
+  /** Cut-out only: engrave the shape where it crosses bare metal (stamp reversal) instead of letting it vanish. */
+  invertOverBare: boolean
 }
 
 /** Arbitrary SVG warped into an annulus band — bbox x → angle, bbox y → radius. */
@@ -253,6 +257,13 @@ export const LAYER_TYPE_LABELS: Record<LayerType, string> = {
 // ---------------------------------------------------------------------------
 // Factories
 // ---------------------------------------------------------------------------
+
+/**
+ * New text / centre layers engrave with a gap: their halo keeps whatever they
+ * sit over clear of the letters so they read on fills and patterns alike
+ * (0 = merge into the engraving beneath). Existing documents keep their own.
+ */
+export const NEW_TEXT_GAP_MM = 0.15
 
 export function newId(): string {
   const c = (globalThis as { crypto?: Crypto }).crypto
@@ -345,9 +356,10 @@ export function makeRingTextLayer(patch: Partial<RingTextLayer> = {}): RingTextL
     dividerSizeMM: 0.8,
     dividerStrokeMM: 0.12,
     booleanRole: 'draw',
-    haloMM: 0,
+    haloMM: NEW_TEXT_GAP_MM,
     haloMode: 'clear',
     haloStrokeMM: 0.1,
+    invertOverBare: true,
     ...patch,
   }
 }
@@ -372,9 +384,10 @@ export function makeCenterLayer(patch: Partial<CenterLayer> = {}): CenterLayer {
     strokeMM: 0.12,
     clearanceMM: 0,
     booleanRole: 'draw',
-    haloMM: 0,
+    haloMM: NEW_TEXT_GAP_MM,
     haloMode: 'clear',
     haloStrokeMM: 0.1,
+    invertOverBare: true,
     ...patch,
   }
 }

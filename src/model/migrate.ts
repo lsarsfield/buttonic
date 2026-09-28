@@ -66,6 +66,16 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
         : layer,
     ),
   }),
+  // v9: cut-out text engraves where it crosses bare metal — off for existing
+  // documents (a knockout there used to vanish; stored designs stay identical)
+  9: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) => {
+      if (typeof layer !== 'object' || layer === null) return layer
+      const t = (layer as { type?: string }).type
+      return t === 'ringText' || t === 'center' ? { invertOverBare: false, ...layer } : layer
+    }),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

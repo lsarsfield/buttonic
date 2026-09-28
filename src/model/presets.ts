@@ -73,7 +73,7 @@ export function presetReferenceA(): ButtonDoc {
         sourceType: 'glyph', text: 'F', fontId: 'garamond', assetId: null, motifId: 'star',
         sizeMM: 2.1, rotationDeg: 0, offsetXMM: 0, offsetYMM: 0,
         render: 'fill', strokeMM: 0.12, clearanceMM: 2.3,
-        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,
+        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1, invertOverBare: false,
       },
     ],
     assets: {},
@@ -94,7 +94,7 @@ export function presetReferenceB(): ButtonDoc {
         sourceType: 'glyph', text: 'D', fontId: 'unifraktur', assetId: null, motifId: 'star',
         sizeMM: 5.6, rotationDeg: 0, offsetXMM: 0, offsetYMM: 0,
         render: 'fill', strokeMM: 0.12, clearanceMM: 0,
-        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,
+        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1, invertOverBare: false,
       },
       {
         id: 'refB-border', type: 'ring', name: 'Inner border', visible: true, phaseDeg: 0,
@@ -150,7 +150,7 @@ export function presetGroovy(): ButtonDoc {
         text: 'GROOVY', fontId: 'bebas', sizeMM: 1.6, radiusMM: 7.1, anchorDeg: 0, anchorAlign: 'center',
         letterSpacingMM: 0.3, direction: 'outward', mode: 'arc', useKerning: true, repeats: 2,
         dividerSource: { kind: 'builtin', motifId: 'heart' }, dividerSizeMM: 1.0, dividerStrokeMM: 0.12,
-        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,
+        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1, invertOverBare: false,
       },
       {
         id: 'groovy-rim', type: 'ring', name: 'Rim', visible: true, phaseDeg: 0,
@@ -195,7 +195,7 @@ export function presetOldBook(): ButtonDoc {
         text: 'EX LIBRIS', fontId: 'garamond', sizeMM: 1.5, radiusMM: 7.1, anchorDeg: 0, anchorAlign: 'center',
         letterSpacingMM: 0.2, direction: 'outward', mode: 'arc', useKerning: true, repeats: 2,
         dividerSource: { kind: 'builtin', motifId: 'fleuron' }, dividerSizeMM: 0.9, dividerStrokeMM: 0.12,
-        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1,
+        booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1, invertOverBare: false,
       },
       {
         id: 'oldbook-rim', type: 'ring', name: 'Rim', visible: true, phaseDeg: 0,

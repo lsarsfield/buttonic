@@ -9,12 +9,13 @@ import {
   layerKeepoutRegion,
   regionOutlineShapes,
 } from '../geometry/keepout'
-import { rotateMultiPolygon } from '../geometry/poly'
+import { bareInvertRegion, invertsBare } from '../geometry/invert'
+import { multiPolygonToPathD, rotateMultiPolygon } from '../geometry/poly'
 import { expandInstanced, defMatrix } from '../geometry/expand'
 import { fmt } from '../geometry/format'
 import { flattenSegs } from '../geometry/flatten'
 import { parsePathData, transformSegs } from '../geometry/pathData'
-import type { Paint, Shape } from '../geometry/shapes'
+import { fillPaint, type Paint, type Shape } from '../geometry/shapes'
 import { stringifyDoc } from '../model/serialize'
 import { getLoadedFont } from './fonts'
 import { getSvgAsset } from './svgAssets'
@@ -151,8 +152,9 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
   doc.layers.forEach((layer, index) => {
     if (!layer.visible) return
 
-    // cut-out layers emit no markup — but still compile so an empty knockout is
-    // a LOUD warning (a silently-missing knockout is a scrapped die)
+    // cut-out layers emit no markup of their own (bar any invert-over-bare
+    // overhang) — but still compile so an empty knockout is a LOUD warning
+    // (a silently-missing knockout is a scrapped die)
     if (castsRegion(layer)) {
       const { region, warnings: rw } = layerKeepoutRegion(layer, ctx)
       for (const w of rw) warnings.push(`${layer.name}: ${w}`)
@@ -161,16 +163,22 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
           `${layer.name}: ${isSubtractLayer(layer) ? 'cut-out' : 'halo'} produced no geometry — the knockout is MISSING from this export`,
         )
       }
-      if (isSubtractLayer(layer)) return
+      // a cut-out engraves only where it crosses bare metal (invertOverBare)
+      if (isSubtractLayer(layer) && !invertsBare(layer)) return
     }
 
     let compiled = compileLayer(layer, ctx)
+    if (isSubtractLayer(layer)) {
+      const bare = bareInvertRegion(doc.layers, index, ctx, (l) => layerKeepoutRegion(l, ctx).region)
+      if (bare.length === 0) return
+      compiled = { shapes: [{ kind: 'path', d: multiPolygonToPathD(bare), fillRule: 'evenodd', paint: fillPaint() }], warnings: [] }
+    }
     const keepouts = keepoutsAbove(doc.layers, index, ctx)
     const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
     if (keepouts.discs.length > 0 || regions.length > 0) {
       compiled = clipCompiled(compiled, { discs: keepouts.discs, regions }, ctx.toleranceMM)
     }
-    if (haloOf(layer) > 0 && layer.type !== 'bend' && (layer as { haloMode?: string }).haloMode === 'outline') {
+    if (haloOf(layer) > 0 && !isSubtractLayer(layer) && (layer as { haloMode?: string }).haloMode === 'outline') {
       const own = layerKeepoutRegion(layer, ctx).region
       if (own) compiled = { shapes: [...compiled.shapes, ...regionOutlineShapes(own, (layer as { haloStrokeMM: number }).haloStrokeMM)], warnings: compiled.warnings }
     }

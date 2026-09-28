@@ -4,9 +4,11 @@ import { isLocalFontId } from '../model/types'
 import { clipCompiled } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import { annulusPathD } from '../geometry/format'
+import { bareInvertRegion, invertsBare, pruneInvertCache } from '../geometry/invert'
 import { haloOf, isSubtractLayer, regionOutlineShapes, type Keepouts } from '../geometry/keepout'
 import { getRegionAsync, keepoutsAboveAsync, pruneRegions } from './keepoutAsync'
-import { rotateMultiPolygon, type MultiPolygon } from '../geometry/poly'
+import { multiPolygonToPathD, rotateMultiPolygon, type MultiPolygon } from '../geometry/poly'
+import { fillPaint } from '../geometry/shapes'
 import { ensureFontLoaded, getLoadedFont } from '../io/fonts'
 import { ensureLocalFontsResolved } from '../io/localFonts'
 import { ensureSvgParsed, getSvgAsset } from '../io/svgAssets'
@@ -51,7 +53,10 @@ export function DocRenderer() {
     getFont: getLoadedFont,
     getSvgAsset,
   }
-  pruneRegions(new Set(doc.layers.map((l) => l.id)))
+  const ids = new Set(doc.layers.map((l) => l.id))
+  pruneRegions(ids)
+  pruneInvertCache(ids)
+  const regionOf = (l: Layer) => getRegionAsync(l, ctx).region
   return (
     <>
       {doc.layers.map((layer, index) => (
@@ -65,6 +70,7 @@ export function DocRenderer() {
               ? getRegionAsync(layer, ctx).region
               : null
           }
+          overBare={layer.visible && invertsBare(layer) ? bareInvertRegion(doc.layers, index, ctx, regionOf) : null}
         />
       ))}
     </>
@@ -87,9 +93,11 @@ const sameKeepouts = (a: Keepouts, b: Keepouts): boolean =>
  * compiled geometry (pointer-events off — the band is the only click target).
  * phaseDeg is a render-time rotation; dragging phase never recompiles.
  *
- * Cut-out (subtract) layers draw nothing — their geometry is subtracted from
- * layers below via keepoutsAbove — but stay selectable and show a faint
- * preview while selected.
+ * Cut-out (subtract) layers draw nothing of their own — their geometry is
+ * subtracted from layers below via keepoutsAbove — except, with
+ * invertOverBare, the parts that cross bare metal (`overBare`), which engrave
+ * and are clipped by keepouts above like any other engraving. They stay
+ * selectable and show a faint preview while selected.
  */
 const LayerGroup = memo(
   function LayerGroup({
@@ -97,31 +105,46 @@ const LayerGroup = memo(
     ctx,
     keepouts,
     ownRegion,
+    overBare,
   }: {
     layer: Layer
     ctx: CompileCtx
     keepouts: Keepouts
     ownRegion: MultiPolygon | null
+    overBare: MultiPolygon | null
   }) {
     const selected = useEngraver((s) => s.selection === layer.id)
     if (!layer.visible) return null
     const compiled = compileLayer(layer, ctx)
 
+    // regions from contributors above, rotated into this layer's local frame
+    const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
+
     if (isSubtractLayer(layer)) {
+      const engraved =
+        overBare && overBare.length > 0
+          ? clipCompiled(
+              { shapes: [{ kind: 'path', d: multiPolygonToPathD(overBare), fillRule: 'evenodd', paint: fillPaint() }], warnings: [] },
+              { discs: keepouts.discs, regions },
+              INTERACTIVE_TOLERANCE_MM,
+            )
+          : null
       return (
         <g data-layer-id={layer.id} transform={layer.phaseDeg !== 0 ? `rotate(${layer.phaseDeg})` : undefined}>
           <HitBand layer={layer} />
+          {engraved && engraved.shapes.length > 0 && (
+            <g pointerEvents="none">
+              <ShapesRenderer layerId={layer.id} compiled={engraved} />
+            </g>
+          )}
           {selected && compiled.shapes.length > 0 && (
             <g pointerEvents="none" opacity={0.3}>
-              <ShapesRenderer layerId={layer.id} compiled={compiled} />
+              <ShapesRenderer layerId={`${layer.id}-ghost`} compiled={compiled} />
             </g>
           )}
         </g>
       )
     }
-
-    // regions from contributors above, rotated into this layer's local frame
-    const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
     const clipped =
       keepouts.discs.length > 0 || regions.length > 0
         ? clipCompiled(compiled, { discs: keepouts.discs, regions }, INTERACTIVE_TOLERANCE_MM)
@@ -156,6 +179,7 @@ const LayerGroup = memo(
     prev.ctx.assetsRevision === next.ctx.assetsRevision &&
     prev.ctx.fontsRevision === next.ctx.fontsRevision &&
     prev.ownRegion === next.ownRegion &&
+    prev.overBare === next.overBare &&
     sameKeepouts(prev.keepouts, next.keepouts),
 )
 
