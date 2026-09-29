@@ -38,7 +38,7 @@ export const METAL_FINISHES: Record<Finish, MetalFinish> = {
     color: [0.74, 0.43, 0.28],
     roughness: 0.3,
     oxide: 1,
-    patina: { cavity: 1, field: 0.85, darken: 0.92 },
+    patina: { cavity: 1, field: 0.55, darken: 0.82 },
   },
   // copper darkened almost to black-brown, bright copper only where it's rubbed
   'copper-oxide': {

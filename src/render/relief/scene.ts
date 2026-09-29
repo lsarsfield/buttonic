@@ -79,7 +79,12 @@ function faceRadii(p: ReliefParams): number[] {
   } else if (p.centre === 'nipple') {
     for (let k = 0; k <= 32; k++) pts.push(c * Math.sin((k / 32) * (Math.PI / 2))) // dense near the steep base
   } else if (p.centre === 'cup') {
-    for (let k = 0; k <= 24; k++) pts.push((c * k) / 24)
+    for (let k = 0; k <= 64; k++) pts.push((c * 1.3 * k) / 64) // bowl, nail head, rolled ring
+  }
+  if (p.centre === 'pin') for (let k = 0; k <= 16; k++) pts.push(c + p.lipMM + (Math.max(0.12, c * 0.6) * k) / 16) // collar
+  if (p.plateauR > 0) {
+    const w = Math.max(0.08, p.plateauH * 1.5)
+    for (let k = 0; k <= 12; k++) pts.push(p.plateauR - (w * k) / 12) // the riser
   }
   pts.sort((a, b) => a - b)
   const out: number[] = []
@@ -174,10 +179,11 @@ function buildPostGeometries(holeR: number, capH: number): { copper: THREE.Buffe
  * Returns the geometry and its height below the cap underside.
  */
 function buildShank(R: number, capH: number, swivel: boolean): { geo: THREE.BufferGeometry; height: number } {
-  const postR = 0.22 * R
-  const len = 0.62 * R
-  const footR = 0.3 * R
-  const foot = 0.1 * R
+  // chunky, as in the trade's product shots: ~⅓ of the cap wide, ~⅓ as tall
+  const postR = 0.3 * R
+  const len = 0.7 * R
+  const footR = 0.36 * R
+  const foot = 0.12 * R
   const y0 = -capH
   const pts: THREE.Vector2[] = [new THREE.Vector2(0.001, y0), new THREE.Vector2(postR * 1.25, y0)]
   if (swivel) {
@@ -204,7 +210,8 @@ function studioScene(bright = false): THREE.Scene {
   const scene = new THREE.Scene()
   // bright = a white product table: the sweep and walls are paper, so polished
   // metal mirrors pale greys instead of a black room
-  const wall: [number, number, number] = bright ? [0.55, 0.55, 0.56] : [0.025, 0.025, 0.028]
+  // not uniformly bright: curved metal needs dark to read its form against
+  const wall: [number, number, number] = bright ? [0.22, 0.22, 0.23] : [0.025, 0.025, 0.028]
   const room = new THREE.Mesh(
     new THREE.SphereGeometry(50, 32, 16),
     new THREE.MeshBasicMaterial({ color: new THREE.Color(wall[0], wall[1], wall[2]), side: THREE.BackSide }),
@@ -425,7 +432,8 @@ export class ButtonScene {
       this.button.add(im)
     }
     const dark = () => {
-      const m = new THREE.MeshPhysicalMaterial({ color: 0x14100c, metalness: 0.5, roughness: 0.8, side: THREE.DoubleSide })
+      // a bore sees nothing but the inside of the part: no studio reflection
+      const m = new THREE.MeshPhysicalMaterial({ color: 0x0c0a08, metalness: 0.5, roughness: 0.8, side: THREE.DoubleSide, envMapIntensity: 0.05 })
       this.extraMats.push(m)
       return m
     }
@@ -444,14 +452,6 @@ export class ButtonScene {
       floor.rotation.x = -Math.PI / 2
       floor.position.y = -p.capH + 0.02
       this.button.add(floor)
-    } else if (p.centre === 'cup') {
-      // the bore at the bottom of the sunk cup
-      const bore = new THREE.Mesh(new THREE.CircleGeometry(p.centreR * 0.28, 48), dark())
-      bore.rotation.x = -Math.PI / 2
-      bore.position.y = baseProfile(0, p).y + 0.003
-      ;(bore.material as THREE.Material).polygonOffset = true
-      ;(bore.material as THREE.Material).polygonOffsetFactor = -2
-      this.button.add(bore)
     }
 
     // studio shot: a button stands on its shank (rivets lie on their backs)
@@ -472,10 +472,18 @@ export class ButtonScene {
 
   private applyFinish(): void {
     const f = finishOf(this.spec!.finish)
-    for (const m of [this.faceMat, this.bodyMat]) {
-      if (!m) continue
-      m.color.setRGB(f.color[0], f.color[1], f.color[2])
-      m.roughness = f.roughness
+    if (this.faceMat) {
+      this.faceMat.color.setRGB(f.color[0], f.color[1], f.color[2])
+      this.faceMat.roughness = f.roughness
+    }
+    if (this.bodyMat) {
+      // the side wall isn't burnished like the face: duller, a shade darker, and
+      // carrying the finish's field oxide (antiqued caps are dark down the sides)
+      const ox = f.patina.field * f.patina.darken
+      const k = 0.78 * (1 - 0.75 * ox)
+      this.bodyMat.color.setRGB(f.color[0] * k, f.color[1] * k, f.color[2] * k)
+      this.bodyMat.roughness = Math.min(1, f.roughness * 1.5 + 0.08 + 0.3 * ox)
+      this.bodyMat.metalness = 1 - 0.6 * ox
     }
     if (this.holeMat) {
       this.holeMat.color.setRGB(f.color[0] * 0.5, f.color[1] * 0.5, f.color[2] * 0.5)
@@ -530,7 +538,10 @@ export class ButtonScene {
       this.depthMat.displacementMap = null
     } else {
       const disp = dataTexture(field.disp, field.dispN, THREE.RedFormat, THREE.FloatType, false)
-      disp.minFilter = disp.magFilter = THREE.NearestFilter // float32 linear filtering isn't universal
+      // float32 linear filtering isn't universal — nearest steps show as jagged
+      // relief walls at the new strike depth, so filter wherever it's supported
+      const lin = this.renderer.extensions.has('OES_texture_float_linear')
+      disp.minFilter = disp.magFilter = lin ? THREE.LinearFilter : THREE.NearestFilter
       const normal = dataTexture(field.normal, field.n, THREE.RGBAFormat, THREE.HalfFloatType, true)
       normal.anisotropy = 8
       this.fieldTex = [disp, normal]

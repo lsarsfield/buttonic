@@ -61,6 +61,8 @@ const params = (patch: Partial<ReliefParams> = {}): ReliefParams => ({
   domeMM: 0,
   concaveMM: 0,
   capH: 1.15,
+  plateauR: 0,
+  plateauH: 0,
   ...patch,
 })
 
@@ -125,7 +127,7 @@ describe('cap profile', () => {
       expect(y).toBeLessThan(prev)
       prev = y
     }
-    expect(baseProfile(0, dome).y).toBeCloseTo(0.075 * 17, 6)
+    expect(baseProfile(0, dome).y).toBeCloseTo(0.2 * 17, 6)
   })
 
   it('open top concave dishes down toward the hole', () => {
@@ -143,9 +145,20 @@ describe('cap profile', () => {
     const nip = styleParams('nipple', 9, 2.7)
     expect(baseProfile(0, nip).y).toBeGreaterThan(baseProfile(1, nip).y)
     expect(baseProfile(1, nip).y).toBeGreaterThan(baseProfile(2.5, nip).y)
-    const cup = styleParams('inverted-nipple', 9, 3.6)
-    expect(baseProfile(0, cup).y).toBeLessThan(baseProfile(1, cup).y)
-    expect(baseProfile(1, cup).y).toBeLessThan(baseProfile(2.5, cup).y)
+    const cup = styleParams('inverted-nipple', 9, 3.8)
+    const c = 1.9
+    // the bowl sinks below the face; the nail head rises inside it; a rolled ring rims it
+    expect(baseProfile(0.9, cup).y).toBeLessThan(baseProfile(3.5, cup).y - 0.3)
+    expect(baseProfile(0, cup).y).toBeGreaterThan(baseProfile(0.9, cup).y)
+    expect(baseProfile(c, cup).y).toBeGreaterThan(baseProfile(3.5, cup).y)
+  })
+
+  it('die-cast rivet: a raised centre plateau and a collared pin hole', () => {
+    const p = reliefParamsOf({ diameterMM: 9, holeDiameterMM: 1.2, product: 'rivet', style: 'die-cast', material: 'die-cast', logoDisplay: 'embossed' })
+    const plateau = baseProfile(2, p).y
+    const ring = baseProfile(4.0, p).y
+    expect(plateau - ring).toBeCloseTo(0.035 * 9, 2)
+    expect(baseProfile(p.centreR + p.lipMM + 0.02, p).y).toBeGreaterThan(plateau) // collar
   })
 
   it('die-cast is thicker with deeper relief than brass', () => {

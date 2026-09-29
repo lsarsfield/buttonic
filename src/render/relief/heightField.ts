@@ -43,9 +43,13 @@ export interface ReliefParams {
   concaveMM: number
   /** Cap body height (face to underside), mm — scene geometry. */
   capH: number
+  /** Raised central plateau (die-cast rivet): radius and step height, mm (0 = none). */
+  plateauR: number
+  plateauH: number
 }
 
-export const WALL_MM = 0.06
+/** Drafted relief wall width: dies are cut with draft, so struck walls slope (and catch light). */
+export const WALL_MM = 0.1
 
 /** The physical cap for a product spec (doc-level fields). */
 export function reliefParamsOf(d: {
@@ -57,7 +61,7 @@ export function reliefParamsOf(d: {
   logoDisplay: LogoDisplay
 }): ReliefParams {
   const st = STYLES[d.style]
-  const { capH, roll, depthMM } = capProportions(d.product, d.material, d.diameterMM)
+  const { capH, roll, depthMM } = capProportions(d.product, d.material, d.diameterMM, d.style)
   const centre = centreKindOf(d)
   const centreR = centre === 'none' ? 0 : d.holeDiameterMM / 2
   return {
@@ -72,6 +76,8 @@ export function reliefParamsOf(d: {
     domeMM: st.domeFrac * d.diameterMM,
     concaveMM: st.concaveFrac * d.diameterMM,
     capH,
+    plateauR: (st.plateauFrac ?? 0) * (d.diameterMM / 2),
+    plateauH: (st.plateauHFrac ?? 0) * d.diameterMM,
   }
 }
 
@@ -112,9 +118,14 @@ export const ROUGH_HEADROOM = 1.8
 // cap profile
 // ---------------------------------------------------------------------------
 
-/** Nipple knob height as a fraction of its radius; sunk cup depth likewise. */
-export const NIPPLE_H = 0.75
-export const CUP_D = 0.45
+/** Nipple knob height as a fraction of its radius (a near-hemispherical nail head). */
+export const NIPPLE_H = 0.95
+/** Inverted nipple: bowl depth, the rolled ring around it, and the nail head at its bottom (fractions of the cup radius). */
+export const CUP_D = 0.5
+const CUP_RING_H = 0.14
+const CUP_RING_W = 0.26
+const CUP_HEAD_R = 0.36
+const CUP_HEAD_H = 0.3
 
 /** Cap surface height at radius r, before the design (see baseProfile). */
 function profileY(r: number, p: ReliefParams): number {
@@ -128,6 +139,12 @@ function profileY(r: number, p: ReliefParams): number {
       const t = Math.min(1, Math.max(0, (a - rr) / (a - inner)))
       y -= p.concaveMM * t * t * (3 - 2 * t)
     }
+    if (p.plateauR > 0 && p.plateauH > 0) {
+      // die-cast step: a raised centre plateau with a short filleted riser
+      const w = Math.max(0.08, p.plateauH * 1.5)
+      const t = Math.min(1, Math.max(0, (p.plateauR - rr) / w))
+      y += p.plateauH * t * t * (3 - 2 * t)
+    }
     return y
   }
   if (p.rollMM > 0 && r > a) {
@@ -135,8 +152,7 @@ function profileY(r: number, p: ReliefParams): number {
     return flat(a) - p.rollMM + Math.sqrt(p.rollMM * p.rollMM - u * u)
   }
   switch (p.centre) {
-    case 'hole':
-    case 'pin': {
+    case 'hole': {
       const b = c + p.lipMM
       if (p.lipMM > 0 && r < b) {
         const u = Math.min(b - r, p.lipMM * 0.9995)
@@ -144,12 +160,36 @@ function profileY(r: number, p: ReliefParams): number {
       }
       break
     }
+    case 'pin': {
+      // die-cast pin hole: a raised collar around a rolled-in bore
+      const b = c + p.lipMM
+      const collarW = Math.max(0.12, c * 0.6)
+      const collarH = Math.min(0.1, c * 0.18)
+      if (p.lipMM > 0 && r < b) {
+        const u = Math.min(b - r, p.lipMM * 0.9995)
+        return flat(b) + collarH - p.lipMM + Math.sqrt(p.lipMM * p.lipMM - u * u)
+      }
+      if (r < b + collarW) {
+        const t = (r - b) / collarW
+        return flat(r) + collarH * Math.cos((t * Math.PI) / 2) ** 2
+      }
+      break
+    }
     case 'nipple':
       if (r < c) return flat(c) + NIPPLE_H * c * Math.sqrt(Math.max(0, 1 - (r * r) / (c * c)))
       break
-    case 'cup':
-      if (r < c) return flat(c) - CUP_D * c * (1 - (r * r) / (c * c))
-      break
+    case 'cup': {
+      // inverted nipple: a rolled ring, a bowl, and the nail head sitting in it
+      const ringW = CUP_RING_W * c
+      const ring = Math.abs(r - c) < ringW ? CUP_RING_H * c * Math.cos(((r - c) / ringW) * (Math.PI / 2)) ** 2 : 0
+      if (r < c) {
+        const bowl = flat(c) - CUP_D * c * (1 - (r * r) / (c * c))
+        const hr = CUP_HEAD_R * c
+        const head = r < hr ? CUP_HEAD_H * c * Math.sqrt(1 - (r * r) / (hr * hr)) : 0
+        return bowl + head + ring
+      }
+      return flat(r) + ring
+    }
   }
   return flat(r)
 }

@@ -17,8 +17,9 @@ from the centre axis outward — counts, radii, angles — never manual duplicat
 
 `npm run dev` (preview via .claude/launch.json "dev", port 5173) · `npm test` ·
 `npm run typecheck` · `npm run build`. Dev builds expose `window.__engraver`
-(stores, presets, exportSvg/exportPng, workspace, loadProjectFile) for scripted
-browser verification.
+(stores, presets, exportSvg/exportPng, workspace, loadProjectFile) and, while the 3D
+view is mounted, `window.__relief` ({scene, controls, render}) for scripted browser
+verification.
 
 Deploy = push to main → CI (typecheck + tests gate the deploy, base `./`).
 **Pages flake:** "Deployment failed, try again later" with a green build is GitHub being
@@ -156,7 +157,13 @@ param, not an error.)
     deterministic mottled oxide (`distressMask`) worn bright on the high points.
     Patina maps carry METALNESS (surface.B): oxide is a dark dielectric film — dimmed
     metal still mirrors a bright studio. Normals are HALF-FLOAT (8-bit terraced into
-    blocky bands on polished domes). `studio` backdrop = white sweep + a bright PMREM
+    blocky bands on polished domes). SHAPE CALIBRATION (Liam: "things seem very
+    flat"): die-struck relief is DEEP — brass 0.3 mm, die-cast 0.45 (0.12 read as
+    print), drafted walls 0.1 mm, caps ~D/10 tall with a 0.04 D rolled edge, domed cap
+    0.2 D; proportions tuned against the supplier guides' page-2 shape photos. Side
+    walls are duller than the face and carry the finish's field oxide. Displacement
+    uses linear float filtering where supported (nearest = jagged walls at depth).
+    `studio` backdrop = white sweep + a bright PMREM
     environment, the button standing on its tack/swivel shank, shot low (62°).
   - `heightAsync.ts` rasterizes the EXACT `exportSvg` die (halos/cut-outs/inverts
     included) on the main thread (~25 ms), EDT in `heightWorker.ts` (~1 s at 2048²),

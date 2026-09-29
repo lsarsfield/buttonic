@@ -80,6 +80,8 @@ export default function ReliefStage() {
     ro.observe(host)
 
     sceneRef.current = { scene, controls, render }
+    // dev-only handle for scripted browser verification (like window.__engraver)
+    if (import.meta.env.DEV) (window as unknown as { __relief?: unknown }).__relief = { scene, controls, render }
     const s = useEngraver.getState()
     scene.setSpec(specOf(s))
     resize()
