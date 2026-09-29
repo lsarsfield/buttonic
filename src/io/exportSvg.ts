@@ -4,11 +4,11 @@ import { clipCompiled } from '../geometry/clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import {
   castsRegion,
-  haloOf,
   isSubtractLayer,
   keepoutsAbove,
   layerKeepoutRegion,
-  regionOutlineShapes,
+  outlineOf,
+  outlineShapes,
 } from '../geometry/keepout'
 import { bareInvertRegion, invertsBare } from '../geometry/invert'
 import { multiPolygonToPathD, rotateMultiPolygon } from '../geometry/poly'
@@ -214,14 +214,15 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
       if (bare.length === 0) return
       compiled = { shapes: [{ kind: 'path', d: multiPolygonToPathD(bare), fillRule: 'evenodd', paint: fillPaint() }], warnings: [] }
     }
+    // halo 'outline': the engraved ring joins the art BEFORE clipping (layers above trim it)
+    if (!isSubtractLayer(layer) && outlineOf(layer) > 0) {
+      const own = outlineShapes(layerKeepoutRegion(layer, ctx).outline)
+      if (own.length > 0) compiled = { shapes: [...compiled.shapes, ...own], warnings: compiled.warnings }
+    }
     const keepouts = keepoutsAbove(doc.layers, index, ctx)
     const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
     if (keepouts.discs.length > 0 || regions.length > 0) {
       compiled = clipCompiled(compiled, { discs: keepouts.discs, regions }, ctx.toleranceMM)
-    }
-    if (haloOf(layer) > 0 && !isSubtractLayer(layer) && (layer as { haloMode?: string }).haloMode === 'outline') {
-      const own = layerKeepoutRegion(layer, ctx).region
-      if (own) compiled = { shapes: [...compiled.shapes, ...regionOutlineShapes(own, (layer as { haloStrokeMM: number }).haloStrokeMM)], warnings: compiled.warnings }
     }
     for (const w of compiled.warnings) warnings.push(`${layer.name}: ${w}`)
 

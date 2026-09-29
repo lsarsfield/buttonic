@@ -6,7 +6,7 @@ import { clipCompiled } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import { annulusPathD } from '../geometry/format'
 import { bareInvertRegion, invertsBare, pruneInvertCache } from '../geometry/invert'
-import { haloOf, isSubtractLayer, regionOutlineShapes, type Keepouts } from '../geometry/keepout'
+import { isSubtractLayer, outlineOf, outlineShapes, type Keepouts } from '../geometry/keepout'
 import { getRegionAsync, keepoutsAboveAsync, pruneRegions } from './keepoutAsync'
 import { multiPolygonToPathD, rotateMultiPolygon, type MultiPolygon } from '../geometry/poly'
 import { fillPaint } from '../geometry/shapes'
@@ -39,6 +39,7 @@ export function DocRenderer() {
   pruneRegions(ids)
   pruneInvertCache(ids)
   const regionOf = (l: Layer) => getRegionAsync(l, ctx).region
+  const outlineFor = (l: Layer) => getRegionAsync(l, ctx).outline
   // how each layer is struck, as a tone (flat view only — exports stay plain black):
   // raised = the engrave colour, sunk = a dimmer warm grey, lasered = dimmer still
   const tone = (l: Layer): string | undefined => {
@@ -55,12 +56,8 @@ export function DocRenderer() {
           layer={layer}
           ctx={ctx}
           keepouts={keepoutsAboveAsync(doc.layers, index, ctx)}
-          ownRegion={
-            haloOf(layer) > 0 && (layer as { haloMode?: string }).haloMode === 'outline'
-              ? getRegionAsync(layer, ctx).region
-              : null
-          }
-          overBare={layer.visible && invertsBare(layer) ? bareInvertRegion(doc.layers, index, ctx, regionOf) : null}
+          ownOutline={outlineOf(layer) > 0 ? outlineFor(layer) : null}
+          overBare={layer.visible && invertsBare(layer) ? bareInvertRegion(doc.layers, index, ctx, regionOf, outlineFor) : null}
           tone={tone(layer)}
         />
       ))}
@@ -122,14 +119,15 @@ const LayerGroup = memo(
     layer,
     ctx,
     keepouts,
-    ownRegion,
+    ownOutline,
     overBare,
     tone,
   }: {
     layer: Layer
     ctx: CompileCtx
     keepouts: Keepouts
-    ownRegion: MultiPolygon | null
+    /** halo 'outline': this layer's engraved ring (pre-phase, clipped like its art) */
+    ownOutline: MultiPolygon | null
     overBare: MultiPolygon | null
     /** Colour for sunk / lasered layers (undefined = the engrave colour). */
     tone?: string
@@ -170,18 +168,16 @@ const LayerGroup = memo(
         </g>
       )
     }
+    // halo 'outline': this layer's own engraved ring joins its art BEFORE the
+    // clip, so cut-outs and halos above trim it too (pre-phase, drawn inside
+    // this phase-rotated group; a prop, so its settle re-renders via the memo)
+    const own = outlineShapes(ownOutline)
+    const art = own.length > 0 ? { shapes: [...compiled.shapes, ...own], warnings: compiled.warnings } : compiled
     const clipped =
       keepouts.discs.length > 0 || regions.length > 0
-        ? clipCompiled(compiled, { discs: keepouts.discs, regions }, INTERACTIVE_TOLERANCE_MM)
-        : compiled
-
-    // halo 'outline': engrave this layer's own halo boundary (pre-phase region
-    // drawn inside this phase-rotated group — correct by construction; the
-    // region is a prop so its settle re-renders through the memo comparator)
-    const shapes = [...clipped.shapes]
-    if (ownRegion) {
-      shapes.push(...regionOutlineShapes(ownRegion, (layer as { haloStrokeMM: number }).haloStrokeMM))
-    }
+        ? clipCompiled(art, { discs: keepouts.discs, regions }, INTERACTIVE_TOLERANCE_MM)
+        : art
+    const shapes = clipped.shapes
 
     const hasShapes = shapes.length > 0
     const swallowed = !hasShapes && compiled.shapes.length > 0 // wholly clipped away — intentional
@@ -207,7 +203,7 @@ const LayerGroup = memo(
     prev.ctx.diameterMM === next.ctx.diameterMM &&
     prev.ctx.assetsRevision === next.ctx.assetsRevision &&
     prev.ctx.fontsRevision === next.ctx.fontsRevision &&
-    prev.ownRegion === next.ownRegion &&
+    prev.ownOutline === next.ownOutline &&
     prev.overBare === next.overBare &&
     prev.tone === next.tone &&
     sameKeepouts(prev.keepouts, next.keepouts),

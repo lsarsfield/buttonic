@@ -12,9 +12,12 @@ import {
   pathToMultiPolygon,
   pointInMultiPolygon,
   safeDifference,
+  safeUnion,
   type MultiPolygon,
 } from './poly'
 import type { CompiledLayer, Shape } from './shapes'
+import { fillPaint } from './shapes'
+import { holdsDisc, linePieces, ringSectorPieces, strokePieces } from './strokePieces'
 
 /**
  * Cross-layer subtraction: clearance discs (the "moat", rotation-invariant) and
@@ -121,20 +124,7 @@ interface Seg {
 const insideAny = (x: number, y: number, regions: MultiPolygon[]): boolean =>
   regions.some((mp) => pointInMultiPolygon(x, y, mp))
 
-/**
- * Minimum length for a surviving clipped stroke fragment. A piece only as long
- * as the stroke is wide reads as a stray nub, not a tick — these appear where a
- * tick grazes a serif or the letter-shaped halo edge. Require a few stroke
- * widths (floored for hairline strokes) so the fringe around text stays tidy.
- */
-const stubMinLen = (strokeWidthMM: number | undefined): number =>
-  Math.max(3 * (strokeWidthMM ?? 0), 0.15)
 
-function polylineLen(pts: Pt[]): number {
-  let len = 0
-  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y)
-  return len
-}
 
 // --- swath-shadow clipping ---------------------------------------------------
 // A hatch tick is a constant-width TOOL PASS: it must be cut wherever ANY part
@@ -635,49 +625,114 @@ function convexDifference(P: Pt[], rings: RegionRing[], regions: MultiPolygon[])
 }
 
 /**
- * Straight constant-width stroke (a hatch tick) minus regions, full-width
- * semantics: the tool must not pass wherever any part of the stroke's width
- * would enter a region. Returns the surviving sub-segments (stub-filtered);
- * an untouched tick returns its exact original endpoints.
+ * Smallest piece that survives a cut (Liam's call: the 0.05 mm engraving
+ * minimum). One rule, applied identically on the canvas and in the die file.
  */
-function strokeSwathSegments(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  widthMM: number | undefined,
-  edges: REdge[],
-  regions: MultiPolygon[],
-): Seg[] {
-  const len = Math.hypot(x2 - x1, y2 - y1)
-  if (len < 1e-9) return []
-  const ux = (x2 - x1) / len
-  const uy = (y2 - y1) / len
-  const hw = Math.max((widthMM ?? 0.1) / 2, 1e-6)
-  const px = -uy
-  const py = ux
-  const rect: Pt[] = [
-    { x: x1 + px * hw, y: y1 + py * hw },
-    { x: x2 + px * hw, y: y2 + py * hw },
-    { x: x2 - px * hw, y: y2 - py * hw },
-    { x: x1 - px * hw, y: y1 - py * hw },
-  ]
-  const axialOf = (x: number, y: number) => (x - x1) * ux + (y - y1) * uy
-  const sToPoint = (s: number): Pt => ({ x: x1 + ux * s, y: y1 + uy * s })
-  const spans = swathClearSpans(rect, axialOf, sToPoint, 0, len, edges, regions)
-  if (spans.length === 1 && spans[0]![0] <= 1e-9 && spans[0]![1] >= len - 1e-9) {
-    return [{ ax: x1, ay: y1, bx: x2, by: y2 }] // untouched — exact endpoints
-  }
-  const minLen = stubMinLen(widthMM)
-  const out: Seg[] = []
-  for (const [lo, hi] of spans) {
-    if (hi - lo < minLen) continue
-    const a = sToPoint(lo)
-    const b = sToPoint(hi)
-    out.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y })
-  }
-  return out
+export const MIN_PIECE_MM = 0.05
+
+
+/** A piece's thinnest dimension: exact caliper width when convex, else mean width 2A/P. */
+/** Is the piece at least MIN_PIECE_MM thick somewhere (a disc of that diameter fits)? */
+function pieceHolds(p: Piece): boolean {
+  return holdsDisc([p.outer, ...p.holes], MIN_PIECE_MM / 2)
 }
+
+/**
+ * Drop sub-minimum slivers, judged per CONNECTED group of pieces (touching
+ * boxes): a stroke cut into many convex pieces keeps a short full-width
+ * fragment beside a long one — only a group whose every piece is thinner than
+ * the minimum (a hairline strip left along a letter edge) goes.
+ */
+function keepMinPieces(pieces: Piece[]): Piece[] {
+  const n = pieces.length
+  if (n === 0) return pieces
+  const box = pieces.map((p) => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const q of p.outer) {
+      minX = Math.min(minX, q.x); minY = Math.min(minY, q.y)
+      maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y)
+    }
+    return { minX, minY, maxX, maxY }
+  })
+  const parent = pieces.map((_, i) => i)
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)))
+  const e = 1e-6
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = box[i]!
+      const b = box[j]!
+      if (a.minX <= b.maxX + e && b.minX <= a.maxX + e && a.minY <= b.maxY + e && b.minY <= a.maxY + e) parent[find(i)] = find(j)
+    }
+  }
+  const holds = new Map<number, boolean>()
+  pieces.forEach((p, i) => {
+    const k = find(i)
+    if (!holds.get(k) && pieceHolds(p)) holds.set(k, true)
+  })
+  return pieces.filter((_, i) => holds.get(find(i)) === true)
+}
+
+/** Pieces → one filled path (outers counter-clockwise, holes clockwise: nonzero-safe where pieces overlap). */
+function piecesToPathD(pieces: Piece[]): string {
+  const loopD = (loop: Pt[]) => 'M ' + loop.map((p, i) => `${i ? 'L ' : ''}${fmt(p.x)} ${fmt(p.y)}`).join(' ') + ' Z'
+  const parts: string[] = []
+  for (const p of pieces) {
+    parts.push(loopD(loopArea(p.outer) >= 0 ? p.outer : [...p.outer].reverse()))
+    for (const h of p.holes) parts.push(loopD(loopArea(h) <= 0 ? h : [...h].reverse()))
+  }
+  return parts.join(' ')
+}
+
+/** A convex polygon minus the regions: exact boundary walk; martinez only if the walk is degenerate. */
+function convexCut(P: Pt[], rings: RegionRing[], regions: MultiPolygon[], warnings: string[]): Piece[] | 'identity' {
+  const exact = convexDifference(P, rings, regions)
+  if (exact !== null) return exact
+  // degenerate walk (tangency / vertex-on-edge): one small convex piece is safe for martinez
+  const diff = safeDifference([[P.map((q) => [q.x, q.y] as [number, number])]], ...regions)
+  if (diff === null) {
+    warnings.push('A knockout could not be computed — geometry left uncut.')
+    return 'identity'
+  }
+  return diff.map((poly) => ({
+    outer: poly[0]!.slice(0, -1).map(([x, y]) => ({ x, y })),
+    holes: poly.slice(1).map((h) => h.slice(0, -1).map(([x, y]) => ({ x, y }))),
+  }))
+}
+
+/**
+ * A stroke's convex pieces minus the regions. null = nothing touched (keep the
+ * original stroke, exact); otherwise the surviving pieces, min-piece filtered.
+ */
+function cutConvexPieces(
+  convex: Pt[][],
+  rings: RegionRing[],
+  regions: MultiPolygon[],
+  box: { minX: number; minY: number; maxX: number; maxY: number } | null,
+  warnings: string[],
+  filter = true,
+): Piece[] | null {
+  let touched = false
+  const out: Piece[] = []
+  for (const P of convex) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const q of P) {
+      minX = Math.min(minX, q.x); minY = Math.min(minY, q.y)
+      maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y)
+    }
+    if (box && (minX > box.maxX || maxX < box.minX || minY > box.maxY || maxY < box.minY)) {
+      out.push({ outer: P, holes: [] })
+      continue
+    }
+    const r = convexCut(P, rings, regions, warnings)
+    if (r === 'identity') out.push({ outer: P, holes: [] })
+    else {
+      touched = true
+      out.push(...r)
+    }
+  }
+  return touched ? (filter ? keepMinPieces(out) : out) : null
+}
+
 
 /**
  * A thin, straight, single-loop filled polygon is a pointed hatch tick — a
@@ -755,9 +810,7 @@ function filledThinTickClip(
   if (exact !== null) {
     const loopD = (loop: Pt[]) => 'M ' + loop.map((p, i) => `${i ? 'L ' : ''}${fmt(p.x)} ${fmt(p.y)}`).join(' ') + ' Z'
     const out: Shape[] = []
-    for (const piece of exact) {
-      const area = Math.abs(loopArea(piece.outer)) - piece.holes.reduce((s, h) => s + Math.abs(loopArea(h)), 0)
-      if (area < 1e-5) continue // numerical dust (≲ 3µm sliver) — nothing visible is dropped
+    for (const piece of keepMinPieces(exact)) {
       const dd = [piece.outer, ...piece.holes].map(loopD).join(' ')
       if (piece.holes.length > 0) out.push({ kind: 'path', d: dd, fillRule: 'evenodd', paint: shape.paint })
       else out.push({ kind: 'path', d: dd, paint: shape.paint })
@@ -774,10 +827,9 @@ function filledThinTickClip(
   if (spans.length === 1 && spans[0]![0] <= sMin + 1e-9 && spans[0]![1] >= sMax - 1e-9) {
     return [shape] // untouched by the halo → keep the exact spindle (tips intact)
   }
-  const min = stubMinLen(2 * halfW)
   const out: Shape[] = []
   for (const [lo, hi] of spans) {
-    if (hi - lo < min) continue // sub-few-stroke nubs (tight concavities) drop
+    if (hi - lo < MIN_PIECE_MM) continue // sub-minimum nubs drop
     const kept = clipPolyBand(pts, axialOf, lo, hi) // hi ≈ sMax keeps the point; a buried tip cuts flat
     if (kept.length < 3) continue
     out.push({
@@ -963,21 +1015,72 @@ function regionClipShape(
       const r0 = Math.hypot(shape.x1, shape.y1)
       const r1 = Math.hypot(shape.x2, shape.y2)
       const near = distToSegment({ x: 0, y: 0 }, { x: shape.x1, y: shape.y1 }, { x: shape.x2, y: shape.y2 })
-      if (!bandOverlaps(band, Math.min(r0, r1, near), Math.max(r0, r1))) {
+      const st = shape.paint.stroke
+      const reach = ((st?.widthMM ?? 0.1) / 2) * Math.SQRT2 // the painted outline, caps and corners included
+      if (!bandOverlaps(band, Math.min(r0, r1, near) - reach, Math.max(r0, r1) + reach)) {
         out.push(shape)
         return
       }
-      for (const s of strokeSwathSegments(shape.x1, shape.y1, shape.x2, shape.y2, shape.paint.stroke?.widthMM, edges, regions)) {
-        out.push({ kind: 'line', x1: s.ax, y1: s.ay, x2: s.bx, y2: s.by, paint: shape.paint })
-      }
+      // EXACT: the tick's true outline (its cap included) minus the regions —
+      // oblique letter edges cut obliquely, a round cap never pokes in
+      const cut = cutConvexPieces(
+        linePieces({ x: shape.x1, y: shape.y1 }, { x: shape.x2, y: shape.y2 }, st?.widthMM ?? 0.1, st?.cap ?? 'butt', tolMM),
+        rings,
+        regions,
+        box,
+        warnings,
+      )
+      if (cut === null) out.push(shape)
+      else if (cut.length > 0) out.push({ kind: 'path', d: piecesToPathD(cut), paint: fillPaint() })
       return
     }
     case 'circle': {
       if (shape.paint.stroke) {
-        const res = splitCircleOutsideRegions(shape.rMM, regions)
-        if (res === 'keep') out.push(shape)
-        else if (res === 'drop') return
-        else for (const [a0, a1] of res) out.push({ kind: 'path', d: arcPathD(shape.rMM, a0, a1), paint: shape.paint })
+        const w = shape.paint.stroke.widthMM
+        if (!bandOverlaps(band, shape.rMM - w / 2, shape.rMM + w / 2)) {
+          out.push(shape)
+          return
+        }
+        // EXACT: tile the ring's band into annular trapezoids; untouched runs stay
+        // as stroked arcs (their butt ends are the radial tile edges), touched
+        // tiles are cut by the boundary walk — the ring ends follow the letter
+        // ¼ tolerance: a cut tile's straight chords must sit on the ring's edge (sub-µm), since
+        // its untouched neighbours stay exact arcs
+        const tiles = ringSectorPieces(shape.rMM, w, -Math.PI, Math.PI, tolMM / 4)
+        const res = tiles.map((P) => cutConvexPieces([P], rings, regions, box, warnings, false))
+        if (res.every((r) => r === null)) {
+          out.push(shape)
+          return
+        }
+        const n = tiles.length
+        const deg = (k: number) => ((-Math.PI + (2 * Math.PI * k) / n) * 180) / Math.PI + 90 // atan2 → 12-o'clock polar
+        const start = res.findIndex((r) => r !== null)
+        const cutPieces: Piece[] = []
+        let runFrom = -1
+        for (let j = 0; j <= n; j++) {
+          const k = (start + j) % n
+          const r = j === n ? res[start] : res[k]
+          if (r === null && j < n) {
+            if (runFrom < 0) runFrom = j
+          } else {
+            if (runFrom >= 0) {
+              const a0 = deg(start + runFrom)
+              const a1 = deg(start + j)
+              out.push({ kind: 'path', d: arcPathD(shape.rMM, a0, a1), paint: shape.paint })
+              runFrom = -1
+            }
+            if (j < n && r) cutPieces.push(...r)
+          }
+        }
+        // the minimum-piece rule judges each cut fragment WITH the ring it's joined
+        // to (untouched neighbour tiles), never a lone tile's sliver in isolation
+        const whole = new Set(cutPieces)
+        const all: Piece[] = [...cutPieces]
+        tiles.forEach((P, k) => {
+          if (res[k] === null) all.push({ outer: P, holes: [] })
+        })
+        const kept = keepMinPieces(all).filter((p) => whole.has(p))
+        if (kept.length > 0) out.push({ kind: 'path', d: piecesToPathD(kept), paint: fillPaint() })
       } else {
         out.push(shape) // fill circles are never emitted; pass through defensively
       }
@@ -986,7 +1089,13 @@ function regionClipShape(
     case 'path': {
       const segs = parsePathData(shape.d)
       const cbox = segsControlBox(segs)
-      if (cbox && box && (cbox.x > box.maxX || cbox.x + cbox.w < box.minX || cbox.y > box.maxY || cbox.y + cbox.h < box.minY)) {
+      // a stroke paints beyond its centreline: half its width, and a miter up to 4× that
+      const pad = shape.paint.fill ? 0 : 2 * (shape.paint.stroke?.widthMM ?? 0.1)
+      if (
+        cbox &&
+        box &&
+        (cbox.x - pad > box.maxX || cbox.x + cbox.w + pad < box.minX || cbox.y - pad > box.maxY || cbox.y + cbox.h + pad < box.minY)
+      ) {
         out.push(shape) // disjoint from all regions — untouched, exact
         return
       }
@@ -1007,52 +1116,37 @@ function regionClipShape(
         if (diff === null) {
           out.push(shape)
           warnings.push('A knockout could not be computed — geometry left uncut.')
-        } else if (diff.length > 0) {
-          out.push({ kind: 'path', d: multiPolygonToPathD(diff), fillRule: 'evenodd', paint: shape.paint })
+        } else {
+          const kept = diff.filter((poly) =>
+            pieceHolds({
+              outer: poly[0]!.slice(0, -1).map(([x, y]) => ({ x, y })),
+              holes: poly.slice(1).map((h) => h.slice(0, -1).map(([x, y]) => ({ x, y }))),
+            }),
+          )
+          if (kept.length > 0) out.push({ kind: 'path', d: multiPolygonToPathD(kept), fillRule: 'evenodd', paint: shape.paint })
         }
       } else {
-        // stroked path (warped centreline / halo outline): clip each polyline segment
-        const minLen = stubMinLen(shape.paint.stroke?.widthMM)
-        const parts: string[] = []
-        for (const sub of flattenSegs(segs, tolMM)) {
-          const pts = sub.pts
-          if (!sub.closed && pts.length === 2) {
-            // a straight hatch tick — clip its full-width swath, not just the centreline
-            for (const s of strokeSwathSegments(pts[0]!.x, pts[0]!.y, pts[1]!.x, pts[1]!.y, shape.paint.stroke?.widthMM, edges, regions)) {
-              parts.push(`M ${fmt(s.ax)} ${fmt(s.ay)} L ${fmt(s.bx)} ${fmt(s.by)}`)
-            }
-            continue
-          }
-          let open: Pt[] = []
-          const flush = () => {
-            if (open.length >= 2 && polylineLen(open) >= minLen) {
-              parts.push(`M ${fmt(open[0]!.x)} ${fmt(open[0]!.y)}`)
-              for (let i = 1; i < open.length; i++) parts.push(`L ${fmt(open[i]!.x)} ${fmt(open[i]!.y)}`)
-            }
-            open = []
-          }
-          for (let i = 0; i + 1 < pts.length; i++) {
-            const segsKept = clipSegmentOutsideRegions(pts[i]!.x, pts[i]!.y, pts[i + 1]!.x, pts[i + 1]!.y, regions)
-            for (const s of segsKept) {
-              const tail = open[open.length - 1]
-              if (!tail || Math.hypot(tail.x - s.ax, tail.y - s.ay) > 1e-9) {
-                flush()
-                open = [{ x: s.ax, y: s.ay }, { x: s.bx, y: s.by }]
-              } else {
-                open.push({ x: s.bx, y: s.by })
-              }
-            }
-          }
-          flush()
-        }
-        if (parts.length > 0) out.push({ kind: 'path', d: parts.join(' '), paint: shape.paint })
+        // stroked path (motif strokes, centre strokes, bend centrelines): EXACT —
+        // the stroke's true outline (caps + joins, SVG semantics) as convex
+        // pieces, each cut by the boundary walk; untouched → the stroke itself
+        const st = shape.paint.stroke
+        const cut = cutConvexPieces(
+          strokePieces(flattenSegs(segs, tolMM), st?.widthMM ?? 0.1, st?.cap ?? 'butt', st?.join, tolMM),
+          rings,
+          regions,
+          box,
+          warnings,
+        )
+        if (cut === null) out.push(shape)
+        else if (cut.length > 0) out.push({ kind: 'path', d: piecesToPathD(cut), paint: fillPaint() })
       }
       return
     }
     case 'instanced': {
       const defSegs = transformSegs(parsePathData(shape.def.d), defMatrix(shape.def))
       const rb = radialBandOf(defSegs)
-      if (rb && !bandOverlaps(band, rb.rMin, rb.rMax)) {
+      const reach = shape.paint.fill ? 0 : 2 * (shape.paint.stroke?.widthMM ?? 0.1) // stroke paint beyond the centreline
+      if (rb && !bandOverlaps(band, rb.rMin - reach, rb.rMax + reach)) {
         out.push(shape) // whole instanced band misses every region
         return
       }
@@ -1086,7 +1180,8 @@ export function clipCompiled(
   keepouts: { discs: ClearanceDisc[]; regions: MultiPolygon[] },
   tolMM: number,
 ): CompiledLayer {
-  const { discs, regions } = keepouts
+  const { discs } = keepouts
+  let regions = keepouts.regions
   const R = maxClearance(discs)
   const hasRegions = regions.length > 0
   if (R <= 0 && !hasRegions) return compiled
@@ -1138,6 +1233,10 @@ export function clipCompiled(
   if (!hasRegions) return { shapes: discClipped, warnings }
 
   // ---- phase 2: polygon region clipping ----
+  // overlapping regions (two haloed words side by side) are merged first: the
+  // exact boundary walk needs disjoint region rings, and a shared crossing
+  // otherwise forced the conservative fallback between the letters
+  regions = mergeOverlapping(regions)
   const band = regionsBand(regions)
   const box = regionsBox(regions)
   const edges = collectRegionEdges(regions)
@@ -1145,6 +1244,42 @@ export function clipCompiled(
   const out: Shape[] = []
   for (const shape of discClipped) regionClipShape(shape, regions, edges, rings, band, box, tolMM, out, warnings)
   return { shapes: out, warnings }
+}
+
+const regionIds = new WeakMap<MultiPolygon, number>()
+let regionIdSeq = 0
+const mergeCache = new Map<string, MultiPolygon[]>()
+
+/** Union any regions whose bounding boxes overlap (memoized by region identity). */
+function mergeOverlapping(regions: MultiPolygon[]): MultiPolygon[] {
+  if (regions.length < 2) return regions
+  const boxes = regions.map((r) => mpBounds(r))
+  let overlap = false
+  for (let i = 0; i < regions.length && !overlap; i++) {
+    for (let j = i + 1; j < regions.length; j++) {
+      const a = boxes[i]
+      const b = boxes[j]
+      if (a && b && a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY) {
+        overlap = true
+        break
+      }
+    }
+  }
+  if (!overlap) return regions
+  const key = regions
+    .map((r) => {
+      let id = regionIds.get(r)
+      if (id === undefined) regionIds.set(r, (id = ++regionIdSeq))
+      return id
+    })
+    .join(',')
+  const hit = mergeCache.get(key)
+  if (hit) return hit
+  const u = safeUnion(...regions)
+  const merged = u === null ? regions : [u]
+  if (mergeCache.size > 64) mergeCache.clear()
+  mergeCache.set(key, merged)
+  return merged
 }
 
 /** Rotate a point — exported for instance-expansion in the exporter. */

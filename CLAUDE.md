@@ -73,13 +73,26 @@ param, not an error.)
     rest standing, counters survive. Degenerate configurations (tangency,
     vertex-on-edge, overlapping contributor regions) fail validation and fall back to
     the conservative SWATH cut (`swathClearSpans`: union of per-edge Cyrus–Beck axial
-    shadows on the tick axis; gap midpoints classify interior-only coverage). STROKED
-    ticks keep tool-pass semantics — a stroke physically cannot end obliquely — and
-    stop where their FULL width first touches a region. Centreline-only clipping was
-    wrong by strokeMM/2 and missed corner grazes — don't regress to it. NEVER
-    martinez-difference ticks against a halo (hangs tens of seconds, mangles edges).
-    Real motifs (curved/multi-loop/non-convex) still use `safeDifference`; warped
-    multi-segment strokes still clip by centreline (known limit).
+    shadows on the tick axis; gap midpoints classify interior-only coverage).
+    STROKED geometry is cut EXACTLY too (Liam's call, superseding tool-pass): a stroke
+    becomes its true painted outline as convex pieces (`strokePieces.ts`: segment
+    quads + SVG caps + joins; stroked rings tile into ¼-tol annular trapezoids whose
+    untouched runs stay exact arcs), each cut by the same boundary walk; a touched
+    stroke is emitted as a filled path, an untouched one as itself. Overlapping regions
+    are unioned first (`mergeOverlapping`) so the walk sees disjoint rings. Minimum
+    surviving piece `MIN_PIECE_MM` = 0.05 (Liam's rule): a piece is dropped only if
+    no 0.05 disc fits anywhere in it (`holdsDisc`, polylabel-style) — judged per
+    CONNECTED group, so a sliver joined to live stroke stays. Mean width 2A/P was wrong
+    (killed star tips). Early-out bbox/band tests pad by the stroke's reach — a round
+    cap can poke past its centreline's box. NEVER martinez-difference ticks against a
+    halo (hangs tens of seconds, mangles edges). Real motifs (curved/multi-loop/
+    non-convex filled) still use `safeDifference`.
+    Halo 'outline' = an exact FILLED ring `dilate(region, haloStrokeMM) \ region`,
+    built with the region (worker too), added to the layer's art BEFORE clipping so
+    cut-outs/halos above trim it; the stated gap is clear metal. Halos dilate by
+    `haloMM + 0.75·srcTol` (chord sag) — they may exceed the stated gap by ≲9 µm,
+    never fall short. Clearance DISCS still clip strokes by centreline (changing it
+    would move the Reference A golden — known limit).
   - `motifs/builtins.ts` — ~128 built-in motifs grouped Basic/Celestial/Floral/Bandana/
     Kilim/Groovy/Workwear/Tarot/Old Book (`{id,label,d,paintType,group?}`, unit-box y-down).
     Selection is grounded in the traditional canon per category (kilim = authentic Anatolian:
@@ -97,7 +110,11 @@ param, not an error.)
     by `ui/controls/MotifPicker`, which is a SEARCH + collapsible-accordion + capped-scroll
     picker (the flat grid would swamp the ~272px inspector at this count; the group holding
     the current value auto-expands).
-  - `poly.ts` polygon-clipping bridge: counter-preserving winding nesting (nonzero),
+  - `poly.ts` polygon-clipping bridge: TRUE nonzero reconstruction (bbox clusters;
+    self-crossing contours split by Seifert smoothing — Jost B, Roboto 6; contours that
+    touch/overlap/cross → face split with winding sums — Cinzel's serifs share the stem's
+    edges; otherwise an exact containment tree; `nonzero.test.ts` checks every glyph of
+    every bundled font + every fill motif against a scanline nonzero fill),
     xor (evenodd), disc-sweep Minkowski dilation (circumscribed caps — margins never
     undershoot), `safe*` wrappers (martinez can throw; never let it reach React).
   - `keepout.ts` per-layer knockout/halo regions, WeakMap-memoized, cached PRE-PHASE;
@@ -218,7 +235,8 @@ param, not an error.)
 1. **Conventions:** mm units; degrees, 0° at 12 o'clock, CLOCKWISE, y-down
    (`polar.ts`, test-locked). Instance angles are exact `k*360/N`, never accumulated.
 2. **Stroke semantics:** stroked geometry = constant-width cut (centreline + strokeMM);
-   filled = outline fill. Never `vector-effect`. Line clipping is centreline-based.
+   filled = outline fill. Never `vector-effect`. Region clipping cuts a stroke's TRUE
+   outline (caps + joins); only clearance-disc clipping is centreline-based.
    Per-layer stroke `cap` (butt/round/square, hatch/repeat) + `join` (miter/round/bevel,
    repeat) via `SvgStrokeCap`/`StrokeJoin`; `join` is OMITTED from paint when miter so
    goldens stay byte-identical. Hatch `cap: 'point'` synthesizes a filled tapered spindle
@@ -234,7 +252,7 @@ param, not an error.)
 
 ## Testing & verification culture
 
-229 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+274 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,
@@ -253,7 +271,7 @@ preview tools + `window.__engraver`, then push (CI re-gates).
   not bytes; exports always bake outlines. Explicit per-font Embed action exists.
 - Halo dilation is martinez's worst case: disc-sweep capsules (~200ms, memoized).
   Thin-rect capsules are slower AND crash — don't "optimize" back to them. Same reason
-  pointed-hatch ticks (thin filled spindles) are halo-clipped by centreline, not martinez.
+  thin ticks/stroke pieces are cut by the convex boundary walk, not martinez.
 - Pointed hatch ticks are filled, so the def-level clearance-disc trim (a stroked-line
   fast path) doesn't apply — a pointed band is bounded by its own rInner/rOuter, not by a
   centre clearance moat.

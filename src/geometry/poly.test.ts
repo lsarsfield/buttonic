@@ -63,10 +63,36 @@ describe('winding reconstruction', () => {
     expect(holeCount(ringsToMultiPolygonNonzero(rings))).toBe(1) // ours keeps it
   })
 
-  it('island-in-counter (Θ: three concentric squares) → two polygons', () => {
-    const mp = ringsToMultiPolygonNonzero([squareRing(0, 0, 10), squareRing(0, 0, 6), squareRing(0, 0, 2)])
+  it('island-in-counter (Θ: alternately wound concentric squares) → two polygons', () => {
+    const rev = (r: Ring): Ring => [...r].reverse()
+    const mp = ringsToMultiPolygonNonzero([squareRing(0, 0, 10), rev(squareRing(0, 0, 6)), squareRing(0, 0, 2)])
     expect(mp.length).toBe(2) // outer(+hole) and the inner island
     expect(holeCount(mp)).toBe(1)
+  })
+
+  it('TRUE nonzero: same-direction nested contours are solid (winding 2), not a hole', () => {
+    const mp = ringsToMultiPolygonNonzero([squareRing(0, 0, 10), squareRing(0, 0, 6)])
+    expect(holeCount(mp)).toBe(0)
+    expect(multiPolygonArea(mp)).toBeCloseTo(400, 6)
+  })
+
+  it('TRUE nonzero: overlapping same-direction contours union (a crossbar over a stem stays)', () => {
+    // a stem and a crossbar drawn as separate overlapping contours, like Cinzel's "A"
+    const stem: Ring = [[0, 0], [2, 0], [2, 10], [0, 10]]
+    const bar: Ring = [[-3, 4], [5, 4], [5, 6], [-3, 6]]
+    const mp = ringsToMultiPolygonNonzero([stem, bar])
+    expect(multiPolygonArea(mp)).toBeCloseTo(20 + 16 - 4, 6)
+    expect(pointInMultiPolygon(1, 5, mp)).toBe(true) // the overlap is filled, not a hole
+  })
+
+  it('TRUE nonzero: a crossbar over a counter hole stays filled (winding +1 −1 +1)', () => {
+    const outer: Ring = [[0, 0], [10, 0], [10, 10], [0, 10]]
+    const counter: Ring = [...([[3, 2], [7, 2], [7, 8], [3, 8]] as Ring)].reverse()
+    const bar: Ring = [[1, 4.5], [9, 4.5], [9, 5.5], [1, 5.5]]
+    const mp = ringsToMultiPolygonNonzero([outer, counter, bar])
+    expect(pointInMultiPolygon(5, 5, mp)).toBe(true) // crossbar across the counter
+    expect(pointInMultiPolygon(5, 3, mp)).toBe(false) // counter above it still open
+    expect(multiPolygonArea(mp)).toBeCloseTo(100 - 24 + 4, 5)
   })
 
   it('evenodd annulus xor has the right area', () => {

@@ -6,6 +6,7 @@ import {
   castsRegion,
   haloOf,
   layerKeepoutRegion,
+  outlineOf,
   peekKeepoutRegion,
   pruneKeepoutCache,
   type Keepouts,
@@ -34,6 +35,7 @@ const DEBOUNCE_MS = 120
 interface Entry {
   key: string
   region: MultiPolygon | null
+  outline: MultiPolygon | null
 }
 interface Want {
   key: string
@@ -92,8 +94,8 @@ function getWorker(): Worker | null {
 function resolveSync(id: string): void {
   const want = wanted.get(id)
   if (!want) return
-  const { region } = layerKeepoutRegion(want.layer, want.ctx) // fills the sync caches
-  lastGood.set(id, { key: want.key, region })
+  const { region, outline } = layerKeepoutRegion(want.layer, want.ctx) // fills the sync caches
+  lastGood.set(id, { key: want.key, region, outline })
   wanted.delete(id)
   const t = timers.get(id)
   if (t) {
@@ -118,7 +120,7 @@ function dispatch(id: string): void {
   const { srcTol, arcTol } = keepoutTolerances(halo, want.ctx.toleranceMM)
   const jobId = ++jobSeq
   inflight.set(id, { key: want.key, jobId, layer: want.layer })
-  const job: KeepoutJob = { jobId, layerId: id, shapes: compiled.shapes, haloMM: halo, srcTol, arcTol }
+  const job: KeepoutJob = { jobId, layerId: id, shapes: compiled.shapes, haloMM: halo, srcTol, arcTol, outlineMM: outlineOf(want.layer) }
   w.postMessage(job)
 }
 
@@ -130,8 +132,8 @@ function onDone(msg: KeepoutDone): void {
   if (msg.error) {
     if (want) resolveSync(msg.layerId) // one sync retry on a job error
   } else {
-    lastGood.set(msg.layerId, { key: cur.key, region: msg.region })
-    adoptKeepoutRegion(cur.layer, cur.key, msg.region, msg.warnings)
+    lastGood.set(msg.layerId, { key: cur.key, region: msg.region, outline: msg.outline })
+    adoptKeepoutRegion(cur.layer, cur.key, msg)
     if (want && want.key === cur.key) wanted.delete(msg.layerId)
     else if (want) dispatch(msg.layerId) // edited again while computing — chase the newest
   }
@@ -144,15 +146,18 @@ function onDone(msg: KeepoutDone): void {
  * region immediately (null before the first ever build) and schedules an
  * off-thread rebuild when the content key changed.
  */
-export function getRegionAsync(layer: Layer, ctx: CompileCtx): { region: MultiPolygon | null; pending: boolean } {
+export function getRegionAsync(
+  layer: Layer,
+  ctx: CompileCtx,
+): { region: MultiPolygon | null; outline: MultiPolygon | null; pending: boolean } {
   const id = layer.id
   const key = regionKey(layer, compileCtxKey(ctx))
   const good = lastGood.get(id)
-  if (good && good.key === key) return { region: good.region, pending: false }
+  if (good && good.key === key) return { region: good.region, outline: good.outline, pending: false }
   const peeked = peekKeepoutRegion(layer, ctx) // sync caches may already have it
   if (peeked) {
-    lastGood.set(id, { key, region: peeked.region })
-    return { region: peeked.region, pending: false }
+    lastGood.set(id, { key, region: peeked.region, outline: peeked.outline })
+    return { region: peeked.region, outline: peeked.outline, pending: false }
   }
   const already = wanted.get(id)
   if (!already || already.key !== key) {
@@ -168,7 +173,7 @@ export function getRegionAsync(layer: Layer, ctx: CompileCtx): { region: MultiPo
     )
     syncPendingFlag()
   }
-  return { region: good ? good.region : null, pending: true }
+  return { region: good ? good.region : null, outline: good ? good.outline : null, pending: true }
 }
 
 /** keepoutsAbove, but contributors resolve via the stale-while-recomputing cache. */

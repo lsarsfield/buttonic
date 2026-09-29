@@ -16,12 +16,14 @@ export interface KeepoutJob {
   haloMM: number
   srcTol: number
   arcTol: number
+  outlineMM: number
 }
 
 export interface KeepoutDone {
   jobId: number
   layerId: string
   region: MultiPolygon | null
+  outline: MultiPolygon | null
   warnings: string[]
   error?: string
 }
@@ -32,11 +34,11 @@ const scope = self as unknown as {
 }
 
 scope.onmessage = (e) => {
-  const { jobId, layerId, shapes, haloMM, srcTol, arcTol } = e.data
+  const { jobId, layerId, shapes, haloMM, srcTol, arcTol, outlineMM } = e.data
   try {
-    const { region, warnings } = buildKeepoutRegion(shapes, haloMM, srcTol, arcTol)
-    scope.postMessage({ jobId, layerId, region, warnings })
+    const { region, outline, warnings } = buildKeepoutRegion(shapes, haloMM, srcTol, arcTol, outlineMM)
+    scope.postMessage({ jobId, layerId, region, outline, warnings })
   } catch (err) {
-    scope.postMessage({ jobId, layerId, region: null, warnings: [], error: String(err) })
+    scope.postMessage({ jobId, layerId, region: null, outline: null, warnings: [], error: String(err) })
   }
 }

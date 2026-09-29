@@ -1,19 +1,18 @@
 import type { HatchLayer, Layer } from '../model/types'
-import { clearancesAbove, clipCompiled, maxClearance } from './clip'
+import { clearancesAbove, clipCompiled, maxClearance, MIN_PIECE_MM } from './clip'
 import { compileCtxKey, compileLayer, type CompileCtx } from './compile'
 import { expandInstanced } from './expand'
-import { castsRegion, haloOf, isSubtractLayer, regionOutlineShapes } from './keepout'
+import { castsRegion, haloOf, isSubtractLayer, layerKeepoutRegion, outlineOf, outlineShapes } from './keepout'
 import { buildKeepoutRegion, keepoutTolerances, shapeToRegion } from './keepoutRegion'
+import { holdsDisc } from './strokePieces'
 import { segsControlBox, parsePathData } from './pathData'
 import {
   mpBounds,
   rotateMultiPolygon,
-  ringArea,
   safeDifference,
   safeUnion,
   type Bounds,
   type MultiPolygon,
-  type Polygon,
   type Ring,
 } from './poly'
 import type { Shape } from './shapes'
@@ -53,8 +52,8 @@ export function invertsBare(l: Layer): boolean {
   return (l.type === 'ringText' || l.type === 'center') && l.booleanRole === 'subtract' && l.invertOverBare
 }
 
-/** Pieces thinner than this (mean width, mm) are boundary slivers, not features. */
-const MIN_PIECE_WIDTH_MM = 0.025
+/** Pieces nowhere this thick (mm) are boundary slivers, not features — the minimum surviving piece. */
+const MIN_PIECE_WIDTH_MM = MIN_PIECE_MM
 
 // ---------------------------------------------------------------------------
 
@@ -76,7 +75,14 @@ export function pruneInvertCache(validIds: ReadonlySet<string>): void {
  * every layer up to and including it plus the identity of the keepout regions
  * it consumed, so a stale→exact region landing recomputes it exactly once.
  */
-export function bareInvertRegion(layers: Layer[], index: number, ctx: CompileCtx, regionOf: RegionOf): MultiPolygon {
+export function bareInvertRegion(
+  layers: Layer[],
+  index: number,
+  ctx: CompileCtx,
+  regionOf: RegionOf,
+  /** a halo 'outline' layer's engraved ring (default: the exact sync one) */
+  outlineFor: RegionOf = (l) => layerKeepoutRegion(l, ctx).outline,
+): MultiPolygon {
   const layer = layers[index]!
   const discs = clearancesAbove(layers, index).map((d) => d.rMM)
   const key =
@@ -88,7 +94,7 @@ export function bareInvertRegion(layers: Layer[], index: number, ctx: CompileCtx
   const deps: (MultiPolygon | null)[] = []
   for (let j = 0; j <= index; j++) {
     const l = layers[j]!
-    if (l.visible && castsRegion(l)) deps.push(regionOf(l))
+    if (l.visible && castsRegion(l)) deps.push(regionOf(l), outlineOf(l) > 0 ? outlineFor(l) : null)
   }
   // one slot per layer AND tolerance, so an export never evicts the canvas entry
   const slot = layer.id + '|' + ctx.toleranceMM
@@ -96,12 +102,12 @@ export function bareInvertRegion(layers: Layer[], index: number, ctx: CompileCtx
   if (hit && hit.key === key && hit.deps.length === deps.length && hit.deps.every((d, i) => d === deps[i])) {
     return hit.result
   }
-  const result = computeInvert(layers, index, ctx, regionOf)
+  const result = computeInvert(layers, index, ctx, regionOf, outlineFor)
   cache.set(slot, { key, deps, result })
   return result
 }
 
-function computeInvert(layers: Layer[], index: number, ctx: CompileCtx, regionOf: RegionOf): MultiPolygon {
+function computeInvert(layers: Layer[], index: number, ctx: CompileCtx, regionOf: RegionOf, outlineFor: RegionOf): MultiPolygon {
   const layer = layers[index]!
   const tol = ctx.toleranceMM
   // T: the bare letters. Without a halo the knockout region IS the letters
@@ -136,7 +142,7 @@ function computeInvert(layers: Layer[], index: number, ctx: CompileCtx, regionOf
     if (isSubtractLayer(lj)) {
       // a cut-out below only engraves its own inverted overhang
       if (invertsBare(lj)) {
-        const inv = bareInvertRegion(layers, j, ctx, regionOf)
+        const inv = bareInvertRegion(layers, j, ctx, regionOf, outlineFor)
         if (inv.length > 0) add.push(rotateMultiPolygon(inv, lj.phaseDeg))
       }
     } else if (lj.type === 'hatch') {
@@ -144,7 +150,7 @@ function computeInvert(layers: Layer[], index: number, ctx: CompileCtx, regionOf
       if (band.length > 0) add.push(band)
     } else {
       const localBox = rotateBox(tBox, -lj.phaseDeg)
-      for (const shape of engravedShapes(layers, j, ctx, regionOf)) {
+      for (const shape of engravedShapes(layers, j, ctx, outlineFor)) {
         for (const flat of shape.kind === 'instanced' ? expandInstanced(shape) : [shape]) {
           if (!shapeMayOverlap(flat, localBox)) continue
           const r = shapeToRegion(flat, tol, tol)
@@ -161,16 +167,13 @@ function computeInvert(layers: Layer[], index: number, ctx: CompileCtx, regionOf
 }
 
 /** A draw layer's engraved shapes as they end up (disc moats applied; halo outline included). */
-function engravedShapes(layers: Layer[], j: number, ctx: CompileCtx, regionOf: RegionOf): Shape[] {
+function engravedShapes(layers: Layer[], j: number, ctx: CompileCtx, outlineFor: RegionOf): Shape[] {
   const lj = layers[j]!
   const discs = clearancesAbove(layers, j)
   const compiled = compileLayer(lj, ctx)
-  const shapes = discs.length > 0 ? clipCompiled(compiled, { discs, regions: [] }, ctx.toleranceMM).shapes : compiled.shapes
-  if (haloOf(lj) > 0 && (lj as { haloMode?: string }).haloMode === 'outline') {
-    const own = regionOf(lj)
-    if (own) return [...shapes, ...regionOutlineShapes(own, (lj as { haloStrokeMM: number }).haloStrokeMM)]
-  }
-  return shapes
+  const own = outlineOf(lj) > 0 ? outlineShapes(outlineFor(lj)) : []
+  const all = own.length > 0 ? { shapes: [...compiled.shapes, ...own], warnings: [] } : compiled
+  return discs.length > 0 ? clipCompiled(all, { discs, regions: [] }, ctx.toleranceMM).shapes : all.shapes
 }
 
 // ---------------------------------------------------------------------------
@@ -289,22 +292,9 @@ function shapeMayOverlap(shape: Shape, box: Bounds): boolean {
   }
 }
 
-/** Remove boundary slivers: pieces whose mean width 2A/P is below the floor. */
+/** Remove boundary slivers: pieces nowhere as thick as the minimum surviving piece. */
 function dropSlivers(mp: MultiPolygon): MultiPolygon {
-  const keep: Polygon[] = []
-  for (const poly of mp) {
-    const outer = poly[0]
-    if (!outer || outer.length < 3) continue
-    const area = Math.abs(ringArea(outer)) - poly.slice(1).reduce((s, h) => s + Math.abs(ringArea(h)), 0)
-    let perim = 0
-    for (const ring of poly) {
-      for (let i = 0; i < ring.length; i++) {
-        const [x0, y0] = ring[i]!
-        const [x1, y1] = ring[(i + 1) % ring.length]!
-        perim += Math.hypot(x1 - x0, y1 - y0)
-      }
-    }
-    if (perim > 0 && (2 * area) / perim >= MIN_PIECE_WIDTH_MM) keep.push(poly)
-  }
-  return keep
+  return mp.filter(
+    (poly) => poly[0] && poly[0].length >= 3 && holdsDisc(poly.map((r) => r.map(([x, y]) => ({ x, y }))), MIN_PIECE_WIDTH_MM / 2),
+  )
 }

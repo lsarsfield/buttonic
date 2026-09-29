@@ -12,12 +12,13 @@ import {
 } from '../model/types'
 import { clipCompiled } from './clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from './compile'
-import { keepoutsAbove, layerKeepoutRegion, regionOutlineShapes } from './keepout'
+import { keepoutsAbove, layerKeepoutRegion, outlineShapes } from './keepout'
 import {
   multiPolygonArea,
   pathToMultiPolygon,
   pointInMultiPolygon,
   rotateMultiPolygon,
+  safeDifference,
   type MultiPolygon,
 } from './poly'
 import type { Shape } from './shapes'
@@ -119,6 +120,12 @@ describe('text halo over a pattern', () => {
       else if (s.kind === 'path') for (const sub of s.d.split('M').filter((x) => x.trim())) {
         subs.push([...sub.matchAll(/([-\d.]+)\s+([-\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]))
       }
+      if (s.kind === 'path' && s.paint.fill) {
+        // a cut tick is its exact filled remnant: it may TOUCH the halo, never enter it
+        const mp = pathToMultiPolygon(s.d, s.fillRule ?? 'nonzero', EXPORT_TOLERANCE_MM)
+        expect(multiPolygonArea(mp) - multiPolygonArea(safeDifference(mp, region) ?? mp)).toBeLessThan(1e-5)
+        continue
+      }
       for (const pts of subs) for (let i = 0; i + 1 < pts.length; i++) {
         const mx = (pts[i]![0] + pts[i + 1]![0]) / 2
         const my = (pts[i]![1] + pts[i + 1]![1]) / 2
@@ -189,16 +196,45 @@ describe('text halo over a pattern', () => {
     expect(filled.length).toBeLessThan(180 * 3) // but bounded — no nub clutter
   })
 
-  it('halo outline mode emits a stroked L-only boundary', () => {
+  it('halo outline is an exact filled ring OUTSIDE the gap (the stated gap stays clear)', () => {
     const layer = makeRingTextLayer({ text: 'AB', fontId: 'cinzel', haloMM: 0.5, haloMode: 'outline', haloStrokeMM: 0.1 })
-    const region = layerKeepoutRegion(layer, ctx()).region!
-    const shapes = regionOutlineShapes(region, 0.1)
-    expect(shapes.length).toBeGreaterThan(0)
+    const { region, outline } = layerKeepoutRegion(layer, ctx())
+    expect(region && outline).toBeTruthy()
+    const shapes = outlineShapes(outline)
+    expect(shapes.length).toBe(1)
     const s = shapes[0]!
-    if (s.kind === 'path') {
-      expect(s.paint.fill).toBe(false)
-      expect(s.paint.stroke?.widthMM).toBe(0.1)
-      expect(s.d).not.toContain('C ')
+    expect(s.kind === 'path' && s.paint.fill && !s.paint.stroke && !s.d.includes('C ')).toBe(true)
+    // nothing engraved inside the gap; the ring's area ≈ perimeter × width (> 0)
+    const ring = multiPolygonArea(outline!)
+    expect(ring).toBeGreaterThan(0)
+    for (const poly of outline!) {
+      for (const [x, y] of poly[0]!) {
+        // every ring vertex lies on or outside the gap region (tolerate the boundary itself)
+        const inward = pointInMultiPolygon(x * 0.999, y * 0.999, region!) && pointInMultiPolygon(x * 1.001, y * 1.001, region!)
+        expect(inward).toBe(false)
+      }
+    }
+  })
+
+  it('halo outline ring is trimmed by a cut-out above it (clipped like the art)', () => {
+    const text = makeRingTextLayer({ id: 't', text: 'AB', fontId: 'cinzel', haloMM: 0.4, haloMode: 'outline', haloStrokeMM: 0.15 })
+    const outline = layerKeepoutRegion(text, ctx()).outline!
+    // a big cut-out "O" above, struck across the same letters
+    const cut = makeRingTextLayer({ id: 'cut', text: 'O', fontId: 'cinzel', sizeMM: 3, booleanRole: 'subtract' })
+    const layers: Layer[] = [text, cut]
+    const c = ctx()
+    const keepouts = keepoutsAbove(layers, 0, c)
+    expect(keepouts.contributors.length).toBe(1)
+    const cutRegion = keepouts.contributors[0]!.region
+    const overlap = (mp: MultiPolygon) => multiPolygonArea(mp) - multiPolygonArea(safeDifference(mp, cutRegion) ?? mp)
+    expect(overlap(outline)).toBeGreaterThan(0.01) // the ring really does run under the cut-out
+    const own = outlineShapes(outline)
+    const art = { shapes: [...compileLayer(text, c).shapes, ...own], warnings: [] }
+    const clipped = clipCompiled(art, { discs: keepouts.discs, regions: [cutRegion] }, c.toleranceMM)
+    for (const sh of clipped.shapes) {
+      if (sh.kind !== 'path' || !sh.paint.fill) continue
+      const mp = pathToMultiPolygon(sh.d, sh.fillRule ?? 'nonzero', EXPORT_TOLERANCE_MM)
+      expect(overlap(mp)).toBeLessThan(1e-4) // nothing engraved inside the cut-out
     }
   })
 })

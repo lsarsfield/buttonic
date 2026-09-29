@@ -169,53 +169,280 @@ export function ringsToMultiPolygonEvenodd(rings: Ring[]): MultiPolygon {
 }
 
 /**
- * Nonzero (font/SVG-default) sources: reconstruct hole nesting by containment
- * parity (even depth = exterior, odd = hole), group holes under their immediate
- * exterior, then one union() to normalize overlapping sibling contours.
+ * Nonzero (font/SVG-default) fill, EXACTLY: a point is filled where the sum of
+ * the orientations of the contours around it is non-zero.
+ *
+ * Containment parity (the old approach) is only right when contours never
+ * overlap and alternate direction. Real fonts break both: Cinzel, Jost, Roboto
+ * and Playfair build letters from OVERLAPPING contours (a crossbar drawn over
+ * a stem), and some motifs nest same-direction contours — parity then turned
+ * crossbars, serifs and arms into holes inside every knockout and halo.
+ *
+ * Contours are clustered by bounding-box overlap (letters are independent).
+ * A cluster whose contours never cross gets an exact containment tree with
+ * winding sums (no boolean library). A cluster with crossing contours is split
+ * into faces of constant winding (intersection/difference per contour), and
+ * the faces with non-zero winding are unioned.
  */
 export function ringsToMultiPolygonNonzero(rings: Ring[]): MultiPolygon {
-  const usable = rings.filter((r) => r.length >= 3 && Math.abs(ringArea(r)) > 1e-12)
+  // a contour that crosses ITSELF (variable-font outlines: Jost's B, Roboto's 6)
+  // becomes the simple loops it's made of — winding numbers add, so this is exact
+  const usable = rings.flatMap(splitSelfCrossing).filter((r) => r.length >= 3 && Math.abs(ringArea(r)) > 1e-12)
   if (usable.length === 0) return []
+  const boxes = usable.map(ringBox)
 
-  interface Node {
-    ring: Ring
-    absArea: number
-    depth: number
-    parent: Node | null
+  // cluster by bbox overlap (union-find)
+  const parent = usable.map((_, i) => i)
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)))
+  for (let i = 0; i < usable.length; i++) {
+    for (let j = i + 1; j < usable.length; j++) {
+      if (boxesTouch(boxes[i]!, boxes[j]!)) parent[find(i)] = find(j)
+    }
   }
-  const nodes: Node[] = usable
-    .map((ring) => ({ ring, absArea: Math.abs(ringArea(ring)), depth: 0, parent: null as Node | null }))
-    .sort((a, b) => b.absArea - a.absArea) // largest first — any container is processed earlier
+  const clusters = new Map<number, number[]>()
+  usable.forEach((_, i) => {
+    const k = find(i)
+    if (!clusters.has(k)) clusters.set(k, [])
+    clusters.get(k)!.push(i)
+  })
 
-  const placed: Node[] = []
-  for (const node of nodes) {
-    const [rx, ry] = node.ring[0]! // representative point (font contours never touch)
-    const containers = placed.filter((s) => pointInRing(rx, ry, s.ring))
-    node.depth = containers.length
-    if (node.depth % 2 === 1) {
-      // immediate parent = deepest container (== depth-1), tiebreak smallest
-      let best: Node | null = null
-      for (const c of containers) {
-        if (!best || c.depth > best.depth || (c.depth === best.depth && c.absArea < best.absArea)) {
-          best = c
+  const out: MultiPolygon = []
+  for (const idx of clusters.values()) {
+    const rs = idx.map((i) => usable[i]!)
+    if (rs.length === 1) {
+      out.push([rs[0]!])
+      continue
+    }
+    const faces = anyRingsCross(rs, idx.map((i) => boxes[i]!)) ? windingFacesSplit(rs) : windingFacesTree(rs)
+    for (const poly of faces) out.push(poly)
+  }
+  return out
+}
+
+/**
+ * Split a self-crossing ring at its crossings into simple loops (each keeps
+ * its own direction). Rings that don't cross themselves come back as-is.
+ */
+export function splitSelfCrossing(ring: Ring): Ring[] {
+  const n = ring.length
+  if (n < 4) return [ring]
+  // edges sorted by minX; compare only while x-ranges overlap
+  const order = Array.from({ length: n }, (_, i) => i)
+  const lo = (i: number) => Math.min(ring[i]![0], ring[(i + 1) % n]![0])
+  const hi = (i: number) => Math.max(ring[i]![0], ring[(i + 1) % n]![0])
+  order.sort((a, b) => lo(a) - lo(b))
+  const cuts: { t: number; id: number; pt: [number, number] }[][] = Array.from({ length: n }, () => [])
+  let ids = 0
+  for (let a = 0; a < n; a++) {
+    const i = order[a]!
+    const hiI = hi(i)
+    for (let b = a + 1; b < n && lo(order[b]!) <= hiI; b++) {
+      const j = order[b]!
+      if (Math.abs(i - j) <= 1 || Math.abs(i - j) === n - 1) continue // neighbours share a vertex
+      const [ax, ay] = ring[i]!
+      const [bx, by] = ring[(i + 1) % n]!
+      const [cx, cy] = ring[j]!
+      const [dx, dy] = ring[(j + 1) % n]!
+      if (!segsCross(ax, ay, bx, by, cx, cy, dx, dy)) continue
+      const rx = bx - ax, ry = by - ay, sx = dx - cx, sy = dy - cy
+      const den = rx * sy - ry * sx
+      if (Math.abs(den) < 1e-18) continue
+      const t = ((cx - ax) * sy - (cy - ay) * sx) / den
+      const u = ((cx - ax) * ry - (cy - ay) * rx) / den
+      const pt: [number, number] = [ax + rx * t, ay + ry * t]
+      const id = ids++
+      cuts[i]!.push({ t, id, pt })
+      cuts[j]!.push({ t: u, id, pt })
+    }
+  }
+  if (ids === 0) return [ring]
+  const seq: { pt: [number, number]; id: number }[] = []
+  for (let k = 0; k < n; k++) {
+    seq.push({ pt: ring[k]!, id: -1 })
+    for (const c of cuts[k]!.sort((a, b) => a.t - b.t)) seq.push({ pt: c.pt, id: c.id })
+  }
+  // Seifert smoothing: at each crossing, leave along the OTHER strand's outgoing
+  // edge. Every edge keeps its direction (winding is unchanged everywhere) and
+  // the resulting loops touch at the crossings but never cross — whatever order
+  // the crossings interleave in.
+  const m = seq.length
+  const twin = new Map<number, number>()
+  const firstAt = new Map<number, number>()
+  seq.forEach((v, k) => {
+    if (v.id < 0) return
+    const f = firstAt.get(v.id)
+    if (f === undefined) firstAt.set(v.id, k)
+    else {
+      twin.set(k, f)
+      twin.set(f, k)
+    }
+  })
+  const succ = (k: number) => ((twin.get(k) ?? k) + 1) % m
+  const seen = new Uint8Array(m)
+  const loops: Ring[] = []
+  for (let s0 = 0; s0 < m; s0++) {
+    if (seen[s0]) continue
+    const loop: Ring = []
+    for (let k = s0; !seen[k]; k = succ(k)) {
+      seen[k] = 1
+      loop.push(seq[k]!.pt)
+    }
+    loops.push(loop)
+  }
+  return loops.filter((l) => l.length >= 3)
+}
+
+/** A point on the ring that is never a shared crossing vertex: its first edge's midpoint. */
+function sampleOf(r: Ring): [number, number] {
+  const [x0, y0] = r[0]!
+  const [x1, y1] = r[1]!
+  return [(x0 + x1) / 2, (y0 + y1) / 2]
+}
+
+interface RBox {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+function ringBox(r: Ring): RBox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const [x, y] of r) {
+    if (x < minX) minX = x
+    if (y < minY) minY = y
+    if (x > maxX) maxX = x
+    if (y > maxY) maxY = y
+  }
+  return { minX, minY, maxX, maxY }
+}
+const boxesTouch = (a: RBox, b: RBox): boolean =>
+  a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY
+
+const orient = (r: Ring): 1 | -1 => (ringArea(r) > 0 ? 1 : -1)
+
+function segsCross(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number): boolean {
+  const d1 = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx)
+  const d2 = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx)
+  const d3 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+  const d4 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax)
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
+}
+
+/**
+ * Do two segments meet at all — crossing, touching, or overlapping along a
+ * line? (Cinzel's serifs are separate contours sharing the stem's edges: they
+ * never strictly cross, yet the containment tree is wrong for them.)
+ */
+function segsMeet(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number): boolean {
+  const E = 1e-12
+  const o = (px: number, py: number, qx: number, qy: number, rx: number, ry: number) => {
+    const v = (qx - px) * (ry - py) - (qy - py) * (rx - px)
+    return Math.abs(v) < E ? 0 : v > 0 ? 1 : -1
+  }
+  const on = (px: number, py: number, qx: number, qy: number, rx: number, ry: number) =>
+    Math.min(px, qx) - E <= rx && rx <= Math.max(px, qx) + E && Math.min(py, qy) - E <= ry && ry <= Math.max(py, qy) + E
+  const o1 = o(ax, ay, bx, by, cx, cy)
+  const o2 = o(ax, ay, bx, by, dx, dy)
+  const o3 = o(cx, cy, dx, dy, ax, ay)
+  const o4 = o(cx, cy, dx, dy, bx, by)
+  if (o1 !== o2 && o3 !== o4) return true
+  return (
+    (o1 === 0 && on(ax, ay, bx, by, cx, cy)) ||
+    (o2 === 0 && on(ax, ay, bx, by, dx, dy)) ||
+    (o3 === 0 && on(cx, cy, dx, dy, ax, ay)) ||
+    (o4 === 0 && on(cx, cy, dx, dy, bx, by))
+  )
+}
+
+/** Do any two contours' edges meet (cross, touch or overlap)? Then the tree can't be trusted. */
+function anyRingsCross(rs: Ring[], boxes: RBox[]): boolean {
+  for (let i = 0; i < rs.length; i++) {
+    for (let j = i + 1; j < rs.length; j++) {
+      if (!boxesTouch(boxes[i]!, boxes[j]!)) continue
+      const a = rs[i]!
+      const b = rs[j]!
+      const bb = boxes[j]!
+      for (let p = 0; p < a.length; p++) {
+        const [ax, ay] = a[p]!
+        const [bx, by] = a[(p + 1) % a.length]!
+        if (Math.max(ax, bx) < bb.minX || Math.min(ax, bx) > bb.maxX || Math.max(ay, by) < bb.minY || Math.min(ay, by) > bb.maxY) continue
+        for (let q = 0; q < b.length; q++) {
+          const [cx, cy] = b[q]!
+          const [dx, dy] = b[(q + 1) % b.length]!
+          if (segsMeet(ax, ay, bx, by, cx, cy, dx, dy)) return true
         }
       }
-      node.parent = best
     }
-    placed.push(node)
   }
+  return false
+}
 
-  const mp: MultiPolygon = []
-  for (const node of nodes) {
-    if (node.depth % 2 === 0) {
-      const poly: Polygon = [node.ring]
-      for (const other of nodes) {
-        if (other.depth % 2 === 1 && other.parent === node) poly.push(other.ring)
-      }
-      mp.push(poly)
-    }
+/**
+ * Non-crossing contours: the containment tree is the whole story. A contour's
+ * face (inside it, outside its children) has winding = its orientation plus
+ * its ancestors'; faces with non-zero winding are filled.
+ */
+function windingFacesTree(rs: Ring[]): Polygon[] {
+  interface Node {
+    ring: Ring
+    area: number
+    parent: Node | null
+    w: number
   }
-  return safeUnion(mp) ?? mp
+  const nodes: Node[] = rs.map((ring) => ({ ring, area: Math.abs(ringArea(ring)), parent: null, w: 0 }))
+  nodes.sort((a, b) => b.area - a.area) // containers first
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i]!
+    const [px, py] = sampleOf(n.ring)
+    // smallest already-placed contour containing it = its parent
+    for (let j = i - 1; j >= 0; j--) {
+      if (pointInRing(px, py, nodes[j]!.ring)) {
+        n.parent = nodes[j]!
+        break
+      }
+    }
+    n.w = orient(n.ring) + (n.parent ? n.parent.w : 0)
+  }
+  // only contours where filled ⇄ unfilled flips are real boundaries (a
+  // same-direction contour nested in a filled one is interior, not a hole)
+  const filled = (n: Node | null) => (n ? n.w !== 0 : false)
+  const isEdge = (n: Node) => filled(n) !== filled(n.parent)
+  const edgeAncestor = (n: Node): Node | null => {
+    let p = n.parent
+    while (p && !isEdge(p)) p = p.parent
+    return p
+  }
+  const polys = new Map<Node, Polygon>()
+  for (const n of nodes) if (isEdge(n) && filled(n)) polys.set(n, [n.ring])
+  for (const n of nodes) {
+    if (!isEdge(n) || filled(n)) continue
+    const outer = edgeAncestor(n)
+    if (outer) polys.get(outer)?.push(n.ring)
+  }
+  return [...polys.values()]
+}
+
+/** Crossing contours: split into faces of constant winding, keep the non-zero ones. */
+function windingFacesSplit(rs: Ring[]): Polygon[] {
+  let faces: { mp: MultiPolygon; w: number }[] = []
+  for (const ring of rs) {
+    const o = orient(ring)
+    const R: MultiPolygon = [[ring]]
+    const next: { mp: MultiPolygon; w: number }[] = []
+    let rest: MultiPolygon | null = R
+    for (const f of faces) {
+      const inter = run(polygonClipping.intersection, [f.mp, R]) ?? []
+      const diff = safeDifference(f.mp, R) ?? f.mp
+      if (inter.length > 0) next.push({ mp: inter, w: f.w + o })
+      if (diff.length > 0) next.push({ mp: diff, w: f.w })
+      if (rest && rest.length > 0) rest = safeDifference(rest, f.mp)
+    }
+    if (rest && rest.length > 0) next.push({ mp: rest, w: o })
+    faces = next
+  }
+  const filled = faces.filter((f) => f.w !== 0).map((f) => f.mp)
+  if (filled.length === 0) return []
+  return safeUnion(...filled) ?? filled.flat()
 }
 
 // ---------------------------------------------------------------------------

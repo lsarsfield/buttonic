@@ -173,7 +173,7 @@ describe('region clipping', () => {
   })
 })
 
-describe('tick clipping: EXACT difference (pointed) + tool-pass swath (stroked)', () => {
+describe('tick clipping: EXACT difference (pointed and stroked)', () => {
   // A vertical pointed tick, exactly as compileHatch emits it: inner base at
   // y=-4, outer at y=-7, apex at y=-7.3, half-width 0.105 (stroke 0.21).
   const TICK_D = 'M 0.105 -4 L 0.105 -7 L 0 -7.3 L -0.105 -7 L -0.105 -4 Z'
@@ -296,19 +296,57 @@ describe('tick clipping: EXACT difference (pointed) + tool-pass swath (stroked)'
     expect(pointInMultiPolygon(-0.06, -5.5, pieceMp)).toBe(false) // covered side cut
   })
 
-  it('stroked tick (tool-pass): endpoint sits where the full width clears — a stroke cannot end obliquely', () => {
-    // oblique boundary y = x - 6.5; the stroke edge at x=+0.1 reaches it at
-    // y=-6.4 — a full 0.1 (= half-width) before the centreline does at -6.5
+  it('stroked tick: cut EXACTLY along the halo — an oblique boundary leaves an oblique end', () => {
+    // oblique boundary y = x - 6.5 across a 0.2-wide butt stroke from y=-4 to -7:
+    // the remnant is the painted rectangle minus the region — the right edge
+    // (x=+0.1) stops at -6.4, the left (x=-0.1) runs on to -6.6
     const region: MultiPolygon = [[[[-1, -7.5], [1, -5.5], [1, -8.5], [-1, -8.5]]]]
     const shape: Shape = { kind: 'path', d: 'M 0 -4 L 0 -7', paint: strokePaint(0.2, 'butt') }
     const out = clip(shape, region)
     expect(out).toHaveLength(1)
     const s = out[0]!
     if (s.kind !== 'path') throw new Error('expected path')
-    expect((s.d.match(/M/g) || []).length).toBe(1) // outer remnant fully blocked → dropped
-    const nums = [...s.d.matchAll(/([-\d.]+)\s+([-\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])] as const)
-    expect(nums[0]![1]).toBeCloseTo(-4, 9)
-    expect(nums[1]![1]).toBeCloseTo(-6.4, 6) // hw-aware; centreline-only gave -6.5
+    expect(s.paint.fill).toBe(true) // a cut stroke becomes its exact filled outline
+    const mp = pathToMultiPolygon(s.d, s.fillRule ?? 'nonzero', 0.0025)
+    expect(multiPolygonArea(mp)).toBeCloseTo(0.2 * 2.5, 6)
+    expect(pointInMultiPolygon(0.09, -6.35, mp)).toBe(true)
+    expect(pointInMultiPolygon(-0.09, -6.55, mp)).toBe(true) // the oblique end survives
+    expect(pointInMultiPolygon(0.09, -6.45, mp)).toBe(false)
+  })
+
+  it('round-capped tick: the cap never pokes into the region', () => {
+    const region: MultiPolygon = [[[[-1, -7.5], [1, -7.5], [1, -6.5], [-1, -6.5]]]]
+    const shape: Shape = { kind: 'line', x1: 0, y1: -4, x2: 0, y2: -6.45, paint: strokePaint(0.2, 'round') }
+    const out = clip(shape, region)
+    expect(out).toHaveLength(1)
+    const s = out[0]!
+    if (s.kind !== 'path') throw new Error('expected the cut cap as a filled path')
+    const mp = pathToMultiPolygon(s.d, s.fillRule ?? 'nonzero', 0.0025)
+    const ys = mp.flatMap((p) => p.flatMap((r) => r.map(([, y]) => y)))
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(-6.5 - 1e-9) // cap sliced flat at the region
+    expect(pointInMultiPolygon(0, -6.48, mp)).toBe(true) // the rest of the cap stays
+  })
+
+  it('a stroked ring crossing a region is cut exactly; its untouched arc stays a stroke', () => {
+    const region: MultiPolygon = [[[[-1, -7], [1, -7], [1, -5], [-1, -5]]]]
+    const ring: Shape = { kind: 'circle', rMM: 6, paint: strokePaint(0.3, 'butt') }
+    const out = clip(ring, region)
+    const filled = out.filter((s) => s.kind === 'path' && s.paint.fill)
+    const stroked = out.filter((s) => s.paint.stroke)
+    expect(filled.length).toBeGreaterThan(0)
+    expect(stroked.length).toBeGreaterThan(0)
+    for (const f of filled) {
+      if (f.kind !== 'path') continue
+      const mp = pathToMultiPolygon(f.d, f.fillRule ?? 'nonzero', 0.0025)
+      for (const poly of mp) for (const [x, y] of poly[0]!) expect(Math.abs(x) >= 1 - 1e-6 || y > -5 - 1e-6 || y < -7 + 1e-6).toBe(true)
+    }
+  })
+
+  it('a remnant thinner than 0.05 mm is dropped (minimum surviving piece)', () => {
+    // region leaves a 0.03 sliver of the 0.2-wide tick's right flank
+    const region: MultiPolygon = [[[[-1, -6], [0.07, -6], [0.07, -5], [-1, -5]]]]
+    const shape: Shape = { kind: 'path', d: 'M 0 -5.5 L 0 -5.8', paint: strokePaint(0.2, 'butt') }
+    expect(clip(shape, region)).toHaveLength(0)
   })
 
   it('region swallowing the middle: two pieces with exact horizontal cut boundaries', () => {
