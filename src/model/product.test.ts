@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { makeBlankDoc } from './types'
-import { centreKindOf, coerceProductOptions, defaultCentreMM, FINISH_GROUPS, PRODUCTS, STYLES } from './product'
+import { makeBlankDoc, makeRingLayer } from './types'
+import { parseDoc } from './serialize'
+import { exportSvg } from '../io/exportSvg'
+import { centreKindOf, coerceProductOptions, defaultCentreMM, FINISH_GROUPS, layerRelief, PRODUCTS, reliefGroups, STYLES } from './product'
 import { FINISH_IDS } from './types'
 import { specSheet } from '../io/specSheet'
 
@@ -65,5 +67,49 @@ describe('spec sheet', () => {
       Finish        Antique copper, distressed
       Artwork       Vector outlines, mm-true (SVG; text converted to outlines). Convert to AI / PDF / EPS if required."
     `)
+  })
+})
+
+describe('per-layer relief', () => {
+  const doc = () => ({
+    ...makeBlankDoc(),
+    name: 'Mixed',
+    layers: [
+      makeRingLayer({ id: 'rim', name: 'Rim', mode: 'stroke', radiusMM: 8.2, strokeMM: 0.3, relief: 'debossed' }),
+      makeRingLayer({ id: 'ring', name: 'Ring', mode: 'stroke', radiusMM: 6, strokeMM: 0.3 }),
+    ],
+  })
+
+  it('a layer follows the button unless it has its own relief', () => {
+    const d = doc()
+    expect(layerRelief(d.layers[0]!, d)).toBe('debossed')
+    expect(layerRelief(d.layers[1]!, d)).toBe('embossed')
+    expect([...reliefGroups(d).keys()].sort()).toEqual(['debossed', 'embossed'])
+  })
+
+  it('the die SVG groups each depth separately; a single-relief die stays flat', () => {
+    const mixed = exportSvg(doc()).svg
+    expect(mixed).toMatch(/<g id="relief-raised"[^>]*>\s*<g id="layer-ring"/)
+    expect(mixed).toMatch(/<g id="relief-sunk"[^>]*>\s*<g id="layer-rim"/)
+    const single = exportSvg({ ...doc(), layers: doc().layers.map((l) => ({ ...l, relief: 'inherit' as const })) }).svg
+    expect(single).not.toMatch(/relief-/)
+    const only = exportSvg(doc(), { expandInstances: true, mirrorForDie: false, includeBlankOutline: false, onlyLayers: new Set(['rim']) }).svg
+    expect(only).toMatch(/layer-rim/)
+    expect(only).not.toMatch(/layer-ring/)
+  })
+
+  it('the spec sheet lists which layers are raised and which are sunk', () => {
+    expect(specSheet(doc())).toMatch(/Logo display\s+Mixed relief — (debossed: Rim; embossed: Ring|embossed: Ring; debossed: Rim)/)
+  })
+
+  it('v13 documents: every layer follows the button', () => {
+    const v13 = { ...makeBlankDoc(), version: 13 } as unknown as { layers: Record<string, unknown>[] } & Record<string, unknown>
+    v13.layers = v13.layers.map((l) => {
+      const { relief, ...rest } = l
+      void relief
+      return rest
+    })
+    const r = parseDoc(JSON.stringify(v13))
+    expect(r.ok && r.doc.layers.every((l) => l.relief === 'inherit')).toBe(true)
   })
 })

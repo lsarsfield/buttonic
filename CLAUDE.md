@@ -29,7 +29,7 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **13**), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **14**), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
   `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
   v8 centre `motifId` (built-in motif as a third centre source, inert unless
@@ -175,6 +175,14 @@ param, not an error.)
     pass uses a low-res proxy face mesh. `postFinish` (v13, was v12 `postMetal`):
     the open-top post takes ANY cap finish (silver→dull nickel, copper→the new
     'copper' Polished copper), rendered darkened for sitting down a pit.
+    MIXED RELIEF (v14): every layer has `relief` 'inherit' | embossed | debossed |
+    lasered (`layerRelief`, `reliefGroups` in product.ts). The 3D pipeline
+    rasterizes one mask per class via `exportSvg({onlyLayers})` (each layer still
+    clipped by ALL keepouts), and `buildHeightField(masks)` puts raised +d, sunk −d,
+    field midway for "high ground" (cavity) purposes; raised art inside a sunk area
+    lands at face level. A mixed die file wraps layers in `relief-raised` /
+    `relief-sunk` / `relief-lasered` groups (single-relief output unchanged); the
+    spec sheet lists layers per depth. `regionKey` ignores `relief`.
     `studio` backdrop = white sweep + a bright PMREM
     environment, the button standing on its tack/swivel shank, shot low (62°).
   - `heightAsync.ts` rasterizes the EXACT `exportSvg` die (halos/cut-outs/inverts

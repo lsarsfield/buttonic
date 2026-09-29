@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 13
+export const DOC_VERSION = 14
 
 /** Whether a content layer engraves its geometry or subtracts it from below. */
 export type BooleanRole = 'draw' | 'subtract'
@@ -91,6 +91,8 @@ export type ProductStyle = ButtonStyle | RivetStyle
 export type Material = 'brass' | 'die-cast'
 /** How the die art appears: raised, sunk into the face, or laser-marked flat. */
 export type LogoDisplay = 'embossed' | 'debossed' | 'lasered'
+/** A layer's own relief: follow the button's logo display, or its own (mixed-relief dies). */
+export type LayerRelief = 'inherit' | LogoDisplay
 
 export interface ButtonDoc {
   version: number
@@ -125,6 +127,12 @@ export interface LayerBase {
   visible: boolean
   /** Whole-ring rotation, applied at render time — never part of compiled geometry. */
   phaseDeg: number
+  /**
+   * How this layer's art is struck: 'inherit' follows the button's logo
+   * display; raised / sunk / lasered per layer makes a mixed-relief die.
+   * Never part of compiled geometry.
+   */
+  relief: LayerRelief
 }
 
 /** Circle stroke or filled annulus: borders, rims, grooves. */
@@ -329,6 +337,7 @@ export function makeRingLayer(patch: Partial<RingLayer> = {}): RingLayer {
     name: 'Ring',
     visible: true,
     phaseDeg: 0,
+    relief: 'inherit',
     mode: 'stroke',
     radiusMM: 8.2,
     strokeMM: 0.15,
@@ -345,6 +354,7 @@ export function makeHatchLayer(patch: Partial<HatchLayer> = {}): HatchLayer {
     name: 'Hatch',
     visible: true,
     phaseDeg: 0,
+    relief: 'inherit',
     count: 180,
     rInnerMM: 4,
     rOuterMM: 8,
@@ -366,6 +376,7 @@ export function makeRepeatLayer(patch: Partial<RepeatLayer> = {}): RepeatLayer {
     name: 'Repeat',
     visible: true,
     phaseDeg: 0,
+    relief: 'inherit',
     source: { kind: 'builtin', motifId: 'chevron' },
     count: 48,
     radiusMM: 6.5,
@@ -392,6 +403,7 @@ export function makeRingTextLayer(patch: Partial<RingTextLayer> = {}): RingTextL
     name: 'Ring text',
     visible: true,
     phaseDeg: 0,
+    relief: 'inherit',
     text: 'SPECIMEN',
     fontId: 'cinzel',
     sizeMM: 1.8,
@@ -422,6 +434,7 @@ export function makeCenterLayer(patch: Partial<CenterLayer> = {}): CenterLayer {
     name: 'Centre',
     visible: true,
     phaseDeg: 0,
+    relief: 'inherit',
     sourceType: 'glyph',
     text: 'D',
     fontId: 'unifraktur',
@@ -450,6 +463,7 @@ export function makeBendLayer(patch: Partial<BendLayer> = {}): BendLayer {
     name: 'Bend SVG',
     visible: true,
     phaseDeg: 0,
+    relief: 'inherit',
     assetId: null,
     rInnerMM: 5.5,
     rOuterMM: 7.5,

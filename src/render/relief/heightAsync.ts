@@ -1,6 +1,7 @@
 import type { ButtonDoc } from '../../model/types'
 import { exportSvg } from '../../io/exportSvg'
-import { buildHeightField, coverageFromRgba, reliefParamsOf, type HeightField, type ReliefParams } from './heightField'
+import { reliefGroups } from '../../model/product'
+import { buildHeightField, masksFromRasters, reliefParamsOf, type HeightField, type ReliefParams } from './heightField'
 import type { HeightDone, HeightJob } from './heightWorker'
 
 /**
@@ -34,13 +35,14 @@ export function heightKey(doc: ButtonDoc, fontsRevision: number, assetsRevision:
   ])
 }
 
-/** Rasterize the die art (black on transparent) over the face, n × n. */
-export async function rasterizeDie(doc: ButtonDoc, n: number): Promise<Uint8ClampedArray> {
+/** Rasterize the die art (black on transparent) over the face, n × n — optionally only some layers. */
+export async function rasterizeDie(doc: ButtonDoc, n: number, onlyLayers?: ReadonlySet<string>): Promise<Uint8ClampedArray> {
   const { svg } = exportSvg(doc, {
     expandInstances: false,
     mirrorForDie: false,
     includeBlankOutline: false,
     embedProject: false,
+    onlyLayers,
   })
   const sized = svg.replace(/width="[^"]*mm" height="[^"]*mm"/, `width="${n}" height="${n}"`)
   const url = URL.createObjectURL(new Blob([sized], { type: 'image/svg+xml' }))
@@ -95,14 +97,33 @@ function getWorker(): Worker | null {
   return worker
 }
 
-function buildOffThread(rgba: Uint8ClampedArray, n: number, spanMM: number, params: ReliefParams): Promise<HeightField> {
+type Rasters = HeightJob['rasters']
+
+/** One raster per relief class present: a mixed-relief die rasterizes each depth's layers separately. */
+async function rasterizeClasses(doc: ButtonDoc, n: number): Promise<Rasters> {
+  const groups = reliefGroups(doc)
+  const key = { embossed: 'raised', debossed: 'sunk', lasered: 'lasered' } as const
+  const out: Rasters = {}
+  if (groups.size <= 1) {
+    const only = [...groups.keys()][0] ?? doc.logoDisplay
+    out[key[only]] = await rasterizeDie(doc, n)
+    return out
+  }
+  for (const [relief, members] of groups) {
+    out[key[relief]] = await rasterizeDie(doc, n, new Set(members.map((m) => m.id)))
+  }
+  return out
+}
+
+function buildOffThread(rasters: Rasters, n: number, spanMM: number, params: ReliefParams): Promise<HeightField> {
   const w = getWorker()
-  if (!w) return Promise.resolve(buildHeightField(coverageFromRgba(rgba, n), n, spanMM, params))
+  if (!w) return Promise.resolve(buildHeightField(masksFromRasters(rasters, n), n, spanMM, params))
   const jobId = ++jobSeq
-  const job: HeightJob = { jobId, rgba, n, spanMM, params }
+  const job: HeightJob = { jobId, rasters, n, spanMM, params }
+  const transfer = Object.values(rasters).map((r) => (r as Uint8ClampedArray).buffer)
   return new Promise<HeightField>((resolve, reject) => {
     pending.set(jobId, { resolve, reject })
-    w.postMessage(job, [rgba.buffer])
+    w.postMessage(job, transfer)
   }).catch(() => {
     // worker died mid-job: the raster was transferred away, so re-rasterize is
     // the caller's job — signal with a plain rejection
@@ -130,9 +151,9 @@ export function computeHeightField(
     const params = reliefParams(doc)
     let field: HeightField
     try {
-      field = await buildOffThread(await rasterizeDie(doc, n), n, doc.diameterMM, params)
+      field = await buildOffThread(await rasterizeClasses(doc, n), n, doc.diameterMM, params)
     } catch {
-      field = buildHeightField(coverageFromRgba(await rasterizeDie(doc, n), n), n, doc.diameterMM, params)
+      field = buildHeightField(masksFromRasters(await rasterizeClasses(doc, n), n), n, doc.diameterMM, params)
     }
     if (n === HEIGHT_N) last = { key, field }
     return field

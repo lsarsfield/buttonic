@@ -1,5 +1,5 @@
-import type { ButtonDoc } from '../model/types'
-import { CENTRE_LABELS, centreKindOf, isOpening } from '../model/product'
+import type { ButtonDoc, LogoDisplay } from '../model/types'
+import { CENTRE_LABELS, centreKindOf, isOpening, reliefGroups } from '../model/product'
 import { clipCompiled } from '../geometry/clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import {
@@ -37,6 +37,12 @@ export interface SvgExportOptions {
   includeBlankOutline: boolean
   /** Embed the project JSON in <metadata> (default true; thumbnails pass false). */
   embedProject?: boolean
+  /**
+   * Emit only these layers' markup — every layer still casts its knockouts and
+   * halos, so each emitted layer is exactly as in the full die (the 3D view
+   * rasterizes raised / sunk / lasered art separately this way).
+   */
+  onlyLayers?: ReadonlySet<string>
 }
 
 export const DEFAULT_SVG_OPTIONS: SvgExportOptions = {
@@ -181,7 +187,7 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
     getSvgAsset,
   }
 
-  const layerMarkup: string[] = []
+  const layerMarkup: { id: string; markup: string }[] = []
   const defs: string[] = []
 
   doc.layers.forEach((layer, index) => {
@@ -241,9 +247,10 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
     if (body.length === 0) return
 
     const phase = layer.phaseDeg !== 0 ? ` transform="rotate(${fmt(layer.phaseDeg)})"` : ''
-    layerMarkup.push(
-      `<g id="layer-${layer.id}" data-name="${xmlEscape(layer.name)}"${phase}>\n${body.join('\n')}\n</g>`,
-    )
+    layerMarkup.push({
+      id: layer.id,
+      markup: `<g id="layer-${layer.id}" data-name="${xmlEscape(layer.name)}"${phase}>\n${body.join('\n')}\n</g>`,
+    })
   })
 
   const outline = options.includeBlankOutline
@@ -252,6 +259,30 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
         ? `\n<circle r="${fmt(holeR)}" fill="none" stroke="#000000" stroke-width="0.02" data-name="${centreName}"/>`
         : '')
     : ''
+  // a mixed-relief die: the maker needs each depth as its own group (all still
+  // plain black); a single-relief die keeps the flat layer list
+  const emitted = options.onlyLayers ? layerMarkup.filter((m) => options.onlyLayers!.has(m.id)) : layerMarkup
+  const groups = reliefGroups(doc)
+  let engravingBody: string
+  if (groups.size > 1 && !options.onlyLayers) {
+    const RELIEF_GROUP: Record<LogoDisplay, [string, string]> = {
+      embossed: ['relief-raised', 'Raised (embossed)'],
+      debossed: ['relief-sunk', 'Sunk (debossed)'],
+      lasered: ['relief-lasered', 'Lasered (flush marking)'],
+    }
+    engravingBody = [...groups.entries()]
+      .map(([relief, members]) => {
+        const ids = new Set(members.map((m) => m.id))
+        const inner = emitted.filter((m) => ids.has(m.id)).map((m) => m.markup)
+        if (inner.length === 0) return ''
+        const [gid, label] = RELIEF_GROUP[relief]
+        return `<g id="${gid}" data-name="${label}">\n${inner.join('\n')}\n</g>`
+      })
+      .filter(Boolean)
+      .join('\n')
+  } else {
+    engravingBody = emitted.map((m) => m.markup).join('\n')
+  }
   const mirror = options.mirrorForDie ? ` transform="scale(-1 1)"` : ''
   const defsBlock = defs.length > 0 ? `<defs>\n${defs.join('\n')}\n</defs>\n` : ''
   // the order spec travels with the artwork (skipped for thumbnails / rasters)
@@ -269,7 +300,7 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
 ${desc}${meta}
 ${defsBlock}<g id="engraving"${mirror}>
 ${outline}
-${layerMarkup.join('\n')}
+${engravingBody}
 </g>
 </svg>`
 

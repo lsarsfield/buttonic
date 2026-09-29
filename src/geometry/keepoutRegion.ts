@@ -106,6 +106,7 @@ export function buildKeepoutRegion(
  */
 export function regionKey(layer: Layer, ctxKey: string): string {
   // invertOverBare decides what a cut-out engraves, never the region it casts
-  const norm = 'invertOverBare' in layer ? { ...layer, invertOverBare: false } : layer
+  // (nor does relief: how a layer is struck never changes the region it casts)
+  const norm = { ...('invertOverBare' in layer ? { ...layer, invertOverBare: false } : layer), relief: 'inherit' }
   return ctxKey + '|' + JSON.stringify({ ...norm, phaseDeg: 0, name: '' })
 }

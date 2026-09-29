@@ -101,6 +101,13 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
     const { postMetal, ...rest } = doc
     return { postFinish: postMetal === 'copper' ? 'copper' : 'nickel', ...rest }
   },
+  // v14: per-layer relief (mixed raised / sunk / lasered dies) — every layer follows the button
+  14: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) =>
+      typeof layer === 'object' && layer !== null ? { relief: 'inherit', ...layer } : layer,
+    ),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

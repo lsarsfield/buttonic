@@ -1,4 +1,4 @@
-import { buildHeightField, coverageFromRgba, type HeightField, type ReliefParams } from './heightField'
+import { buildHeightField, masksFromRasters, type HeightField, type ReliefParams } from './heightField'
 
 /**
  * Off-thread height-field building: the exact EDT at 2048² costs ~1 s, far too
@@ -9,7 +9,8 @@ import { buildHeightField, coverageFromRgba, type HeightField, type ReliefParams
 
 export interface HeightJob {
   jobId: number
-  rgba: Uint8ClampedArray
+  /** One RGBA raster per relief class present (a mixed-relief die has several). */
+  rasters: { raised?: Uint8ClampedArray; sunk?: Uint8ClampedArray; lasered?: Uint8ClampedArray }
   n: number
   spanMM: number
   params: ReliefParams
@@ -23,9 +24,9 @@ const scope = self as unknown as {
 }
 
 scope.onmessage = (e) => {
-  const { jobId, rgba, n, spanMM, params } = e.data
+  const { jobId, rasters, n, spanMM, params } = e.data
   try {
-    const field = buildHeightField(coverageFromRgba(rgba, n), n, spanMM, params)
+    const field = buildHeightField(masksFromRasters(rasters, n), n, spanMM, params)
     scope.postMessage({ jobId, field }, [
       field.disp.buffer,
       field.normal.buffer,

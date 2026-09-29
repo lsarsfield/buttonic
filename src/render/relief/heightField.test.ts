@@ -378,3 +378,30 @@ describe('relief walls', { timeout: 60_000 }, () => {
     }
   })
 })
+
+describe('mixed relief', { timeout: 60_000 }, () => {
+  it('raised and sunk art on one die: +depth, −depth, the field between them at 0', () => {
+    const raised = discCoverage(1.2)
+    // a ring well away from the disc: sunk
+    const outer = discCoverage(4)
+    const inner = discCoverage(3)
+    const sunk = new Float32Array(N * N)
+    for (let i = 0; i < N * N; i++) sunk[i] = Math.max(0, outer[i]! - inner[i]!)
+    const f = buildHeightField({ raised, sunk }, N, SPAN, params())
+    const n = f.dispN
+    const at = (xMM: number, yMM: number) =>
+      f.disp[Math.floor(((yMM + SPAN / 2) / SPAN) * n) * n + Math.floor(((xMM + SPAN / 2) / SPAN) * n)]!
+    expect(at(0, 0)).toBeCloseTo(DEPTH, 2) // raised disc
+    expect(at(3.5, 0)).toBeCloseTo(-DEPTH, 2) // sunk ring
+    expect(at(2.2, 0)).toBeCloseTo(0, 4) // the field
+    // the field sits midway: neither "low" (raised-only) nor "high" (sunk-only)
+    const lowness = f.occl[px(2.2, 0) * 4 + 1]! / 255
+    expect(lowness).toBeCloseTo(0.5, 1)
+  })
+
+  it('lasered layers are flush but located by the art mask', () => {
+    const f = buildHeightField({ raised: discCoverage(1), lasered: discCoverage(0.6, 4, 0) }, N, SPAN, params())
+    expect(f.occl[px(4, 0) * 4 + 2]!).toBeGreaterThan(200)
+    expect(f.occl[px(0, 0) * 4 + 2]!).toBe(0)
+  })
+})

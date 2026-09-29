@@ -443,6 +443,18 @@ export function fromHalf(h: number): number {
   return e === 0 ? (m / 1024) * 2 ** -14 : (1 + m / 1024) * 2 ** (e - 15)
 }
 
+/** RGBA rasters per relief class → coverage masks. */
+export function masksFromRasters(
+  r: { raised?: Uint8ClampedArray; sunk?: Uint8ClampedArray; lasered?: Uint8ClampedArray },
+  n: number,
+): ReliefMasks {
+  return {
+    raised: r.raised ? coverageFromRgba(r.raised, n) : undefined,
+    sunk: r.sunk ? coverageFromRgba(r.sunk, n) : undefined,
+    lasered: r.lasered ? coverageFromRgba(r.lasered, n) : undefined,
+  }
+}
+
 /** Alpha channel of an RGBA raster as 0..1 coverage. */
 export function coverageFromRgba(rgba: Uint8ClampedArray, n: number): Float32Array {
   const cov = new Float32Array(n * n)
@@ -451,25 +463,34 @@ export function coverageFromRgba(rgba: Uint8ClampedArray, n: number): Float32Arr
 }
 
 /** Coverage (0..1, n², rows top→bottom) → the full height field. */
-export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p: ReliefParams): HeightField {
-  const mmPerPx = spanMM / n
-  const V = spanMM / 2
+/** Coverage masks by how the art is struck (a mixed-relief die has more than one). */
+export interface ReliefMasks {
+  raised?: Float32Array
+  sunk?: Float32Array
+  lasered?: Float32Array
+}
+
+/**
+ * Coverage → drafted-wall occupancy (0 field … 1 art): exact signed distance,
+ * lattice smoothing, and a wall width that never exceeds WALL_SHARE of the
+ * local feature (so small art keeps a flat top).
+ */
+function occupancy(cov: Float32Array, n: number, mmPerPx: number, wallMM: number): Float32Array {
   const sd = signedDistance(cov, n, mmPerPx)
   // ~1.6 px sigma: kills pixel-lattice terracing on diagonal walls
   boxBlur(sd, n, 2)
   boxBlur(sd, n, 2)
 
   // local feature half-width: the deepest inside-distance nearby (a separable
-  // max filter over the wall's reach). A wall never takes more than WALL_SHARE
-  // of the feature's width — else a 1 mm star or a full stop becomes a tent.
-  // the search must reach a feature's medial axis from its edge: a feature is
-  // only limited when narrower than wall/(2·share), so that plus a wall is
-  // far enough. (Reaching only a wall halved every wall and kinked its base.)
-  const reach = Math.max(1, Math.ceil((p.wallMM / (2 * WALL_SHARE) + p.wallMM) / mmPerPx))
+  // max filter). The search must reach a feature's medial axis from its edge:
+  // a feature is only limited when narrower than wall/(2·share), so that plus
+  // a wall is far enough. (Reaching only a wall halved every wall and kinked
+  // its base.)
+  const reach = Math.max(1, Math.ceil((wallMM / (2 * WALL_SHARE) + wallMM) / mmPerPx))
   const half = new Float32Array(n * n)
   for (let i = 0; i < n * n; i++) half[i] = Math.max(0, sd[i]!)
   maxFilter(half, n, reach)
-  // gaps between features are bounded the same way (debossed art: the field between strokes)
+  // gaps between features are bounded the same way (the field between strokes)
   const gap = new Float32Array(n * n)
   for (let i = 0; i < n * n; i++) gap[i] = Math.max(0, -sd[i]!)
   maxFilter(gap, n, reach)
@@ -480,23 +501,54 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
   for (let i = 0; i < n * n; i++) {
     const hw = half[i]! > 0 ? half[i]! : Infinity
     const gw = gap[i]! > 0 ? gap[i]! : Infinity
-    wmap[i] = Math.max(0.02, Math.min(p.wallMM, WALL_SHARE * 2 * Math.min(hw, gw)))
+    wmap[i] = Math.max(0.02, Math.min(wallMM, WALL_SHARE * 2 * Math.min(hw, gw)))
   }
-  const smoothR = Math.max(1, Math.round(p.wallMM / mmPerPx / 2))
+  const smoothR = Math.max(1, Math.round(wallMM / mmPerPx / 2))
   boxBlur(wmap, n, smoothR)
   boxBlur(wmap, n, smoothR)
 
-  const sign = p.display === 'embossed' ? 1 : p.display === 'debossed' ? -1 : 0
-  // F: 1 on the HIGH ground, 0 on the low (for debossed art the field is high;
-  // lasered art is flush, so everything is high ground)
+  const occ = new Float32Array(n * n)
+  for (let i = 0; i < n * n; i++) occ[i] = wallProfile(sd[i]!, wmap[i]!)
+  return occ
+}
+
+/**
+ * Coverage masks (0..1, n², rows top→bottom) → the full height field. A bare
+ * Float32Array is one class of art struck per `p.display`. Raised art stands
+ * +depth, sunk art −depth, lasered art is flush (marked in finishMaps).
+ */
+export function buildHeightField(
+  input: Float32Array | ReliefMasks,
+  n: number,
+  spanMM: number,
+  p: ReliefParams,
+): HeightField {
+  const mmPerPx = spanMM / n
+  const V = spanMM / 2
+  const masks: ReliefMasks =
+    input instanceof Float32Array
+      ? p.display === 'embossed'
+        ? { raised: input }
+        : p.display === 'debossed'
+          ? { sunk: input }
+          : { lasered: input }
+      : input
+  const occR = masks.raised ? occupancy(masks.raised, n, mmPerPx, p.wallMM) : null
+  const occS = masks.sunk ? occupancy(masks.sunk, n, mmPerPx, p.wallMM) : null
+  const laser = masks.lasered ?? null
+
+  // F: 1 on the HIGH ground, 0 on the low. The field sits low under raised
+  // art, high over sunk art, midway on a mixed die; lasered art is flush.
+  const fieldLevel = occR ? (occS ? 0.5 : 0) : 1
   const F = new Float32Array(n * n)
   const h = new Float32Array(n * n)
   const art = new Float32Array(n * n)
   for (let i = 0; i < n * n; i++) {
-    const occ = wallProfile(sd[i]!, wmap[i]!)
-    art[i] = occ
-    h[i] = sign * p.depthMM * occ
-    F[i] = sign > 0 ? occ : sign < 0 ? 1 - occ : 1
+    const r = occR ? occR[i]! : 0
+    const sk = occS ? occS[i]! : 0
+    h[i] = p.depthMM * (r - sk)
+    F[i] = fieldLevel + r * (1 - fieldLevel) - sk * fieldLevel
+    art[i] = laser ? laser[i]! : 0
   }
 
   // neighbourhood height (~0.12 mm sigma) → cavity = enclosed by higher ground

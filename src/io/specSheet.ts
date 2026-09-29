@@ -5,6 +5,7 @@ import {
   LOGO_DISPLAYS,
   MATERIALS,
   PRODUCTS,
+  reliefGroups,
   STYLES,
 } from '../model/product'
 import type { ButtonDoc } from '../model/types'
@@ -14,6 +15,17 @@ import type { ButtonDoc } from '../model/types'
  * the trade's own terms, next to the vector artwork. Supplier-neutral: no
  * quantities, prices or lead times.
  */
+/** Single relief: its name. Mixed relief: each depth with the layers struck that way. */
+function logoLine(doc: ButtonDoc): string {
+  const groups = reliefGroups(doc)
+  const label = (r: string) => LOGO_DISPLAYS.find((l) => l.value === r)!.label
+  if (groups.size <= 1) return label([...groups.keys()][0] ?? doc.logoDisplay)
+  return (
+    'Mixed relief — ' +
+    [...groups.entries()].map(([r, ls]) => `${label(r).toLowerCase()}: ${ls.map((l) => l.name).join(', ')}`).join('; ')
+  )
+}
+
 export function specSheet(doc: ButtonDoc): string {
   const centre = centreKindOf(doc)
   const product = doc.product === 'rivet' ? 'Jeans rivet' : 'Jeans button'
@@ -28,7 +40,7 @@ export function specSheet(doc: ButtonDoc): string {
   if (centre === 'hole') lines.push(['Post', FINISH_LABELS[doc.postFinish]])
   lines.push(
     ['Material', MATERIALS[doc.material].label === 'Die-cast' ? 'Die-cast alloy' : 'Brass'],
-    ['Logo display', LOGO_DISPLAYS.find((l) => l.value === doc.logoDisplay)!.label],
+    ['Logo display', logoLine(doc)],
     ['Finish', `${FINISH_LABELS[doc.finish]}${doc.distressed ? ', distressed' : ''}`],
     ['Artwork', 'Vector outlines, mm-true (SVG; text converted to outlines). Convert to AI / PDF / EPS if required.'],
   )

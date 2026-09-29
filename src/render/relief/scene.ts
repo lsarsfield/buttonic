@@ -582,7 +582,8 @@ export class ButtonScene {
     const spec = this.spec!
     const look = {
       patina: finishOf(spec.finish).patina,
-      lasered: spec.logoDisplay === 'lasered',
+      // lasered art (whole design or individual layers) is located by the field's art mask
+      lasered: true,
       distressed: spec.distressed,
       grain: finishOf(spec.finish).grain ?? 0,
     }

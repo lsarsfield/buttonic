@@ -1,4 +1,4 @@
-import { FINISH_IDS, type Finish, type LogoDisplay, type Material, type Product, type ProductStyle } from './types'
+import { FINISH_IDS, type Finish, type LayerRelief, type LogoDisplay, type Material, type Product, type ProductStyle } from './types'
 
 /**
  * The trade's product options for jeans hardware — the vocabulary jeans-button
@@ -213,4 +213,33 @@ export function coerceProductOptions(raw: {
     ? (raw.postFinish as Finish)
     : 'nickel'
   return { product, style, material, logoDisplay, distressed: raw.distressed === true, postFinish }
+}
+
+/** Per-layer relief choices: follow the button, or this layer's own. */
+export const LAYER_RELIEFS: readonly { value: LayerRelief; label: string; title: string }[] = [
+  { value: 'inherit', label: 'As button', title: "Follow the button's logo display" },
+  { value: 'embossed', label: 'Raised', title: 'This layer stands raised (embossed)' },
+  { value: 'debossed', label: 'Sunk', title: 'This layer is sunk into the face (debossed)' },
+  { value: 'lasered', label: 'Lasered', title: 'This layer is laser-marked flat' },
+]
+
+/** How a layer is actually struck (an unknown value follows the button). */
+export function layerRelief(layer: { relief?: string }, doc: { logoDisplay: LogoDisplay }): LogoDisplay {
+  const r = layer.relief
+  return r === 'embossed' || r === 'debossed' || r === 'lasered' ? r : doc.logoDisplay
+}
+
+/** The visible layers grouped by how they're struck (a mixed-relief die has more than one group). */
+export function reliefGroups(doc: {
+  logoDisplay: LogoDisplay
+  layers: readonly { id: string; name: string; visible: boolean; relief?: string }[]
+}): Map<LogoDisplay, { id: string; name: string }[]> {
+  const out = new Map<LogoDisplay, { id: string; name: string }[]>()
+  for (const l of doc.layers) {
+    if (!l.visible) continue
+    const r = layerRelief(l, doc)
+    if (!out.has(r)) out.set(r, [])
+    out.get(r)!.push({ id: l.id, name: l.name })
+  }
+  return out
 }

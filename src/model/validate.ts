@@ -56,6 +56,7 @@ function checkLayer(value: unknown, index: number): string | null {
   if (!isStr(value.name)) return `layer ${index} is missing a name`
   if (!isBool(value.visible)) return `layer ${index} ("${value.name}") is missing "visible"`
   if (!isNum(value.phaseDeg)) return `layer ${index} ("${value.name}") is missing "phaseDeg"`
+  if (!isStr(value.relief)) return `layer ${index} ("${value.name}") is missing "relief"`
 
   const required = REQUIRED[type as LayerType]
   for (const [field, kind] of Object.entries(required)) {
