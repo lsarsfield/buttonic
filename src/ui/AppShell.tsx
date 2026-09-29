@@ -14,6 +14,7 @@ import { ExportDialog } from './dialogs/ExportDialog'
 import { TemplatePicker } from './dialogs/TemplatePicker'
 import { Inspector } from './Inspector'
 import { LayerList } from './LayerList'
+import { ProfileSection } from './ProfileSection'
 import { StatusBar } from './StatusBar'
 import { Toolbar } from './Toolbar'
 
@@ -35,6 +36,7 @@ const STATUS_MESSAGES: Record<WorkspaceStatus['kind'], string | null> = {
 export function AppShell() {
   const [dialog, setDialog] = useState<Dialog>('none')
   const mode3d = useEngraver((s) => s.view.mode === '3d')
+  const showGuides = useEngraver((s) => s.view.showGuides)
   const [statusNote, setStatusNote] = useState<string | null>(STATUS_MESSAGES[getStatus().kind])
   const [flash, setFlash] = useState<string | null>(null)
   const [dropDepth, setDropDepth] = useState(0)
@@ -189,7 +191,10 @@ export function AppShell() {
             <ReliefStage />
           </Suspense>
         ) : (
-          <SvgStage />
+          <>
+            <SvgStage />
+            {showGuides && <ProfileSection />}
+          </>
         )}
         {dropDepth > 0 && <div className="drop-overlay">Drop to open</div>}
         {banner && (

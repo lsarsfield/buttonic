@@ -1,6 +1,7 @@
 import { memo, useEffect } from 'react'
 import type { ButtonDoc, Layer } from '../model/types'
 import { isLocalFontId } from '../model/types'
+import { layerRelief } from '../model/product'
 import { clipCompiled } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import { annulusPathD } from '../geometry/format'
@@ -22,6 +23,7 @@ export function DocRenderer() {
   const assetsRevision = useEngraver((s) => s.assetsRevision)
   const fontsRevision = useEngraver((s) => s.fontsRevision)
   useEngraver((s) => s.regionsRevision) // re-render when an off-thread region lands
+  const artboardLight = useEngraver((s) => s.view.artboardLight)
 
   useDocResources(doc, fontsRevision, assetsRevision)
 
@@ -37,6 +39,14 @@ export function DocRenderer() {
   pruneRegions(ids)
   pruneInvertCache(ids)
   const regionOf = (l: Layer) => getRegionAsync(l, ctx).region
+  // how each layer is struck, as a tone (flat view only — exports stay plain black):
+  // raised = the engrave colour, sunk = a dimmer warm grey, lasered = dimmer still
+  const tone = (l: Layer): string | undefined => {
+    const r = layerRelief(l, doc)
+    if (r === 'embossed') return undefined
+    if (r === 'debossed') return artboardLight ? '#77736b' : '#a39e94'
+    return artboardLight ? '#a9a59d' : '#75726d'
+  }
   return (
     <>
       {doc.layers.map((layer, index) => (
@@ -51,6 +61,7 @@ export function DocRenderer() {
               : null
           }
           overBare={layer.visible && invertsBare(layer) ? bareInvertRegion(doc.layers, index, ctx, regionOf) : null}
+          tone={tone(layer)}
         />
       ))}
     </>
@@ -113,12 +124,15 @@ const LayerGroup = memo(
     keepouts,
     ownRegion,
     overBare,
+    tone,
   }: {
     layer: Layer
     ctx: CompileCtx
     keepouts: Keepouts
     ownRegion: MultiPolygon | null
     overBare: MultiPolygon | null
+    /** Colour for sunk / lasered layers (undefined = the engrave colour). */
+    tone?: string
   }) {
     const selected = useEngraver((s) => s.selection === layer.id)
     if (!layer.visible) return null
@@ -137,7 +151,11 @@ const LayerGroup = memo(
             )
           : null
       return (
-        <g data-layer-id={layer.id} transform={layer.phaseDeg !== 0 ? `rotate(${layer.phaseDeg})` : undefined}>
+        <g
+          data-layer-id={layer.id}
+          transform={layer.phaseDeg !== 0 ? `rotate(${layer.phaseDeg})` : undefined}
+          style={tone ? { color: tone } : undefined}
+        >
           <HitBand layer={layer} />
           {engraved && engraved.shapes.length > 0 && (
             <g pointerEvents="none">
@@ -168,7 +186,11 @@ const LayerGroup = memo(
     const hasShapes = shapes.length > 0
     const swallowed = !hasShapes && compiled.shapes.length > 0 // wholly clipped away — intentional
     return (
-      <g data-layer-id={layer.id} transform={layer.phaseDeg !== 0 ? `rotate(${layer.phaseDeg})` : undefined}>
+      <g
+          data-layer-id={layer.id}
+          transform={layer.phaseDeg !== 0 ? `rotate(${layer.phaseDeg})` : undefined}
+          style={tone ? { color: tone } : undefined}
+        >
         <HitBand layer={layer} />
         <g pointerEvents="none">
           {hasShapes ? (
@@ -187,6 +209,7 @@ const LayerGroup = memo(
     prev.ctx.fontsRevision === next.ctx.fontsRevision &&
     prev.ownRegion === next.ownRegion &&
     prev.overBare === next.overBare &&
+    prev.tone === next.tone &&
     sameKeepouts(prev.keepouts, next.keepouts),
 )
 

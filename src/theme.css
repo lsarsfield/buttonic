@@ -881,6 +881,40 @@ a.pwyc-button {
   white-space: pre-wrap;
 }
 
+/* ---------------------------------------------------------- section inset */
+
+.profile-section {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 8px 10px 6px;
+  background: rgba(13, 13, 14, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  pointer-events: none;
+}
+.profile-section svg {
+  display: block;
+}
+.profile-body {
+  fill: #3a3a3e;
+  stroke: #9a9aa2;
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+.profile-axis {
+  stroke: var(--guide);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.6;
+}
+.profile-label {
+  margin-top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
 /* ---------------------------------------------------------- 3D stage */
 
 .relief-stage {

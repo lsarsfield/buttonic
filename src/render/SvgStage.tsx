@@ -5,6 +5,7 @@ import { xyToPolar } from '../geometry/polar'
 import { annulusPathD } from '../geometry/format'
 import { centreKindOf, isOpening } from '../model/product'
 import { DocRenderer } from './DocRenderer'
+import { CapShading, OpeningMask } from './overlays/CapShape'
 import { Guides } from './overlays/Guides'
 import { Handles } from './overlays/Handles'
 
@@ -121,6 +122,8 @@ export function SvgStage() {
   }
 
   const faceR = diameterMM / 2
+  const faceD =
+    holeDiameterMM > 0 ? annulusPathD(faceR, Math.min(holeDiameterMM / 2, faceR * 0.95)) : annulusPathD(faceR, 0)
 
   return (
     <svg
@@ -137,7 +140,7 @@ export function SvgStage() {
             hole). Not part of the export subtree. */}
         <g id="backdrop">
           <path
-            d={holeDiameterMM > 0 ? annulusPathD(faceR, Math.min(holeDiameterMM / 2, faceR * 0.95)) : annulusPathD(faceR, 0)}
+            d={faceD}
             fillRule="evenodd"
             fill={artboardLight ? '#e9e7e2' : 'var(--face)'}
             stroke={artboardLight ? '#c9c6bf' : 'var(--face-edge)'}
@@ -146,11 +149,14 @@ export function SvgStage() {
               if (e.button === 0 && !spaceDown) select(null)
             }}
           />
+          {/* the cap's shape (dome, dish, rolled edge, centre feature) as shading */}
+          <CapShading faceD={faceD} />
         </g>
         <g id="doc" style={{ color: artboardLight ? '#2a2b30' : 'var(--engrave)' }}>
           <DocRenderer />
         </g>
         <g id="overlays">
+          <OpeningMask />
           <Guides />
           <Handles />
         </g>

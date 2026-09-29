@@ -205,6 +205,12 @@ param, not an error.)
     DocRenderer) kicks font/asset loads since DocRenderer isn't mounted in 3D.
   - Browser gotcha: the preview pane throttles rAF to ~1 fps when backgrounded —
     measure main-thread stalls with a setInterval probe, not rAF.
+- Flat-canvas shape preview (preview only, never exported): `overlays/CapShape.tsx`
+  shades the blank from the same `baseProfile` the 3D view uses (`CapShading`, under
+  the art) and draws a punched-out centre as a hatched, labelled opening OVER the art
+  (`OpeningMask`, art there is dimmed — it isn't struck); `ui/ProfileSection.tsx` is a
+  true-scale cross-section inset (flat view + guides on); DocRenderer tints sunk and
+  lasered layers (raised = engrave colour) so mixed-relief dies read in 2D.
 - `src/ui/` — panels per layer type, workspace switcher, dialogs.
 
 ## Invariants (violating these breaks real dies)
