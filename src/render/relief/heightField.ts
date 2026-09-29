@@ -49,7 +49,9 @@ export interface ReliefParams {
 }
 
 /** Drafted relief wall width: dies are cut with draft, so struck walls slope (and catch light). */
-export const WALL_MM = 0.1
+export const WALL_MM = 0.15
+/** A wall may take at most this share of the local feature width (so small art keeps a flat top). */
+const WALL_SHARE = 0.3
 
 /** The physical cap for a product spec (doc-level fields). */
 export function reliefParamsOf(d: {
@@ -72,7 +74,8 @@ export function reliefParamsOf(d: {
     centre,
     centreR,
     rollMM: roll,
-    lipMM: centre === 'pin' ? Math.min(0.12, centreR * 0.4) : Math.min(0.3, centreR * 0.3),
+    // the face rolls into an open top as a broad bright funnel
+    lipMM: centre === 'pin' ? Math.min(0.12, centreR * 0.4) : Math.min(0.6, centreR * 0.15),
     domeMM: st.domeFrac * d.diameterMM,
     concaveMM: st.concaveFrac * d.diameterMM,
     capH,
@@ -118,26 +121,82 @@ export const ROUGH_HEADROOM = 1.8
 // cap profile
 // ---------------------------------------------------------------------------
 
-/** Nipple knob height as a fraction of its radius (a near-hemispherical nail head). */
-export const NIPPLE_H = 0.95
+/** Nipple: a drafted cylinder (height ×c) under a hemispherical head (radius ×c). */
+export const NIPPLE_WALL_H = 1.1
+const NIPPLE_HEAD_R = 0.9
 /** Inverted nipple: bowl depth, the rolled ring around it, and the nail head at its bottom (fractions of the cup radius). */
 export const CUP_D = 0.5
-const CUP_RING_H = 0.14
+const CUP_RING_H = 0.28
 const CUP_RING_W = 0.26
-const CUP_HEAD_R = 0.36
+const CUP_HEAD_R = 0.45
 const CUP_HEAD_H = 0.3
 
-/** Cap surface height at radius r, before the design (see baseProfile). */
-function profileY(r: number, p: ReliefParams): number {
+/**
+ * A rolled edge: a circular fillet of radius rho that leaves the face
+ * TANGENTIALLY (matching the dome / dish slope — no crease or shelf where a
+ * dome meets its edge) and turns down to vertical exactly at `edge`. dir = +1
+ * rolls outward over the rim, −1 rolls inward into a hole. Solved in mirrored
+ * coordinates x' = dir·r so both cases share one formula.
+ */
+export interface Fillet {
+  dir: 1 | -1
+  edge: number
+  rho: number
+  /** Radius where the fillet leaves the face. */
+  start: number
+  /** Circle centre in mirrored coordinates. */
+  cx: number
+  cy: number
+  /** Tangent angle at the start (≤ 0: heading down). */
+  theta0: number
+}
+
+function makeFillet(edge: number, rho: number, dir: 1 | -1, flat: (r: number) => number): Fillet {
+  const slope = (r: number) => (dir * (flat(r + 1e-4) - flat(r - 1e-4))) / 2e-4
+  let a = edge - dir * rho
+  let th = 0
+  for (let k = 0; k < 8; k++) {
+    th = Math.max(-1.4, Math.min(0, Math.atan(slope(a))))
+    a = edge - dir * rho * (1 + Math.sin(th))
+  }
+  return { dir, edge, rho, start: a, cx: dir * a + rho * Math.sin(th), cy: flat(a) - rho * Math.cos(th), theta0: th }
+}
+
+function filletY(f: Fillet, r: number): number {
+  const s = Math.max(-1, Math.min(1, (f.cx - f.dir * r) / f.rho))
+  return f.cy + f.rho * Math.cos(Math.asin(s))
+}
+
+/** A point on the fillet at arc angle phi (theta0 → −π/2 runs from the face to vertical). */
+export function filletPoint(f: Fillet, phi: number): { r: number; y: number } {
+  return { r: f.dir * (f.cx - f.rho * Math.sin(phi)), y: f.cy + f.rho * Math.cos(phi) }
+}
+
+interface CapGeometry {
+  flat: (r: number) => number
+  outer: Fillet | null
+  lip: Fillet | null
+}
+const geoCache = new WeakMap<ReliefParams, CapGeometry>()
+
+/** The cap's face function and its two rolled edges (memoized per params object). */
+export function capGeometry(p: ReliefParams): CapGeometry {
+  const hit = geoCache.get(p)
+  if (hit) return hit
   const R = p.faceR
-  const a = R - p.rollMM // shoulder start
   const c = p.centreR
-  const inner = p.centre === 'hole' || p.centre === 'pin' ? c + p.lipMM : p.centre === 'none' ? 0 : c
+  const opening = p.centre === 'hole' || p.centre === 'pin'
+  const inner = opening ? c + p.lipMM : p.centre === 'none' ? 0 : c
+  const dishOuter = R - p.rollMM
+  const collarW = Math.max(0.12, c * 0.6)
+  const collarH = Math.min(0.1, c * 0.18)
   const flat = (rr: number): number => {
     let y = p.domeMM > 0 ? p.domeMM * (1 - (rr * rr) / (R * R)) : 0
-    if (p.concaveMM > 0 && a > inner) {
-      const t = Math.min(1, Math.max(0, (a - rr) / (a - inner)))
-      y -= p.concaveMM * t * t * (3 - 2 * t)
+    if (p.concaveMM > 0 && dishOuter > inner) {
+      // a saucer: steepest toward the hole, easing flat at the rim
+      // (not clamped at the inner end: the lip fillet must meet the dish's real slope)
+      const t = Math.max(0, (dishOuter - rr) / (dishOuter - inner))
+      y -= p.concaveMM * t * t
     }
     if (p.plateauR > 0 && p.plateauH > 0) {
       // die-cast step: a raised centre plateau with a short filleted riser
@@ -145,53 +204,52 @@ function profileY(r: number, p: ReliefParams): number {
       const t = Math.min(1, Math.max(0, (p.plateauR - rr) / w))
       y += p.plateauH * t * t * (3 - 2 * t)
     }
+    if (p.centre === 'pin' && rr > c && rr < c + collarW) {
+      // die-cast pin hole: a raised collar the lip rolls in from
+      y += collarH * Math.cos(((rr - c) / collarW) * (Math.PI / 2)) ** 2
+    }
     return y
   }
-  if (p.rollMM > 0 && r > a) {
-    const u = Math.min(r - a, p.rollMM * 0.9995)
-    return flat(a) - p.rollMM + Math.sqrt(p.rollMM * p.rollMM - u * u)
+  const g: CapGeometry = {
+    flat,
+    outer: p.rollMM > 0 ? makeFillet(R, p.rollMM, 1, flat) : null,
+    lip: opening && p.lipMM > 0 ? makeFillet(c, p.lipMM, -1, flat) : null,
   }
+  geoCache.set(p, g)
+  return g
+}
+
+/** Cap surface height at radius r, before the design (see baseProfile). */
+function profileY(r: number, p: ReliefParams): number {
+  const g = capGeometry(p)
+  const c = p.centreR
+  if (g.outer && r >= g.outer.start) return filletY(g.outer, r)
+  if (g.lip && r <= g.lip.start) return filletY(g.lip, r)
   switch (p.centre) {
-    case 'hole': {
-      const b = c + p.lipMM
-      if (p.lipMM > 0 && r < b) {
-        const u = Math.min(b - r, p.lipMM * 0.9995)
-        return flat(b) - p.lipMM + Math.sqrt(p.lipMM * p.lipMM - u * u)
-      }
-      break
-    }
-    case 'pin': {
-      // die-cast pin hole: a raised collar around a rolled-in bore
-      const b = c + p.lipMM
-      const collarW = Math.max(0.12, c * 0.6)
-      const collarH = Math.min(0.1, c * 0.18)
-      if (p.lipMM > 0 && r < b) {
-        const u = Math.min(b - r, p.lipMM * 0.9995)
-        return flat(b) + collarH - p.lipMM + Math.sqrt(p.lipMM * p.lipMM - u * u)
-      }
-      if (r < b + collarW) {
-        const t = (r - b) / collarW
-        return flat(r) + collarH * Math.cos((t * Math.PI) / 2) ** 2
-      }
-      break
-    }
     case 'nipple':
-      if (r < c) return flat(c) + NIPPLE_H * c * Math.sqrt(Math.max(0, 1 - (r * r) / (c * c)))
+      if (r < c) {
+        // the nail head: a drafted cylinder wall capped by a hemisphere
+        const hr = NIPPLE_HEAD_R * c
+        const wallTop = g.flat(c) + NIPPLE_WALL_H * c
+        if (r > hr) return g.flat(c) + (NIPPLE_WALL_H * c * (c - r)) / (c - hr)
+        return wallTop + Math.sqrt(Math.max(0, hr * hr - r * r))
+      }
       break
     case 'cup': {
-      // inverted nipple: a rolled ring, a bowl, and the nail head sitting in it
+      // inverted nipple: a round rolled ring, a bowl, and the nail head sitting in it
       const ringW = CUP_RING_W * c
-      const ring = Math.abs(r - c) < ringW ? CUP_RING_H * c * Math.cos(((r - c) / ringW) * (Math.PI / 2)) ** 2 : 0
+      const u = (r - c) / ringW
+      const ring = Math.abs(u) < 1 ? CUP_RING_H * c * Math.sqrt(1 - u * u) : 0
       if (r < c) {
-        const bowl = flat(c) - CUP_D * c * (1 - (r * r) / (c * c))
+        const bowl = g.flat(c) - CUP_D * c * (1 - (r * r) / (c * c))
         const hr = CUP_HEAD_R * c
         const head = r < hr ? CUP_HEAD_H * c * Math.sqrt(1 - (r * r) / (hr * hr)) : 0
         return bowl + head + ring
       }
-      return flat(r) + ring
+      return g.flat(r) + ring
     }
   }
-  return flat(r)
+  return g.flat(r)
 }
 
 /**
@@ -207,10 +265,9 @@ export function baseProfile(r: number, p: ReliefParams): { y: number; dydr: numb
   const y = profileY(r, p)
   // the rolled curves meet vertical at their ends, where the value is clamped
   // (a central difference would read 0 there) — pin those tangents
-  if (p.rollMM > 0 && r >= p.faceR - p.rollMM * 0.001) return { y, dydr: -MAX_SLOPE }
-  if ((p.centre === 'hole' || p.centre === 'pin') && p.lipMM > 0 && r <= p.centreR + p.lipMM * 0.001) {
-    return { y, dydr: MAX_SLOPE }
-  }
+  const g = capGeometry(p)
+  if (g.outer && r >= g.outer.edge - g.outer.rho * 0.001) return { y, dydr: -MAX_SLOPE }
+  if (g.lip && r <= g.lip.edge + g.lip.rho * 0.001) return { y, dydr: MAX_SLOPE }
   const d = (profileY(r + h, p) - profileY(Math.max(0, r - h), p)) / (r + h - Math.max(0, r - h))
   return { y, dydr: Math.max(-MAX_SLOPE, Math.min(MAX_SLOPE, d)) }
 }
@@ -258,6 +315,30 @@ function edt2d(g: Float64Array, n: number): void {
     for (let x = 0; x < n; x++) f[x] = g[o + x]!
     edt1d(f, n, d, v, z)
     for (let x = 0; x < n; x++) g[o + x] = d[x]!
+  }
+}
+
+/** Separable running MAX over a (2r+1)² window, in place (van Herk / Gil–Werman, O(n) per line). */
+export function maxFilter(a: Float32Array, n: number, r: number): void {
+  const w = 2 * r + 1
+  const line = new Float32Array(n + 2 * r)
+  const g = new Float32Array(n + 2 * r)
+  const h = new Float32Array(n + 2 * r)
+  const pass = (get: (k: number) => number, set: (k: number, v: number) => void) => {
+    const m = n + 2 * r
+    for (let k = 0; k < m; k++) line[k] = get(Math.min(n - 1, Math.max(0, k - r)))
+    for (let k = 0; k < m; k++) g[k] = k % w === 0 ? line[k]! : Math.max(g[k - 1]!, line[k]!)
+    for (let k = m - 1; k >= 0; k--) h[k] = k === m - 1 || (k + 1) % w === 0 ? line[k]! : Math.max(h[k + 1]!, line[k]!)
+    for (let k = 0; k < n; k++) set(k, Math.max(h[k]!, g[k + 2 * r]!))
+  }
+  for (let y = 0; y < n; y++) {
+    const o = y * n
+    pass((k) => a[o + k]!, (k, v) => (a[o + k] = v))
+  }
+  const col = new Float32Array(n)
+  for (let x = 0; x < n; x++) {
+    for (let y = 0; y < n; y++) col[y] = a[y * n + x]!
+    pass((k) => col[k]!, (k, v) => (a[k * n + x] = v))
   }
 }
 
@@ -363,6 +444,18 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
   boxBlur(sd, n, 2)
   boxBlur(sd, n, 2)
 
+  // local feature half-width: the deepest inside-distance nearby (a separable
+  // max filter over the wall's reach). A wall never takes more than WALL_SHARE
+  // of the feature's width — else a 1 mm star or a full stop becomes a tent.
+  const reach = Math.max(1, Math.ceil(p.wallMM / mmPerPx))
+  const half = new Float32Array(n * n)
+  for (let i = 0; i < n * n; i++) half[i] = Math.max(0, sd[i]!)
+  maxFilter(half, n, reach)
+  // gaps between features are bounded the same way (debossed art: the field between strokes)
+  const gap = new Float32Array(n * n)
+  for (let i = 0; i < n * n; i++) gap[i] = Math.max(0, -sd[i]!)
+  maxFilter(gap, n, reach)
+
   const sign = p.display === 'embossed' ? 1 : p.display === 'debossed' ? -1 : 0
   // F: 1 on the HIGH ground, 0 on the low (for debossed art the field is high;
   // lasered art is flush, so everything is high ground)
@@ -370,7 +463,9 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
   const h = new Float32Array(n * n)
   const art = new Float32Array(n * n)
   for (let i = 0; i < n * n; i++) {
-    const occ = wallProfile(sd[i]!, p.wallMM)
+    // feature width = 2 × half-width; the wall may take WALL_SHARE of it
+    const w = Math.max(0.02, Math.min(p.wallMM, WALL_SHARE * 2 * Math.min(half[i]! || p.wallMM, gap[i]! || p.wallMM)))
+    const occ = wallProfile(sd[i]!, w)
     art[i] = occ
     h[i] = sign * p.depthMM * occ
     F[i] = sign > 0 ? occ : sign < 0 ? 1 - occ : 1
@@ -441,6 +536,8 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
 /** How a finish is worn: its patina, plus the logo display and distressing. */
 export interface SurfaceLook {
   patina: Patina
+  /** Satin micro-texture (0 polished … 1 sandblasted/tumbled). */
+  grain?: number
   /** Laser-marked art: a dark, matte marking in the art region. */
   lasered: boolean
   distressed: boolean
@@ -519,6 +616,14 @@ export function finishMaps(field: HeightField, look: SurfaceLook | Patina): { su
       patina = Math.max(patina, wear)
       dark = Math.max(dark, 0.9 * wear)
       rough = Math.max(rough, (1 + (ROUGH_HEADROOM - 1) * wear) / ROUGH_HEADROOM)
+    }
+    if (L.grain) {
+      // satin stipple, ~20–40 µm: rough and faintly mottled, never mirror-flat
+      const x = -V + ((i % n) + 0.5) * mmPerPx
+      const y = -V + (Math.floor(i / n) + 0.5) * mmPerPx
+      const g = 0.6 * valueNoise(x / 0.03, y / 0.03, 31) + 0.4 * hash2(i % n, Math.floor(i / n), 32) - 0.5
+      rough = Math.min(1, Math.max(0, rough + L.grain * 0.1 * g))
+      dark = Math.min(1, Math.max(0, dark + L.grain * 0.05 * (g + 0.5)))
     }
     if (L.lasered && art > 0) {
       dark = dark + (0.78 - dark) * art

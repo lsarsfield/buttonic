@@ -120,6 +120,7 @@ export default function ReliefStage() {
     doc.material,
     doc.logoDisplay,
     doc.distressed,
+    doc.postMetal,
     doc.finish,
     lightDeg,
     backdrop,

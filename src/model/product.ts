@@ -1,4 +1,4 @@
-import type { Finish, LogoDisplay, Material, Product, ProductStyle } from './types'
+import type { Finish, LogoDisplay, Material, PostMetal, Product, ProductStyle } from './types'
 
 /**
  * The trade's product options for jeans hardware — the vocabulary jeans-button
@@ -37,23 +37,23 @@ export interface StyleSpec {
 export const STYLES: Record<ProductStyle, StyleSpec> = {
   'flat-cap': {
     product: 'button', label: 'Flat cap', blurb: 'Flat face, rolled edge.',
-    centre: 'none', centreFrac: 0, domeFrac: 0, concaveFrac: 0, back: 'tack',
+    centre: 'none', centreFrac: 0, domeFrac: 0, concaveFrac: 0, back: 'tack', capHFrac: 0.13, rollFrac: 0.015,
   },
   'domed-cap': {
     product: 'button', label: 'Domed cap', blurb: 'Face domed to the centre.',
-    centre: 'none', centreFrac: 0, domeFrac: 0.2, concaveFrac: 0, back: 'tack', capHFrac: 0.07,
+    centre: 'none', centreFrac: 0, domeFrac: 0.2, concaveFrac: 0, back: 'tack', capHFrac: 0.03, rollFrac: 0.08,
   },
   'open-top': {
     product: 'button', label: 'Open top', blurb: 'Donut cap — the tack post shows through the hole.',
-    centre: 'hole', centreFrac: 0.41, domeFrac: 0, concaveFrac: 0, back: 'tack',
+    centre: 'hole', centreFrac: 0.41, domeFrac: 0, concaveFrac: 0, back: 'tack', capHFrac: 0.075, rollFrac: 0.02,
   },
   'open-top-concave': {
     product: 'button', label: 'Open top concave', blurb: 'Donut cap dished down toward the hole.',
-    centre: 'hole', centreFrac: 0.38, domeFrac: 0, concaveFrac: 0.05, back: 'tack',
+    centre: 'hole', centreFrac: 0.38, domeFrac: 0, concaveFrac: 0.06, back: 'tack', capHFrac: 0.075, rollFrac: 0.02,
   },
   'moveable-shank': {
     product: 'button', label: 'Moveable shank', blurb: 'Slightly domed cap on a swivelling shank.',
-    centre: 'none', centreFrac: 0, domeFrac: 0.085, concaveFrac: 0, back: 'swivel',
+    centre: 'none', centreFrac: 0, domeFrac: 0.085, concaveFrac: 0, back: 'swivel', rollFrac: 0.015,
   },
   capped: {
     product: 'rivet', label: 'Capped', blurb: 'Flat cap over the rivet nail.',
@@ -61,7 +61,7 @@ export const STYLES: Record<ProductStyle, StyleSpec> = {
   },
   nipple: {
     product: 'rivet', label: 'Nipple', blurb: 'The nail head stands up as a knob at the centre.',
-    centre: 'nipple', centreFrac: 0.3, domeFrac: 0, concaveFrac: 0, back: 'nail', capHFrac: 0.07, rollFrac: 0.025,
+    centre: 'nipple', centreFrac: 0.36, domeFrac: 0, concaveFrac: 0, back: 'nail', capHFrac: 0.07, rollFrac: 0.025,
   },
   'inverted-nipple': {
     product: 'rivet', label: 'Inverted nipple', blurb: 'A rolled ring around a sunk cup, the nail head at its bottom.',
@@ -107,6 +107,12 @@ export const PRODUCTS: Record<Product, ProductSpec> = {
   },
 }
 
+/** The tack post seen through an open top: most makers plate it silver; some (Stevenson) copper. */
+export const POST_METALS: readonly { value: PostMetal; label: string }[] = [
+  { value: 'silver', label: 'Silver' },
+  { value: 'copper', label: 'Copper' },
+]
+
 export const MATERIALS: Record<Material, { label: string; blurb: string }> = {
   brass: { label: 'Brass', blurb: 'Thin pressed brass — best for simple text designs.' },
   'die-cast': { label: 'Die-cast', blurb: 'Die-cast alloy — thicker and stronger, holds complex art.' },
@@ -129,7 +135,7 @@ export function capProportions(
   const st = style ? STYLES[style] : undefined
   // side-wall height from the face to the underside, as the trade photos show:
   // pressed brass ≈ D/10, die-cast chunkier; rivets proportionally thicker
-  const baseH = product === 'rivet' ? (cast ? 0.2 : 0.12) : cast ? 0.13 : 0.1
+  const baseH = product === 'rivet' ? (cast ? 0.2 : 0.12) : cast ? 0.16 : 0.1
   const capH = D * (st?.capHFrac !== undefined ? st.capHFrac * (cast ? 1.3 : 1) : baseH)
   const roll = D * (st?.rollFrac ?? (cast ? 0.03 : 0.04))
   // die-struck relief is deep — ~0.3 mm on pressed brass, ~0.45 on die-cast
@@ -191,7 +197,15 @@ export function coerceProductOptions(raw: {
   material: unknown
   logoDisplay: unknown
   distressed: unknown
-}): { product: Product; style: ProductStyle; material: Material; logoDisplay: LogoDisplay; distressed: boolean } {
+  postMetal: unknown
+}): {
+  product: Product
+  style: ProductStyle
+  material: Material
+  logoDisplay: LogoDisplay
+  distressed: boolean
+  postMetal: PostMetal
+} {
   const product: Product = raw.product === 'rivet' ? 'rivet' : 'button'
   const style =
     typeof raw.style === 'string' && raw.style in STYLES && STYLES[raw.style as ProductStyle].product === product
@@ -200,5 +214,6 @@ export function coerceProductOptions(raw: {
   const material: Material = raw.material === 'die-cast' ? 'die-cast' : 'brass'
   const logoDisplay: LogoDisplay =
     raw.logoDisplay === 'debossed' || raw.logoDisplay === 'lasered' ? raw.logoDisplay : 'embossed'
-  return { product, style, material, logoDisplay, distressed: raw.distressed === true }
+  const postMetal: PostMetal = raw.postMetal === 'copper' ? 'copper' : 'silver'
+  return { product, style, material, logoDisplay, distressed: raw.distressed === true, postMetal }
 }

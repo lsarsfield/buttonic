@@ -24,6 +24,7 @@ function docWithEverything(): ButtonDoc {
     material: 'brass',
     logoDisplay: 'embossed',
     distressed: false,
+    postMetal: 'silver',
     layers: [
       makeCenterLayer(),
       makeRingTextLayer(),
@@ -280,7 +281,7 @@ describe('parseDoc failure modes', () => {
 describe('schema v11: product options (the trade guides)', () => {
   it('v10 documents migrate: raised → embossed, recessed → debossed, a hole → open top', () => {
     const v10 = { ...makeBlankDoc(), version: 10, relief: 'recessed', holeDiameterMM: 7 } as Record<string, unknown>
-    for (const k of ['product', 'style', 'material', 'logoDisplay', 'distressed']) delete v10[k]
+    for (const k of ['product', 'style', 'material', 'logoDisplay', 'distressed', 'postMetal']) delete v10[k]
     const r = parseDoc(JSON.stringify(v10))
     expect(r.ok).toBe(true)
     if (!r.ok) return
@@ -291,6 +292,7 @@ describe('schema v11: product options (the trade guides)', () => {
       material: 'brass',
       logoDisplay: 'debossed',
       distressed: false,
+      postMetal: 'copper', // existing docs keep the copper post they were drawn with
       holeDiameterMM: 7,
     })
     expect('relief' in r.doc).toBe(false)

@@ -93,6 +93,9 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
       ...rest,
     }
   },
+  // v12: open tops choose their post plating — existing docs keep the copper
+  // post they were drawn with; new docs default to silver
+  12: (doc) => ({ postMetal: 'copper', ...doc }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

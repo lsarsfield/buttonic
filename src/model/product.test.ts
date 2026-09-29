@@ -34,7 +34,7 @@ describe('product catalogue', () => {
 
   it('coerces a style that belongs to the other product to that product’s default', () => {
     expect(
-      coerceProductOptions({ product: 'button', style: 'nipple', material: 'brass', logoDisplay: 'embossed', distressed: false }).style,
+      coerceProductOptions({ product: 'button', style: 'nipple', material: 'brass', logoDisplay: 'embossed', distressed: false, postMetal: 'x' }).style,
     ).toBe('flat-cap')
   })
 })

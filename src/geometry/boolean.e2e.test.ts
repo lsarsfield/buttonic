@@ -219,6 +219,7 @@ describe('export', () => {
       material: 'brass',
       logoDisplay: 'embossed',
       distressed: false,
+      postMetal: 'silver',
       layers: [
         makeRingLayer({ id: 'disc', mode: 'annulus', rInnerMM: 0.01, rOuterMM: 7 }),
         makeCenterLayer({ id: 'd', text: 'D', fontId: 'unifraktur', sizeMM: 6, booleanRole: 'subtract' }),
@@ -245,6 +246,7 @@ describe('export', () => {
       material: 'brass',
       logoDisplay: 'embossed',
       distressed: false,
+      postMetal: 'silver',
       layers: [
         makeRingLayer({ id: 'disc', mode: 'annulus', rInnerMM: 0.01, rOuterMM: 7 }),
         makeCenterLayer({ id: 'd', text: 'D', fontId: 'no-such-font', sizeMM: 6, booleanRole: 'subtract' }),

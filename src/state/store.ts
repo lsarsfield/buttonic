@@ -40,7 +40,16 @@ export interface EngraverState {
     patch: Partial<
       Pick<
         ButtonDoc,
-        'name' | 'diameterMM' | 'finish' | 'holeDiameterMM' | 'product' | 'style' | 'material' | 'logoDisplay' | 'distressed'
+        | 'name'
+        | 'diameterMM'
+        | 'finish'
+        | 'holeDiameterMM'
+        | 'product'
+        | 'style'
+        | 'material'
+        | 'logoDisplay'
+        | 'distressed'
+        | 'postMetal'
       >
     >,
   ) => void

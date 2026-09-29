@@ -3,6 +3,8 @@ import { METAL_FINISHES } from './finishes'
 import {
   baseProfile,
   buildHeightField,
+  capGeometry,
+  maxFilter,
   distressMask,
   finishMaps,
   fromHalf,
@@ -261,5 +263,57 @@ describe('half-float normals', () => {
   it('round-trips [0,1] to ~3 significant digits (8-bit managed only 1/255)', () => {
     for (const v of [0, 0.25, 0.4999, 0.5, 0.5003, 0.75, 1]) expect(Math.abs(fromHalf(toHalf(v)) - v)).toBeLessThan(5e-4)
     expect(toHalf(0.5)).not.toBe(toHalf(0.5006))
+  })
+})
+
+describe('shape realism (adversarial review fixes)', { timeout: 30_000 }, () => {
+  const slopeJump = (p: ReliefParams, r: number) => {
+    const d = 0.002
+    const left = (baseProfile(r - d, p).y - baseProfile(r - 2 * d, p).y) / d
+    const right = (baseProfile(r + 2 * d, p).y - baseProfile(r + d, p).y) / d
+    return Math.abs(right - left)
+  }
+
+  it('a domed face rolls into its edge with no crease: the slope is continuous where the fillet starts', () => {
+    const p = styleParams('domed-cap', 17, 0)
+    const f = capGeometry(p).outer!
+    expect(f.theta0).toBeLessThan(-0.3) // the fillet leaves on the dome's slope, not horizontally
+    expect(slopeJump(p, f.start)).toBeLessThan(0.05)
+    expect(baseProfile(p.faceR - 1e-4, p).dydr).toBeLessThan(-10) // and still ends vertical
+  })
+
+  it('the concave dish rolls into the hole tangentially too', () => {
+    const p = styleParams('open-top-concave', 17, 6.5)
+    const f = capGeometry(p).lip!
+    expect(slopeJump(p, f.start)).toBeLessThan(0.05)
+  })
+
+  it('nipple: a nail head about as tall as it is wide', () => {
+    const p = styleParams('nipple', 9, 3.2)
+    const h = baseProfile(0, p).y - baseProfile(p.centreR + 0.3, p).y
+    expect(h / (2 * p.centreR)).toBeGreaterThan(0.9)
+    expect(h / (2 * p.centreR)).toBeLessThan(1.2)
+  })
+
+  it('inverted nipple: a pronounced rolled ring (~0.28 c) rims the bowl', () => {
+    const p = styleParams('inverted-nipple', 9, 3.8)
+    const ring = baseProfile(p.centreR, p).y - baseProfile(p.centreR + 0.8, p).y
+    expect(ring / p.centreR).toBeGreaterThan(0.25)
+  })
+
+  it('maxFilter: running max over the window, O(n)', () => {
+    const n = 32
+    const a = new Float32Array(n * n)
+    a[10 * n + 10] = 5
+    maxFilter(a, n, 3)
+    expect(a[13 * n + 7]).toBe(5)
+    expect(a[14 * n + 10]).toBe(0)
+  })
+
+  it('small art keeps a flat top: the wall shrinks to the feature', () => {
+    // a 0.2 mm wide dot is narrower than two full walls (0.3 mm)
+    const f = buildHeightField(discCoverage(0.1), N, SPAN, params({ wallMM: WALL_MM }))
+    const n = f.dispN
+    expect(f.disp[(n / 2) * n + n / 2]).toBeCloseTo(DEPTH, 2) // reaches full height, not a tent
   })
 })

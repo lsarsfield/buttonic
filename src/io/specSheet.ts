@@ -25,6 +25,7 @@ export function specSheet(doc: ButtonDoc): string {
     ['Size', `${mm(doc.diameterMM)} diameter${size && doc.product === 'button' ? ` (${size.label.split(' ')[0]!.toLowerCase()})` : ''}`],
   ]
   if (centre !== 'none') lines.push([CENTRE_LABELS[centre], `${mm(doc.holeDiameterMM)} diameter`])
+  if (centre === 'hole') lines.push(['Post', doc.postMetal === 'copper' ? 'Copper' : 'Silver (nickel)'])
   lines.push(
     ['Material', MATERIALS[doc.material].label === 'Die-cast' ? 'Die-cast alloy' : 'Brass'],
     ['Logo display', LOGO_DISPLAYS.find((l) => l.value === doc.logoDisplay)!.label],
