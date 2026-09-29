@@ -3,6 +3,7 @@ import { useEngraver } from '../state/store'
 import { screenToMM, useViewport } from '../state/viewport'
 import { xyToPolar } from '../geometry/polar'
 import { annulusPathD } from '../geometry/format'
+import { centreKindOf, isOpening } from '../model/product'
 import { DocRenderer } from './DocRenderer'
 import { Guides } from './overlays/Guides'
 import { Handles } from './overlays/Handles'
@@ -21,7 +22,8 @@ export function SvgStage() {
 
   const { scale, tx, ty } = useViewport()
   const diameterMM = useEngraver((s) => s.doc.diameterMM)
-  const holeDiameterMM = useEngraver((s) => s.doc.holeDiameterMM)
+  // only a see-through centre (open top / pin hole) cuts the flat blank
+  const holeDiameterMM = useEngraver((s) => (isOpening(centreKindOf(s.doc)) ? s.doc.holeDiameterMM : 0))
   const artboardLight = useEngraver((s) => s.view.artboardLight)
   const select = useEngraver((s) => s.select)
 

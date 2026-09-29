@@ -3,9 +3,13 @@ import { METAL_FINISHES } from './finishes'
 import {
   baseProfile,
   buildHeightField,
+  distressMask,
   finishMaps,
-  RELIEF_DEFAULTS,
+  fromHalf,
+  reliefParamsOf,
+  toHalf,
   signedDistance,
+  WALL_MM,
   wallProfile,
   type ReliefParams,
 } from './heightField'
@@ -44,13 +48,32 @@ const pxCentre = (i: number) => ({
   y: -SPAN / 2 + (Math.floor(i / N) + 0.5) * MMPX,
 })
 
+const DEPTH = 0.15
 const params = (patch: Partial<ReliefParams> = {}): ReliefParams => ({
-  relief: 'raised',
+  display: 'embossed',
+  depthMM: DEPTH,
+  wallMM: WALL_MM,
   faceR: 7.5,
-  holeR: 0,
-  ...RELIEF_DEFAULTS,
+  centre: 'none',
+  centreR: 0,
+  rollMM: 0.45,
+  lipMM: 0.3,
+  domeMM: 0,
+  concaveMM: 0,
+  capH: 1.15,
   ...patch,
 })
+
+/** Params for a trade style at a size (the app's own mapping). */
+const styleParams = (style: Parameters<typeof reliefParamsOf>[0]['style'], d: number, hole: number) =>
+  reliefParamsOf({
+    diameterMM: d,
+    holeDiameterMM: hole,
+    product: style === 'capped' || style === 'nipple' || style === 'inverted-nipple' || style === 'die-cast' ? 'rivet' : 'button',
+    style,
+    material: 'brass',
+    logoDisplay: 'embossed',
+  })
 
 describe('signed distance', () => {
   it('matches the analytic distance to a disc edge within a pixel, positive inside', () => {
@@ -81,36 +104,80 @@ describe('wall profile', () => {
 
 describe('cap profile', () => {
   it('is flat on the face, rolls down at the rim and into the hole', () => {
-    const p = params({ holeR: 2 })
-    expect(baseProfile(4, p)).toEqual({ y: 0, dydr: 0 })
+    const p = params({ centre: 'hole', centreR: 2 })
+    expect(baseProfile(4, p).y).toBe(0)
+    expect(Math.abs(baseProfile(4, p).dydr)).toBeLessThan(1e-6)
     const rim = baseProfile(p.faceR, p)
     expect(rim.y).toBeCloseTo(-p.rollMM, 1)
     expect(rim.dydr).toBeLessThan(-10) // near-vertical
-    const lip = baseProfile(p.holeR, p)
-    expect(lip.y).toBeCloseTo(-p.holeRollMM, 1)
+    const lip = baseProfile(p.centreR, p)
+    expect(lip.y).toBeCloseTo(-p.lipMM, 1)
     expect(lip.dydr).toBeGreaterThan(10)
+  })
+
+  it('flat cap is flat; domed cap peaks at the axis and falls monotonically', () => {
+    const flat = styleParams('flat-cap', 17, 0)
+    for (const r of [0, 2, 5, 7.5]) expect(baseProfile(r, flat).y).toBe(0)
+    const dome = styleParams('domed-cap', 17, 0)
+    let prev = Infinity
+    for (let r = 0; r < 8; r += 0.5) {
+      const y = baseProfile(r, dome).y
+      expect(y).toBeLessThan(prev)
+      prev = y
+    }
+    expect(baseProfile(0, dome).y).toBeCloseTo(0.075 * 17, 6)
+  })
+
+  it('open top concave dishes down toward the hole', () => {
+    const p = styleParams('open-top-concave', 17, 6.5)
+    let prev = -Infinity
+    for (let r = 3.8; r < 8; r += 0.4) {
+      const y = baseProfile(r, p).y
+      expect(y).toBeGreaterThanOrEqual(prev - 1e-9) // rises outward from the lip to the shoulder
+      prev = y
+    }
+    expect(baseProfile(3.8, p).y).toBeLessThan(-0.3)
+  })
+
+  it('nipple rivet: a knob peaking at the axis; inverted nipple: a cup lowest at the axis', () => {
+    const nip = styleParams('nipple', 9, 2.7)
+    expect(baseProfile(0, nip).y).toBeGreaterThan(baseProfile(1, nip).y)
+    expect(baseProfile(1, nip).y).toBeGreaterThan(baseProfile(2.5, nip).y)
+    const cup = styleParams('inverted-nipple', 9, 3.6)
+    expect(baseProfile(0, cup).y).toBeLessThan(baseProfile(1, cup).y)
+    expect(baseProfile(1, cup).y).toBeLessThan(baseProfile(2.5, cup).y)
+  })
+
+  it('die-cast is thicker with deeper relief than brass', () => {
+    const base = { diameterMM: 17, holeDiameterMM: 0, product: 'button', style: 'flat-cap', logoDisplay: 'embossed' } as const
+    const brass = reliefParamsOf({ ...base, material: 'brass' })
+    const cast = reliefParamsOf({ ...base, material: 'die-cast' })
+    expect(cast.capH).toBeGreaterThan(brass.capH)
+    expect(cast.depthMM).toBeGreaterThan(brass.depthMM)
   })
 })
 
 describe('height field', () => {
   const cov = discCoverage(2)
 
-  it('raised art stands proud; recessed is its negative', () => {
+  it('embossed art stands proud; debossed is its negative; lasered is flush', () => {
     const up = buildHeightField(cov, N, SPAN, params())
-    const down = buildHeightField(cov, N, SPAN, params({ relief: 'recessed' }))
+    const down = buildHeightField(cov, N, SPAN, params({ display: 'debossed' }))
+    const flat = buildHeightField(cov, N, SPAN, params({ display: 'lasered' }))
+    expect(flat.disp.every((v) => v === 0)).toBe(true)
     // disp is DISP_N² — sample its centre and a far corner
     const n = up.dispN
     const centre = (n / 2) * n + n / 2
     const corner = 10 * n + 10
-    expect(up.disp[centre]).toBeCloseTo(RELIEF_DEFAULTS.depthMM, 3)
+    expect(up.disp[centre]).toBeCloseTo(DEPTH, 3)
     expect(up.disp[corner]).toBeCloseTo(0, 6)
-    expect(down.disp[centre]).toBeCloseTo(-RELIEF_DEFAULTS.depthMM, 3)
+    expect(down.disp[centre]).toBeCloseTo(-DEPTH, 3)
     for (let i = 0; i < n * n; i += 997) expect(down.disp[i]).toBeCloseTo(-up.disp[i]!, 6)
   })
 
   it('normals point up on flat ground and tilt outward on a raised wall', () => {
     const f = buildHeightField(cov, N, SPAN, params())
-    const nrm = (i: number) => [f.normal[i * 4]! / 127.5 - 1, f.normal[i * 4 + 1]! / 127.5 - 1, f.normal[i * 4 + 2]! / 127.5 - 1]
+    const nrm = (i: number) => [0, 1, 2].map((c) => fromHalf(f.normal[i * 4 + c]!) * 2 - 1)
     const flat = nrm(px(4, 4)) // on the flat face, clear of the rolled shoulder
     expect(flat[1]).toBeGreaterThan(0.99)
     // on the +x wall of a raised disc the surface falls away toward +x → normal leans +x
@@ -142,5 +209,42 @@ describe('height field', () => {
     expect(antique[top * 4]!).toBe(255)
     // the patina is a finish choice over the SAME field — no rebuild
     expect(finishMaps(f, METAL_FINISHES.nickel.patina).albedo).toEqual(nickel)
+  })
+})
+
+describe('finish looks', () => {
+  const f = buildHeightField(discCoverage(2), N, SPAN, params({ display: 'lasered' }))
+  const art = px(0, 0)
+  const bare = px(5, 3)
+
+  it('lasered marks the art dark and matte, and leaves the bare face alone', () => {
+    const plain = finishMaps(f, { patina: METAL_FINISHES.nickel.patina, lasered: false, distressed: false })
+    const laser = finishMaps(f, { patina: METAL_FINISHES.nickel.patina, lasered: true, distressed: false })
+    expect(laser.albedo[art * 4]!).toBeLessThan(plain.albedo[art * 4]! - 120)
+    expect(laser.surface[art * 4 + 1]!).toBe(255) // fully rough
+    expect(laser.albedo[bare * 4]).toBe(plain.albedo[bare * 4])
+  })
+
+  it('distressed wear is deterministic and actually blotchy', () => {
+    const look = { patina: METAL_FINISHES['antique-brass'].patina, lasered: false, distressed: true }
+    const a = finishMaps(f, look).albedo
+    expect(finishMaps(f, look).albedo).toEqual(a)
+    let hits = 0
+    let samples = 0
+    for (let y = -6; y <= 6; y += 0.25) {
+      for (let x = -6; x <= 6; x += 0.25) {
+        samples++
+        if (distressMask(x, y) > 0.5) hits++
+      }
+    }
+    expect(hits / samples).toBeGreaterThan(0.1)
+    expect(hits / samples).toBeLessThan(0.7)
+  })
+})
+
+describe('half-float normals', () => {
+  it('round-trips [0,1] to ~3 significant digits (8-bit managed only 1/255)', () => {
+    for (const v of [0, 0.25, 0.4999, 0.5, 0.5003, 0.75, 1]) expect(Math.abs(fromHalf(toHalf(v)) - v)).toBeLessThan(5e-4)
+    expect(toHalf(0.5)).not.toBe(toHalf(0.5006))
   })
 })

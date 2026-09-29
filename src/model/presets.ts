@@ -13,8 +13,12 @@ export function presetBlank(): ButtonDoc {
     name: 'Untitled button',
     diameterMM: 17,
     finish: 'steel',
+    product: 'button',
+    style: 'flat-cap',
+    material: 'brass',
+    logoDisplay: 'embossed',
+    distressed: false,
     holeDiameterMM: 0,
-    relief: 'raised',
     layers: [
       {
         id: 'blank-rim', type: 'ring', name: 'Rim', visible: true, phaseDeg: 0,
@@ -33,8 +37,12 @@ export function presetReferenceA(): ButtonDoc {
     name: 'Engine turned',
     diameterMM: 17,
     finish: 'gunmetal',
+    product: 'button',
+    style: 'flat-cap',
+    material: 'brass',
+    logoDisplay: 'embossed',
+    distressed: false,
     holeDiameterMM: 0,
-    relief: 'raised',
     layers: [
       {
         id: 'refA-band1', type: 'hatch', name: 'Band 1 · fine', visible: true, phaseDeg: 0,
@@ -92,8 +100,12 @@ export function presetReferenceB(): ButtonDoc {
     name: 'Blackletter monogram',
     diameterMM: 17,
     finish: 'steel',
+    product: 'button',
+    style: 'flat-cap',
+    material: 'brass',
+    logoDisplay: 'embossed',
+    distressed: false,
     holeDiameterMM: 0,
-    relief: 'raised',
     layers: [
       {
         id: 'refB-monogram', type: 'center', name: 'Monogram D', visible: true, phaseDeg: 0,
@@ -130,8 +142,12 @@ export function presetGroovy(): ButtonDoc {
     name: 'Flower power',
     diameterMM: 17,
     finish: 'brass',
+    product: 'button',
+    style: 'flat-cap',
+    material: 'brass',
+    logoDisplay: 'embossed',
+    distressed: false,
     holeDiameterMM: 0,
-    relief: 'raised',
     layers: [
       {
         id: 'groovy-hero', type: 'repeat', name: 'Sunburst', visible: true, phaseDeg: 0,
@@ -177,8 +193,12 @@ export function presetOldBook(): ButtonDoc {
     name: 'Old book',
     diameterMM: 17,
     finish: 'gunmetal',
+    product: 'button',
+    style: 'flat-cap',
+    material: 'brass',
+    logoDisplay: 'embossed',
+    distressed: false,
     holeDiameterMM: 0,
-    relief: 'raised',
     layers: [
       {
         id: 'oldbook-hero', type: 'repeat', name: 'Fleur-de-lis', visible: true, phaseDeg: 0,

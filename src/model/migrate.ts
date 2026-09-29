@@ -78,6 +78,21 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
   }),
   // v10: physical product — donut centre hole + relief polarity (solid, raised cap)
   10: (doc) => ({ holeDiameterMM: 0, relief: 'raised', ...doc }),
+  // v11: the trade's product options — product/style/material/logo display/
+  // distressed; `relief` becomes logoDisplay (raised → embossed); a v10 hole
+  // means an open-top button
+  11: (doc) => {
+    const { relief, ...rest } = doc
+    const hole = typeof doc.holeDiameterMM === 'number' ? doc.holeDiameterMM : 0
+    return {
+      product: 'button',
+      style: hole > 0 ? 'open-top' : 'flat-cap',
+      material: 'brass',
+      logoDisplay: relief === 'recessed' ? 'debossed' : 'embossed',
+      distressed: false,
+      ...rest,
+    }
+  },
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

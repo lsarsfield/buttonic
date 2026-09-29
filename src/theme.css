@@ -868,6 +868,19 @@ a.pwyc-button {
   color: var(--accent);
 }
 
+/* ---------------------------------------------------------- spec sheet */
+
+.spec-sheet {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--bg0);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
 /* ---------------------------------------------------------- 3D stage */
 
 .relief-stage {

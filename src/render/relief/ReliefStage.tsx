@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { useEngraver } from '../../state/store'
 import { useDocResources } from '../DocRenderer'
 import { computeHeightField, heightKey } from './heightAsync'
-import { ButtonScene, lastPose, type ButtonSpec, type Pose } from './scene'
+import { ButtonScene, lastPose, specOfDoc, type ButtonSpec, type Pose } from './scene'
 
 /**
  * The 3D view: the struck button in a photo studio, orbitable. Lazy-loaded
@@ -110,7 +110,24 @@ export default function ReliefStage() {
     if (!ref) return
     ref.scene.setSpec(specOf(useEngraver.getState()))
     ref.render()
-  }, [doc.diameterMM, doc.holeDiameterMM, doc.finish, lightDeg, backdrop])
+  }, [
+    doc.diameterMM,
+    doc.holeDiameterMM,
+    doc.product,
+    doc.style,
+    doc.material,
+    doc.logoDisplay,
+    doc.distressed,
+    doc.finish,
+    lightDeg,
+    backdrop,
+  ])
+
+  // reframe on a new backdrop / size unless the user has orbited to their own view
+  useEffect(() => {
+    if (!lastPose.position) applyPose(lastPose.pose)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backdrop, doc.diameterMM, doc.product])
 
   // relief: debounced off-thread rebuild, latest wins, last result stays up
   const key = heightKey(doc, fontsRevision, assetsRevision)
@@ -167,11 +184,5 @@ export default function ReliefStage() {
 }
 
 function specOf(s: ReturnType<typeof useEngraver.getState>): ButtonSpec {
-  return {
-    diameterMM: s.doc.diameterMM,
-    holeDiameterMM: s.doc.holeDiameterMM,
-    finish: s.doc.finish,
-    lightDeg: s.view.lightDeg,
-    backdrop: s.view.backdrop,
-  }
+  return { ...specOfDoc(s.doc), lightDeg: s.view.lightDeg, backdrop: s.view.backdrop }
 }

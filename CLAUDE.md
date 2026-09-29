@@ -28,7 +28,7 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **10**), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **11**), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
   `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
   v8 centre `motifId` (built-in motif as a third centre source, inert unless
@@ -36,7 +36,17 @@ param, not an error.)
   vanish behaviour; new layers default true), v10 doc-level physical product
   `holeDiameterMM` (donut/tack cap; 0 = solid) + `relief` ('raised' = die-struck: the
   die's cut stands proud) + finish `'nickel'` (new-doc default); `'antique-brass'` added
-  later with no migration (finish is a validated enum string) — copy this pattern; defaults spread FIRST
+  later with no migration (finish is a validated enum string), v11 the TRADE'S PRODUCT
+  OPTIONS (from Liam's supplier guides, jeans buttons + rivets; metals only — he said
+  ignore colour/Pantone/enamel/rubber/epoxy): `product` button|rivet, `style` (flat /
+  domed / open top / open top concave / moveable shank · capped / nipple / inverted
+  nipple / die-cast), `material` brass|die-cast, `logoDisplay` embossed|debossed|lasered
+  (REPLACED `relief`: raised→embossed), `distressed`; `holeDiameterMM` = the style's
+  centre-feature size (hole/nipple/cup/pin). Product options degrade softly in
+  validate (`coerceProductOptions`), never reject. All product numbers live once in
+  `src/model/product.ts` (STYLES/PRODUCTS/capProportions/FINISH_GROUPS), read by the
+  panel, the 3D view and `io/specSheet.ts` (supplier-neutral order spec, also the SVG
+  `<desc>`) — copy this pattern; defaults spread FIRST
   so stored values win). Factory defaults may differ from migration defaults: new
   text/centre layers get `haloMM = NEW_TEXT_GAP_MM` (0.15, the Engrave "Gap") while
   stored docs keep theirs. Hand-rolled `validate.ts` (REQUIRED field tables), `presets.ts` (Reference A/B + Flower-Power +
@@ -139,6 +149,15 @@ param, not an error.)
     low ground with brown-black oxide (burnished highs). Finish switches never re-run
     the EDT. `baseProfile` = flat face (optional
     dome), quarter-round rolled shoulder, rolled hole lip.
+  - Per-style cap profiles (`baseProfile`, from `reliefParamsOf(doc)`): dome, concave
+    dish, rolled shoulder, and the centre feature — hole/pin lip, nipple knob, sunk
+    cup; die-cast = thicker cap + crisper edge + deeper relief. Lasered = no relief,
+    art located by `occl.B` and marked dark/matte in `finishMaps`; distressed =
+    deterministic mottled oxide (`distressMask`) worn bright on the high points.
+    Patina maps carry METALNESS (surface.B): oxide is a dark dielectric film — dimmed
+    metal still mirrors a bright studio. Normals are HALF-FLOAT (8-bit terraced into
+    blocky bands on polished domes). `studio` backdrop = white sweep + a bright PMREM
+    environment, the button standing on its tack/swivel shank, shot low (62°).
   - `heightAsync.ts` rasterizes the EXACT `exportSvg` die (halos/cut-outs/inverts
     included) on the main thread (~25 ms), EDT in `heightWorker.ts` (~1 s at 2048²),
     content-key cached (layers/diameter/hole/relief + font/asset revisions; finish,
@@ -182,7 +201,7 @@ param, not an error.)
 
 ## Testing & verification culture
 
-217 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+229 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,

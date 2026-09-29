@@ -1,27 +1,67 @@
-import type { Finish } from '../../model/types'
+import {
+  CENTRE_LABELS,
+  defaultCentreMM,
+  FINISH_GROUPS,
+  FINISH_LABELS,
+  LOGO_DISPLAYS,
+  MATERIALS,
+  PRODUCTS,
+  STYLES,
+} from '../../model/product'
 import { useEngraver } from '../../state/store'
 import { NumberField } from '../controls/NumberField'
 import { SegmentedControl } from '../controls/SegmentedControl'
-import { Select } from '../controls/Select'
+import { GroupedSelect, Select } from '../controls/Select'
 import { Toggle } from '../controls/Toggle'
 
-const FINISHES: readonly { value: Finish; label: string }[] = [
-  { value: 'nickel', label: 'Nickel' },
-  { value: 'antique-brass', label: 'Antique brass' },
-  { value: 'gunmetal', label: 'Gunmetal' },
-  { value: 'steel', label: 'Steel' },
-  { value: 'brass', label: 'Brass' },
-]
+const FINISH_OPTION_GROUPS = FINISH_GROUPS.map((g) => ({
+  label: g.label,
+  options: g.options.map((f) => ({ value: f, label: FINISH_LABELS[f] })),
+}))
 
+/**
+ * The button itself (no layer selected): what's being struck — product, cap
+ * shape, size, centre feature, material, logo display and metal finish — plus
+ * view settings. Product options shape the 3D view and the spec sheet, never
+ * the die geometry.
+ */
 export function DocPanel() {
   const doc = useEngraver((s) => s.doc)
   const view = useEngraver((s) => s.view)
   const updateDocMeta = useEngraver((s) => s.updateDocMeta)
+  const setProduct = useEngraver((s) => s.setProduct)
+  const setStyle = useEngraver((s) => s.setStyle)
   const setView = useEngraver((s) => s.setView)
+
+  const product = PRODUCTS[doc.product]
+  const style = STYLES[doc.style]
+  const sizeMatch = product.sizes.find((z) => Math.abs(z.mm - doc.diameterMM) < 1e-6)
+
+  const setDiameter = (diameterMM: number) =>
+    updateDocMeta(
+      style.centre === 'none'
+        ? { diameterMM }
+        : { diameterMM, holeDiameterMM: defaultCentreMM(doc.style, diameterMM) },
+    )
 
   return (
     <>
       <div className="field-group">
+        <SegmentedControl
+          label="Product"
+          value={doc.product}
+          options={[
+            { value: 'button', label: 'Button', title: 'Jeans button (cap on a tack or shank)' },
+            { value: 'rivet', label: 'Rivet', title: 'Jeans rivet (cap on a nail)' },
+          ]}
+          onChange={setProduct}
+        />
+        <Select
+          label="Shape"
+          value={doc.style}
+          options={product.styles.map((s) => ({ value: s, label: STYLES[s].label }))}
+          onChange={setStyle}
+        />
         <NumberField
           label="Diameter"
           value={doc.diameterMM}
@@ -29,33 +69,54 @@ export function DocPanel() {
           max={30}
           step={0.1}
           unit="mm"
-          onChange={(diameterMM) => updateDocMeta({ diameterMM })}
-        />
-        <NumberField
-          label="Centre hole"
-          value={doc.holeDiameterMM}
-          min={0}
-          max={Math.max(0, doc.diameterMM - 4)}
-          step={0.1}
-          unit="mm"
-          onChange={(holeDiameterMM) => updateDocMeta({ holeDiameterMM })}
+          onChange={setDiameter}
         />
         <SegmentedControl
-          label="Relief"
-          value={doc.relief}
-          options={[
-            { value: 'raised', label: 'Raised', title: 'The die cut stands proud on the button (die-struck)' },
-            { value: 'recessed', label: 'Recessed', title: 'The die cut sinks into the button face' },
-          ]}
-          onChange={(relief) => updateDocMeta({ relief })}
+          label="Size"
+          value={sizeMatch ? String(sizeMatch.mm) : ''}
+          options={product.sizes.map((z) => ({ value: String(z.mm), label: z.label, title: `${z.mm} mm` }))}
+          onChange={(v) => setDiameter(Number(v))}
         />
-        <Select
+        {style.centre !== 'none' && (
+          <NumberField
+            label={CENTRE_LABELS[style.centre]}
+            value={doc.holeDiameterMM}
+            min={0}
+            max={Math.max(0, doc.diameterMM - 4)}
+            step={0.1}
+            unit="mm"
+            onChange={(holeDiameterMM) => updateDocMeta({ holeDiameterMM })}
+          />
+        )}
+        <div className="readout">{style.blurb}</div>
+      </div>
+      <div className="field-group">
+        <SegmentedControl
+          label="Material"
+          value={doc.material}
+          options={[
+            { value: 'brass', label: 'Brass', title: MATERIALS.brass.blurb },
+            { value: 'die-cast', label: 'Die-cast', title: MATERIALS['die-cast'].blurb },
+          ]}
+          onChange={(material) => updateDocMeta({ material })}
+        />
+        <SegmentedControl
+          label="Logo"
+          stack
+          value={doc.logoDisplay}
+          options={LOGO_DISPLAYS}
+          onChange={(logoDisplay) => updateDocMeta({ logoDisplay })}
+        />
+        <GroupedSelect
           label="Finish"
           value={doc.finish}
-          options={FINISHES}
+          groups={FINISH_OPTION_GROUPS}
           onChange={(finish) => updateDocMeta({ finish })}
         />
-        <div className="readout">Centre hole, relief and finish describe the struck button — they shape the 3D view, not the die geometry.</div>
+        <Toggle label="Distressed" value={doc.distressed} onChange={(distressed) => updateDocMeta({ distressed })} />
+        <div className="readout">
+          {MATERIALS[doc.material].blurb} Product options shape the 3D view and the spec sheet — never the die geometry.
+        </div>
       </div>
       <div className="field-group">
         <Toggle label="Guides" value={view.showGuides} onChange={(showGuides) => setView({ showGuides })} />
@@ -66,10 +127,12 @@ export function DocPanel() {
         />
         <SegmentedControl
           label="3D backdrop"
+          stack
           value={view.backdrop}
           options={[
             { value: 'raw', label: 'Raw', title: 'Raw indigo denim' },
             { value: 'ecru', label: 'Ecru', title: 'Undyed ecru denim' },
+            { value: 'studio', label: 'Studio', title: 'White sweep — the button stands on its shank' },
             { value: 'none', label: 'None', title: 'No backdrop' },
           ]}
           onChange={(backdrop) => setView({ backdrop })}

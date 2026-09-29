@@ -3,6 +3,7 @@ import { DEFAULT_SVG_OPTIONS, exportSvg, type SvgExportOptions } from '../../io/
 import { exportPng } from '../../io/exportPng'
 import { downloadBlob, downloadText, safeFilename } from '../../io/download'
 import { loadProjectFile, saveProject } from '../../io/project'
+import { specSheet } from '../../io/specSheet'
 import { useEngraver } from '../../state/store'
 import { Select } from '../controls/Select'
 import { SegmentedControl } from '../controls/SegmentedControl'
@@ -23,6 +24,9 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  const spec = useMemo(() => specSheet(doc), [doc])
+  const [specCopied, setSpecCopied] = useState(false)
 
   // Live warnings: run the die-file export whenever options change.
   const { warnings } = useMemo(() => exportSvg(doc, svgOptions), [doc, svgOptions])
@@ -145,6 +149,25 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           <button type="button" className="button-primary" disabled={busy} onClick={downloadPng}>
             {busy ? 'Rendering…' : 'Download PNG'}
           </button>
+        </div>
+
+        <div className="modal-section">
+          <div className="modal-section-title">Order spec</div>
+          <pre className="spec-sheet">{spec}</pre>
+          <div className="modal-row">
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(spec).then(() => setSpecCopied(true))
+              }}
+            >
+              {specCopied ? 'Copied' : 'Copy'}
+            </button>
+            <button type="button" onClick={() => downloadText(spec, `${safeFilename(doc.name)}-spec.txt`, 'text/plain')}>
+              Download .txt
+            </button>
+          </div>
+          <div className="readout">Also embedded in the SVG die file (its description).</div>
         </div>
 
         <div className="modal-section">

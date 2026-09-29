@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 10
+export const DOC_VERSION = 11
 
 /** Whether a content layer engraves its geometry or subtracts it from below. */
 export type BooleanRole = 'draw' | 'subtract'
@@ -53,11 +53,42 @@ export interface Asset {
   dataBase64: string
 }
 
-export type Finish = 'nickel' | 'antique-brass' | 'gunmetal' | 'steel' | 'brass'
-export const FINISH_IDS: readonly Finish[] = ['nickel', 'antique-brass', 'gunmetal', 'steel', 'brass']
+export type Finish =
+  | 'nickel'
+  | 'polished-nickel'
+  | 'antique-brass'
+  | 'brass'
+  | 'polished-gold'
+  | 'antique-copper'
+  | 'copper-oxide'
+  | 'pewter'
+  | 'dark-pewter'
+  | 'gunmetal'
+  | 'steel'
+export const FINISH_IDS: readonly Finish[] = [
+  'nickel',
+  'polished-nickel',
+  'antique-brass',
+  'brass',
+  'polished-gold',
+  'antique-copper',
+  'copper-oxide',
+  'pewter',
+  'dark-pewter',
+  'gunmetal',
+  'steel',
+]
 
-/** Which way the die's cut (black in the export) comes out on the struck button. */
-export type Relief = 'raised' | 'recessed'
+/** What is being struck: a jeans (shank/tack) button or a rivet. */
+export type Product = 'button' | 'rivet'
+export type ButtonStyle = 'flat-cap' | 'domed-cap' | 'open-top' | 'open-top-concave' | 'moveable-shank'
+export type RivetStyle = 'capped' | 'nipple' | 'inverted-nipple' | 'die-cast'
+/** Cap shape (the trade's style names). */
+export type ProductStyle = ButtonStyle | RivetStyle
+/** Brass (thin pressed sheet — simple text) or die-cast alloy (thicker — complex art). */
+export type Material = 'brass' | 'die-cast'
+/** How the die art appears: raised, sunk into the face, or laser-marked flat. */
+export type LogoDisplay = 'embossed' | 'debossed' | 'lasered'
 
 export interface ButtonDoc {
   version: number
@@ -65,10 +96,18 @@ export interface ButtonDoc {
   diameterMM: number
   /** Metal preview finish; has no effect on exported geometry. */
   finish: Finish
-  /** Centre hole of a donut / tack button (0 = solid cap). Physical product, not geometry. */
+  /*
+   * The physical product (see model/product.ts). None of these enter compiled
+   * geometry — they shape the 3D view and the spec sheet, never the die file.
+   */
+  product: Product
+  style: ProductStyle
+  material: Material
+  logoDisplay: LogoDisplay
+  /** Worn / distressed treatment over the finish. */
+  distressed: boolean
+  /** Diameter of the style's centre feature — open-top hole, nipple, cup or pin hole (0 = none). */
   holeDiameterMM: number
-  /** Die cut → raised (die-struck convention) or recessed on the button; drives the 3D render. */
-  relief: Relief
   layers: Layer[]
   assets: Record<AssetId, Asset>
   /** Machine-local fonts used by layers, keyed by their `local:` font id. */
@@ -439,8 +478,12 @@ export function makeBlankDoc(): ButtonDoc {
     name: 'Untitled button',
     diameterMM: 17,
     finish: 'nickel',
+    product: 'button',
+    style: 'flat-cap',
+    material: 'brass',
+    logoDisplay: 'embossed',
+    distressed: false,
     holeDiameterMM: 0,
-    relief: 'raised',
     layers: [makeRingLayer({ name: 'Rim', radiusMM: 8.2, strokeMM: 0.3 })],
     assets: {},
     localFonts: {},

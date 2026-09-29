@@ -177,6 +177,7 @@ describe('export: centre hole', () => {
   it('adds the hole to the blank outline and warns when art enters it', () => {
     const doc: ButtonDoc = {
       ...makeBlankDoc(),
+      style: 'open-top',
       holeDiameterMM: 4,
       layers: [makeRingLayer({ id: 'r', mode: 'stroke', radiusMM: 1.5, strokeMM: 0.2 })],
     }

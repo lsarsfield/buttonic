@@ -1,5 +1,6 @@
 import type { Asset, ButtonDoc, Finish, Layer, LayerType, LocalFontRef } from './types'
 import { FINISH_IDS, LAYER_TYPE_LABELS } from './types'
+import { coerceProductOptions } from './product'
 
 export type ValidationResult =
   | { ok: true; doc: ButtonDoc }
@@ -90,6 +91,16 @@ function checkAsset(id: string, value: unknown): string | null {
  * hand-rolled (no schema library): checks everything a compiler or renderer
  * would crash on, tolerates unknown extra fields so newer docs degrade softly.
  */
+function productOptions(value: Record<string, unknown>) {
+  return coerceProductOptions({
+    product: value.product,
+    style: value.style,
+    material: value.material,
+    logoDisplay: value.logoDisplay,
+    distressed: value.distressed,
+  })
+}
+
 export function validateDoc(value: unknown): ValidationResult {
   if (!isObj(value)) return { ok: false, error: 'document is not an object' }
   if (!isNum(value.version)) return { ok: false, error: 'document has no version number' }
@@ -100,9 +111,6 @@ export function validateDoc(value: unknown): ValidationResult {
   if (!isStr(value.finish)) return { ok: false, error: 'document has no finish' }
   if (!isNum(value.holeDiameterMM) || value.holeDiameterMM < 0) {
     return { ok: false, error: 'document has an invalid centre hole' }
-  }
-  if (value.relief !== 'raised' && value.relief !== 'recessed') {
-    return { ok: false, error: 'document has an invalid relief' }
   }
   if (!Array.isArray(value.layers)) return { ok: false, error: 'document has no layer list' }
 
@@ -138,8 +146,9 @@ export function validateDoc(value: unknown): ValidationResult {
       diameterMM: value.diameterMM,
       // an unknown finish (e.g. from a newer app) degrades to steel instead of crashing a renderer
       finish: (FINISH_IDS as readonly string[]).includes(value.finish) ? (value.finish as Finish) : 'steel',
+      // product options degrade softly (a newer app's value → a sane default)
+      ...productOptions(value),
       holeDiameterMM: value.holeDiameterMM,
-      relief: value.relief,
       layers: value.layers as Layer[],
       assets: assets as Record<string, Asset>,
       localFonts: localFonts as Record<string, LocalFontRef>,

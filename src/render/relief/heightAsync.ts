@@ -1,6 +1,6 @@
 import type { ButtonDoc } from '../../model/types'
 import { exportSvg } from '../../io/exportSvg'
-import { buildHeightField, coverageFromRgba, RELIEF_DEFAULTS, type HeightField, type ReliefParams } from './heightField'
+import { buildHeightField, coverageFromRgba, reliefParamsOf, type HeightField, type ReliefParams } from './heightField'
 import type { HeightDone, HeightJob } from './heightWorker'
 
 /**
@@ -15,17 +15,23 @@ import type { HeightDone, HeightJob } from './heightWorker'
 export const HEIGHT_N = 2048
 
 export function reliefParams(doc: ButtonDoc): ReliefParams {
-  return {
-    relief: doc.relief,
-    faceR: doc.diameterMM / 2,
-    holeR: doc.holeDiameterMM / 2,
-    ...RELIEF_DEFAULTS,
-  }
+  return reliefParamsOf(doc)
 }
 
-/** Everything that changes the height field (finish, light and camera don't). */
+/** Everything that changes the height field (finish, distressing, light and camera don't). */
 export function heightKey(doc: ButtonDoc, fontsRevision: number, assetsRevision: number, n = HEIGHT_N): string {
-  return JSON.stringify([n, fontsRevision, assetsRevision, doc.diameterMM, doc.holeDiameterMM, doc.relief, doc.layers])
+  return JSON.stringify([
+    n,
+    fontsRevision,
+    assetsRevision,
+    doc.diameterMM,
+    doc.holeDiameterMM,
+    doc.product,
+    doc.style,
+    doc.material,
+    doc.logoDisplay,
+    doc.layers,
+  ])
 }
 
 /** Rasterize the die art (black on transparent) over the face, n × n. */

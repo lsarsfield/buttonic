@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { polarToXY } from '../../geometry/polar'
+import { centreKindOf } from '../../model/product'
 import { useEngraver } from '../../state/store'
 import { useViewport } from '../../state/viewport'
 
@@ -11,7 +12,8 @@ import { useViewport } from '../../state/viewport'
 export function Guides() {
   const showGuides = useEngraver((s) => s.view.showGuides)
   const diameterMM = useEngraver((s) => s.doc.diameterMM)
-  const holeR = useEngraver((s) => s.doc.holeDiameterMM / 2)
+  // the style's centre feature (hole, nipple, cup, pin hole) — keep art clear of it
+  const holeR = useEngraver((s) => (centreKindOf(s.doc) !== 'none' ? s.doc.holeDiameterMM / 2 : 0))
   const scale = useViewport((s) => s.scale)
   const selected = useEngraver((s) => s.doc.layers.find((l) => l.id === s.selection) ?? null)
 
@@ -59,7 +61,7 @@ export function Guides() {
           ))}
           {/* button edge */}
           <circle r={R} strokeWidth={px(1)} strokeOpacity={0.55} />
-          {/* donut centre hole */}
+          {/* centre feature: hole, nipple, cup or pin hole */}
           {holeR > 0 && (
             <circle r={holeR} strokeWidth={px(1)} strokeOpacity={0.55} strokeDasharray={`${px(3)} ${px(3)}`} />
           )}

@@ -1,37 +1,54 @@
 import * as THREE from 'three'
-import type { Finish } from '../../model/types'
+import { STYLES } from '../../model/product'
+import type { Finish, LogoDisplay, Material, Product, ProductStyle } from '../../model/types'
 import { makeDenim, TILE_MM, type DenimKind } from './denim'
-import { COPPER, finishOf, type MetalFinish } from './finishes'
-import { baseProfile, finishMaps, ROUGH_HEADROOM, RELIEF_DEFAULTS, type HeightField, type ReliefParams } from './heightField'
+import { COPPER, finishOf, METAL_FINISHES, type MetalFinish } from './finishes'
+import {
+  baseProfile,
+  faceInnerR,
+  finishMaps,
+  reliefParamsOf,
+  ROUGH_HEADROOM,
+  type HeightField,
+  type ReliefParams,
+} from './heightField'
 
 /**
- * The struck button as a three.js scene, in millimetres. three is Y-up; the
- * button face lies in the XZ plane and design (x, y-down) maps to (x, 0, y),
- * so looking straight down with screen-up = −Z shows the design as drawn.
+ * The struck button or rivet as a three.js scene, in millimetres. three is
+ * Y-up; the face lies in the XZ plane and design (x, y-down) maps to
+ * (x, 0, y), so looking straight down with screen-up = −Z shows the design
+ * as drawn.
  *
- * Parts: the face (a polar grid carrying the cap profile, displaced by the
- * design relief and shaded by the height field's object-space normals /
- * cavity maps), the lathed cap body (rolled edge, side wall, hole wall), the
- * copper tack post seen through a donut hole, and a denim ground with a soft
- * contact shadow. Lighting: a neutral room environment (PMREM) plus a warm
- * key light whose azimuth is the app's light angle (0° = 12 o'clock, cw).
+ * Parts: the face (a polar grid carrying the style's cap profile — flat,
+ * domed or dished, rolled edge, and its centre feature: hole lip, nipple
+ * knob, sunk cup or pin hole — displaced by the design relief and shaded by
+ * the height field's object-space normals / patina maps), the lathed cap
+ * body (thicker for die-cast), the copper tack post in an open top, and the
+ * back part (tack shank, swivel shank or rivet nail) seen in the studio
+ * product shot. Ground: denim (raw / ecru) with a contact shadow, or a white
+ * studio sweep with the button standing on its shank. Lighting: a procedural
+ * product studio (PMREM) plus a key light whose azimuth is the app's light
+ * angle (0° = 12 o'clock, clockwise).
  *
  * Shared by the interactive 3D stage and the PNG mockup export.
  */
 
-export type Backdrop = DenimKind | 'none'
+export type Backdrop = DenimKind | 'studio' | 'none'
 export type Pose = 'photo' | 'top'
 
 export interface ButtonSpec {
   diameterMM: number
   holeDiameterMM: number
+  product: Product
+  style: ProductStyle
+  material: Material
+  logoDisplay: LogoDisplay
+  distressed: boolean
   finish: Finish
   lightDeg: number
   backdrop: Backdrop
 }
 
-/** Cap height from the ground to the flat face, mm. */
-const CAP_H = 1.15
 const FOV = 22
 /** Visible height at the fit distance, in button radii (margin around the cap). */
 const FRAME = 2.6
@@ -46,23 +63,27 @@ function metalMaterial(f: MetalFinish): THREE.MeshPhysicalMaterial {
   })
 }
 
-/** Radii for the face grid: dense enough for 0.05 mm art, extra samples on the rolled curves. */
+/** Radii for the face grid: dense enough for 0.05 mm art, extra samples on every curve. */
 function faceRadii(p: ReliefParams): number[] {
-  const out: number[] = []
-  const r0 = p.holeR > 0 ? p.holeR : 0
-  const push = (r: number) => {
-    if (out.length === 0 || r - out[out.length - 1]! > 1e-5) out.push(r)
-  }
-  // hole lip: angular samples of the quarter round
-  const lipEnd = p.holeR > 0 ? p.holeR + p.holeRollMM : 0
-  if (p.holeR > 0) {
-    for (let k = 0; k <= 16; k++) push(p.holeR + p.holeRollMM * (1 - Math.cos((k / 16) * (Math.PI / 2))))
-  } else push(r0)
+  const pts: number[] = []
+  const r0 = faceInnerR(p)
   const shoulder = p.faceR - p.rollMM
-  const step = 0.03
-  const n = Math.max(1, Math.ceil((shoulder - lipEnd) / step))
-  for (let k = 1; k <= n; k++) push(lipEnd + ((shoulder - lipEnd) * k) / n)
-  for (let k = 1; k <= 24; k++) push(shoulder + p.rollMM * Math.sin((k / 24) * (Math.PI / 2)))
+  const step = Math.min(0.03, p.faceR / 250)
+  pts.push(r0)
+  const n = Math.max(1, Math.ceil((shoulder - r0) / step))
+  for (let k = 1; k <= n; k++) pts.push(r0 + ((shoulder - r0) * k) / n)
+  for (let k = 1; k <= 24; k++) pts.push(shoulder + p.rollMM * Math.sin((k / 24) * (Math.PI / 2)))
+  const c = p.centreR
+  if (p.centre === 'hole' || p.centre === 'pin') {
+    for (let k = 0; k <= 16; k++) pts.push(c + p.lipMM * (1 - Math.cos((k / 16) * (Math.PI / 2))))
+  } else if (p.centre === 'nipple') {
+    for (let k = 0; k <= 32; k++) pts.push(c * Math.sin((k / 32) * (Math.PI / 2))) // dense near the steep base
+  } else if (p.centre === 'cup') {
+    for (let k = 0; k <= 24; k++) pts.push((c * k) / 24)
+  }
+  pts.sort((a, b) => a - b)
+  const out: number[] = []
+  for (const r of pts) if (r >= r0 - 1e-9 && r <= p.faceR && (out.length === 0 || r - out[out.length - 1]! > 1e-5)) out.push(r)
   return out
 }
 
@@ -105,45 +126,70 @@ function buildFaceGeometry(p: ReliefParams, segments = 1024): THREE.BufferGeomet
   return g
 }
 
-/** Cap body below the face: side wall + curled base, and the hole wall. */
-function buildBodyGeometries(p: ReliefParams): THREE.BufferGeometry[] {
+/** Cap body below the face: side wall + curled base, and the wall of a hole / pin hole. */
+function buildBodyGeometries(p: ReliefParams): { outer: THREE.BufferGeometry; inner: THREE.BufferGeometry | null } {
   const R = p.faceR
+  const H = p.capH
   const yEdge = baseProfile(R, p).y
-  const curl = 0.5
+  const curl = Math.min(0.5, H * 0.4)
   const outer: THREE.Vector2[] = [new THREE.Vector2(R, yEdge)]
   for (let k = 0; k <= 8; k++) {
     const a = (k / 8) * (Math.PI / 2)
-    outer.push(new THREE.Vector2(R - curl + curl * Math.cos(a), -CAP_H + curl - curl * Math.sin(a)))
+    outer.push(new THREE.Vector2(R - curl + curl * Math.cos(a), -H + curl - curl * Math.sin(a)))
   }
-  outer.push(new THREE.Vector2(p.holeR > 0 ? p.holeR : 0, -CAP_H))
-  const geos = [new THREE.LatheGeometry(outer, 256)]
-  if (p.holeR > 0) {
-    const yLip = baseProfile(p.holeR, p).y
-    geos.push(
-      new THREE.LatheGeometry([new THREE.Vector2(p.holeR, -CAP_H), new THREE.Vector2(p.holeR, yLip)], 256),
-    )
+  const r0 = faceInnerR(p)
+  outer.push(new THREE.Vector2(r0, -H))
+  let inner: THREE.BufferGeometry | null = null
+  if (r0 > 0) {
+    const yLip = baseProfile(r0, p).y
+    inner = new THREE.LatheGeometry([new THREE.Vector2(r0, -H), new THREE.Vector2(r0, yLip)], 128)
   }
-  return geos
+  return { outer: new THREE.LatheGeometry(outer, 256), inner }
 }
 
-/** The flared copper tack post under a donut hole: flange floor, rolled lip, hollow bore. */
-function buildPostGeometries(holeR: number): { copper: THREE.BufferGeometry; bore: THREE.BufferGeometry } {
+/** The flared copper tack post under an open top: flange floor, rolled lip, hollow bore. */
+function buildPostGeometries(holeR: number, capH: number): { copper: THREE.BufferGeometry; bore: THREE.BufferGeometry } {
   const h = holeR
+  const k = capH / 1.15 // tuned at the 17 mm brass cap
   const lipR = 0.5 * h
   const tube = 0.1 * h
-  const pts: THREE.Vector2[] = [new THREE.Vector2(h * 0.995, -0.95), new THREE.Vector2(lipR + tube * 1.6, -0.9)]
+  const pts: THREE.Vector2[] = [new THREE.Vector2(h * 0.995, -0.95 * k), new THREE.Vector2(lipR + tube * 1.6, -0.9 * k)]
   // rolled lip: a half torus section from the outside over the top into the bore
-  for (let k = 0; k <= 16; k++) {
-    const a = Math.PI * (k / 16) // 0 = outer side, π = inner side
-    pts.push(new THREE.Vector2(lipR + tube * Math.cos(a), -0.72 + tube * Math.sin(a)))
+  for (let i = 0; i <= 16; i++) {
+    const a = Math.PI * (i / 16) // 0 = outer side, π = inner side
+    pts.push(new THREE.Vector2(lipR + tube * Math.cos(a), -0.72 * k + tube * Math.sin(a)))
   }
-  pts.push(new THREE.Vector2(lipR - tube * 1.05, -0.95))
+  pts.push(new THREE.Vector2(lipR - tube * 1.05, -0.95 * k))
   const copper = new THREE.LatheGeometry(pts, 128)
   const bore = new THREE.LatheGeometry(
-    [new THREE.Vector2(lipR - tube * 1.05, -0.95), new THREE.Vector2(lipR - tube * 1.1, -2.2), new THREE.Vector2(0, -2.2)],
+    [new THREE.Vector2(lipR - tube * 1.05, -0.95 * k), new THREE.Vector2(lipR - tube * 1.1, -2.2 * k), new THREE.Vector2(0, -2.2 * k)],
     96,
   )
   return { copper, bore }
+}
+
+/**
+ * What's under a button cap, for the studio product shot: a tack shank (post
+ * + flared foot) or a swivel shank (the same with a collar where it turns).
+ * Returns the geometry and its height below the cap underside.
+ */
+function buildShank(R: number, capH: number, swivel: boolean): { geo: THREE.BufferGeometry; height: number } {
+  const postR = 0.22 * R
+  const len = 0.62 * R
+  const footR = 0.3 * R
+  const foot = 0.1 * R
+  const y0 = -capH
+  const pts: THREE.Vector2[] = [new THREE.Vector2(0.001, y0), new THREE.Vector2(postR * 1.25, y0)]
+  if (swivel) {
+    // collar: a rounded ring just under the cap where the shank turns
+    for (let i = 0; i <= 10; i++) {
+      const a = Math.PI * (i / 10)
+      pts.push(new THREE.Vector2(postR * 1.12 + 0.06 * R * Math.sin(a), y0 - 0.02 * R - 0.1 * R * (i / 10)))
+    }
+  }
+  pts.push(new THREE.Vector2(postR, y0 - 0.14 * R), new THREE.Vector2(postR, y0 - len + foot))
+  pts.push(new THREE.Vector2(footR, y0 - len + foot * 0.4), new THREE.Vector2(footR, y0 - len), new THREE.Vector2(0.001, y0 - len))
+  return { geo: new THREE.LatheGeometry(pts, 96), height: len }
 }
 
 /**
@@ -154,13 +200,25 @@ function buildPostGeometries(holeR: number): { copper: THREE.BufferGeometry; bor
  * RoomEnvironment is evenly bright and made nickel read as porcelain.
  * Environment space: key at azimuth 0 = −Z.
  */
-function studioScene(): THREE.Scene {
+function studioScene(bright = false): THREE.Scene {
   const scene = new THREE.Scene()
+  // bright = a white product table: the sweep and walls are paper, so polished
+  // metal mirrors pale greys instead of a black room
+  const wall: [number, number, number] = bright ? [0.55, 0.55, 0.56] : [0.025, 0.025, 0.028]
   const room = new THREE.Mesh(
     new THREE.SphereGeometry(50, 32, 16),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(0.025, 0.025, 0.028), side: THREE.BackSide }),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(wall[0], wall[1], wall[2]), side: THREE.BackSide }),
   )
   scene.add(room)
+  if (bright) {
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(49, 48),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(0.8, 0.79, 0.77), side: THREE.DoubleSide }),
+    )
+    floor.rotation.x = -Math.PI / 2
+    floor.position.y = -6
+    scene.add(floor)
+  }
   const panel = (w: number, h: number, intensity: number, tint: [number, number, number], azDeg: number, elDeg: number, dist: number) => {
     const m = new THREE.Mesh(
       new THREE.PlaneGeometry(w, h),
@@ -213,7 +271,7 @@ function denimTextures(kind: DenimKind): { color: THREE.Texture; bump: THREE.Tex
 }
 
 function dataTexture(
-  data: Uint8Array | Float32Array,
+  data: Uint8Array | Uint16Array | Float32Array,
   n: number,
   format: THREE.PixelFormat,
   type: THREE.TextureDataType,
@@ -239,8 +297,12 @@ export class ButtonScene {
   private readonly renderer: THREE.WebGLRenderer
   private readonly pmrem: THREE.PMREMGenerator
   private readonly envTex: THREE.Texture
+  /** The white product-table environment (studio backdrop), built on first use. */
+  private brightEnv: THREE.Texture | null = null
   private readonly key = new THREE.DirectionalLight(0xfffaf2, 1.6)
   private readonly button = new THREE.Group()
+  /** Parts shown only in the studio product shot (the shank under a button). */
+  private readonly back = new THREE.Group()
   private readonly ground: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>
   private readonly contact: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
 
@@ -249,13 +311,16 @@ export class ButtonScene {
   /** The hole wall sits in its own shadow — darker, rougher than the face. */
   private holeMat: THREE.MeshPhysicalMaterial | null = null
   private depthMat: THREE.MeshDepthMaterial | null = null
+  private extraMats: THREE.Material[] = []
   private field: HeightField | null = null
   private fieldTex: THREE.Texture[] = []
-  /** Finish-dependent patina maps (rebuilt on a new field or a finish change). */
+  /** Finish-dependent patina maps (rebuilt on a new field or a look change). */
   private patinaTex: THREE.Texture[] = []
   private patinaKey = ''
   private geoKey = ''
   private spec: ButtonSpec | null = null
+  private params: ReliefParams | null = null
+  private shankH = 0
 
   constructor(renderer: THREE.WebGLRenderer) {
     this.renderer = renderer
@@ -290,36 +355,31 @@ export class ButtonScene {
       new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, bumpScale: 1.2, envMapIntensity: 0.35 }),
     )
     this.ground.rotation.x = -Math.PI / 2
-    this.ground.position.y = -CAP_H - 0.002
     this.ground.receiveShadow = true
     this.contact = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ map: contactShadowTexture(), transparent: true, depthWrite: false }),
     )
     this.contact.rotation.x = -Math.PI / 2
-    this.contact.position.y = -CAP_H + 0.004
     this.contact.renderOrder = 1
+    this.button.add(this.back)
     this.scene.add(this.ground, this.contact, this.button)
-  }
-
-  private params(): ReliefParams {
-    const s = this.spec!
-    return {
-      relief: 'raised',
-      faceR: s.diameterMM / 2,
-      holeR: s.holeDiameterMM / 2,
-      ...RELIEF_DEFAULTS,
-    }
   }
 
   setSpec(spec: ButtonSpec): void {
     const prev = this.spec
     this.spec = spec
-    const geoKey = `${spec.diameterMM}|${spec.holeDiameterMM}`
+    this.params = reliefParamsOf(spec)
+    const geoKey = [spec.diameterMM, spec.holeDiameterMM, spec.product, spec.style, spec.material].join('|')
     if (geoKey !== this.geoKey) {
       this.geoKey = geoKey
       this.rebuildButton()
-    } else if (!prev || prev.finish !== spec.finish) {
+    } else if (
+      !prev ||
+      prev.finish !== spec.finish ||
+      prev.distressed !== spec.distressed ||
+      prev.logoDisplay !== spec.logoDisplay
+    ) {
       this.applyFinish()
     }
     this.applyLight()
@@ -327,48 +387,85 @@ export class ButtonScene {
   }
 
   private rebuildButton(): void {
-    for (const child of [...this.button.children]) {
-      this.button.remove(child)
-      ;(child as THREE.Mesh).geometry.dispose()
+    for (const group of [this.button, this.back]) {
+      for (const child of [...group.children]) {
+        if (child === this.back) continue
+        group.remove(child)
+        ;(child as THREE.Mesh).geometry?.dispose()
+      }
     }
-    const p = this.params()
-    const f = finishOf(this.spec!.finish)
+    for (const m of this.extraMats) m.dispose()
+    this.extraMats = []
+    const p = this.params!
+    const spec = this.spec!
+    const f = finishOf(spec.finish)
     this.faceMat?.dispose()
     this.bodyMat?.dispose()
     this.holeMat?.dispose()
     this.depthMat?.dispose()
     this.faceMat = metalMaterial(f)
     this.bodyMat = metalMaterial(f)
+    this.bodyMat.side = THREE.DoubleSide
     this.holeMat = metalMaterial(f)
     this.holeMat.side = THREE.DoubleSide
     this.depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking })
 
-    const face = new THREE.Mesh(buildFaceGeometry(p), this.faceMat)
+    const face = new THREE.Mesh(buildFaceGeometry(p, p.faceR < 6 ? 768 : 1024), this.faceMat)
     face.castShadow = true
     face.receiveShadow = true
     face.customDepthMaterial = this.depthMat
     this.button.add(face)
-    buildBodyGeometries(p).forEach((g, k) => {
-      const m = new THREE.Mesh(g, k === 0 ? this.bodyMat! : this.holeMat!)
-      this.bodyMat!.side = THREE.DoubleSide
-      m.castShadow = true
-      m.receiveShadow = true
-      this.button.add(m)
-    })
-    if (p.holeR > 0) {
-      const { copper, bore } = buildPostGeometries(p.holeR)
-      const cm = new THREE.Mesh(copper, metalMaterial(COPPER))
-      const cmat = cm.material as THREE.MeshPhysicalMaterial
+    const { outer, inner } = buildBodyGeometries(p)
+    const om = new THREE.Mesh(outer, this.bodyMat)
+    om.castShadow = om.receiveShadow = true
+    this.button.add(om)
+    if (inner) {
+      const im = new THREE.Mesh(inner, this.holeMat)
+      im.receiveShadow = true
+      this.button.add(im)
+    }
+    const dark = () => {
+      const m = new THREE.MeshPhysicalMaterial({ color: 0x14100c, metalness: 0.5, roughness: 0.8, side: THREE.DoubleSide })
+      this.extraMats.push(m)
+      return m
+    }
+    if (p.centre === 'hole') {
+      const { copper, bore } = buildPostGeometries(p.centreR, p.capH)
+      const cmat = metalMaterial(COPPER)
       cmat.side = THREE.DoubleSide
       cmat.envMapIntensity = 0.4 // down a pit: it sees mostly the inside of the cap
+      this.extraMats.push(cmat)
+      const cm = new THREE.Mesh(copper, cmat)
       cm.receiveShadow = true
-      const bm = new THREE.Mesh(
-        bore,
-        new THREE.MeshPhysicalMaterial({ color: 0x2a1a12, metalness: 0.6, roughness: 0.7, side: THREE.DoubleSide }),
-      )
-      this.button.add(cm, bm)
+      this.button.add(cm, new THREE.Mesh(bore, dark()))
+    } else if (p.centre === 'pin') {
+      // the pin hole's floor: dark, just above the cap underside
+      const floor = new THREE.Mesh(new THREE.CircleGeometry(p.centreR, 48), dark())
+      floor.rotation.x = -Math.PI / 2
+      floor.position.y = -p.capH + 0.02
+      this.button.add(floor)
+    } else if (p.centre === 'cup') {
+      // the bore at the bottom of the sunk cup
+      const bore = new THREE.Mesh(new THREE.CircleGeometry(p.centreR * 0.28, 48), dark())
+      bore.rotation.x = -Math.PI / 2
+      bore.position.y = baseProfile(0, p).y + 0.003
+      ;(bore.material as THREE.Material).polygonOffset = true
+      ;(bore.material as THREE.Material).polygonOffsetFactor = -2
+      this.button.add(bore)
     }
-    this.contact.scale.set(p.faceR * 2.25, p.faceR * 2.25, 1)
+
+    // studio shot: a button stands on its shank (rivets lie on their backs)
+    this.shankH = 0
+    const back = STYLES[this.spec!.style].back
+    if (back !== 'nail') {
+      const shankMat = metalMaterial(METAL_FINISHES.steel)
+      this.extraMats.push(shankMat)
+      const { geo, height } = buildShank(p.faceR, p.capH, back === 'swivel')
+      const sm = new THREE.Mesh(geo, shankMat)
+      sm.castShadow = sm.receiveShadow = true
+      this.back.add(sm)
+      this.shankH = height
+    }
     // new materials: re-attach the current relief (setHeightField re-applies the finish)
     this.setHeightField(this.field)
   }
@@ -392,16 +489,21 @@ export class ButtonScene {
     }
   }
 
-  /** (Re)compose the finish's patina over the current field — ~tens of ms, no EDT. */
+  /** (Re)compose the finish's look over the current field — ~tens of ms, no EDT. */
   private applyPatina(): void {
     const m = this.faceMat
     const field = this.field
     if (!m || !field) return
-    const f = finishOf(this.spec!.finish)
-    const key = JSON.stringify(f.patina)
+    const spec = this.spec!
+    const look = {
+      patina: finishOf(spec.finish).patina,
+      lasered: spec.logoDisplay === 'lasered',
+      distressed: spec.distressed,
+    }
+    const key = JSON.stringify(look)
     if (key === this.patinaKey && this.patinaTex.length > 0) return
     for (const t of this.patinaTex) t.dispose()
-    const { surface, albedo } = finishMaps(field, f.patina)
+    const { surface, albedo } = finishMaps(field, look)
     const st = dataTexture(surface, field.n, THREE.RGBAFormat, THREE.UnsignedByteType, true)
     const at = dataTexture(albedo, field.n, THREE.RGBAFormat, THREE.UnsignedByteType, true)
     st.anisotropy = at.anisotropy = 8
@@ -411,6 +513,7 @@ export class ButtonScene {
     m.map = at
     m.roughnessMap = st
     m.aoMap = st
+    m.metalnessMap = st
     if (first) m.needsUpdate = true
   }
 
@@ -423,12 +526,12 @@ export class ButtonScene {
     const m = this.faceMat
     if (!m || !this.depthMat) return
     if (!field) {
-      m.map = m.normalMap = m.roughnessMap = m.aoMap = m.displacementMap = null
+      m.map = m.normalMap = m.roughnessMap = m.aoMap = m.metalnessMap = m.displacementMap = null
       this.depthMat.displacementMap = null
     } else {
       const disp = dataTexture(field.disp, field.dispN, THREE.RedFormat, THREE.FloatType, false)
       disp.minFilter = disp.magFilter = THREE.NearestFilter // float32 linear filtering isn't universal
-      const normal = dataTexture(field.normal, field.n, THREE.RGBAFormat, THREE.UnsignedByteType, true)
+      const normal = dataTexture(field.normal, field.n, THREE.RGBAFormat, THREE.HalfFloatType, true)
       normal.anisotropy = 8
       this.fieldTex = [disp, normal]
       m.map = null // applyFinish → applyPatina attaches the finish's maps
@@ -448,14 +551,17 @@ export class ButtonScene {
     const s = this.spec!
     // app convention: 0° = 12 o'clock (−Z), clockwise seen from above (+X at 90°)
     const az = s.lightDeg * DEG
-    const el = 48 * DEG
+    // studio: high, soft key like a product table's overhead light
+    const studio = s.backdrop === 'studio'
+    const el = (studio ? 64 : 48) * DEG
+    this.key.shadow.intensity = studio ? 0.5 : 1
     const d = 60
     this.key.position.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, -Math.cos(az) * Math.cos(el) * d)
     this.key.target.position.set(0, 0, 0)
     const R = s.diameterMM / 2
     const cam = this.key.shadow.camera
-    cam.left = cam.bottom = -R * 1.8
-    cam.right = cam.top = R * 1.8
+    cam.left = cam.bottom = -R * 2.2
+    cam.right = cam.top = R * 2.2
     cam.near = 1
     cam.far = 140
     cam.updateProjectionMatrix()
@@ -465,14 +571,46 @@ export class ButtonScene {
 
   private applyBackdrop(): void {
     const b = this.spec!.backdrop
+    const p = this.params!
+    const studio = b === 'studio'
+    if (studio && !this.brightEnv) {
+      const sc = studioScene(true)
+      this.brightEnv = this.pmrem.fromScene(sc, 0.02).texture
+      sc.traverse((o) => {
+        const m = o as THREE.Mesh
+        if (m.geometry) m.geometry.dispose()
+        ;(m.material as THREE.Material | undefined)?.dispose()
+      })
+    }
+    this.scene.environment = studio ? this.brightEnv : this.envTex
+    this.back.visible = studio
+    // a button in the studio stands on its shank; everything else sits on its back
+    const groundY = -p.capH - (studio ? this.shankH : 0)
+    this.ground.position.y = groundY - 0.002
+    this.contact.position.y = groundY + 0.004
+    const cs = studio && this.shankH > 0 ? p.faceR * 1.1 : p.faceR * 2.25
+    this.contact.scale.set(cs, cs, 1)
     this.ground.visible = b !== 'none'
     this.contact.visible = b !== 'none'
     if (b === 'none') return
+    const m = this.ground.material
+    if (studio) {
+      // white paper sweep, like a supplier's product shot
+      if (m.map) {
+        m.map = null
+        m.bumpMap = null
+        m.needsUpdate = true
+      }
+      m.color.setRGB(0.9, 0.89, 0.87)
+      m.envMapIntensity = 1.1
+      return
+    }
     const { color, bump } = denimTextures(b)
     const reps = 160 / TILE_MM
     color.repeat.set(reps, reps)
     bump.repeat.set(reps, reps)
-    const m = this.ground.material
+    m.color.setRGB(1, 1, 1)
+    m.envMapIntensity = 0.35
     if (m.map !== color) {
       m.map = color
       m.bumpMap = bump
@@ -485,8 +623,12 @@ export class ButtonScene {
     const R = (this.spec?.diameterMM ?? 17) / 2
     const fit = (R * FRAME) / Math.min(1, aspect)
     const dist = fit / (2 * Math.tan((FOV * DEG) / 2))
-    const polar = pose === 'photo' ? 34 * DEG : 0.0001
+    // studio: shot low like a supplier's product photo, so the shank shows
+    const photoPolar = this.spec?.backdrop === 'studio' && this.shankH > 0 ? 62 : 34
+    const polar = pose === 'photo' ? photoPolar * DEG : 0.0001
     const az = pose === 'photo' ? 20 * DEG : 0
+    const studioLift = this.spec?.backdrop === 'studio' ? this.shankH : 0
+    this.target.set(0, -(this.params?.capH ?? 1.15) * 0.25 - studioLift * 0.45, 0)
     this.camera.aspect = aspect
     this.camera.position.set(
       this.target.x + dist * Math.sin(polar) * Math.sin(az),
@@ -505,8 +647,8 @@ export class ButtonScene {
   }
 
   render(): void {
-    const transparent = this.spec?.backdrop === 'none'
-    this.renderer.setClearColor(0x000000, transparent ? 0 : 1)
+    const b = this.spec?.backdrop
+    this.renderer.setClearColor(b === 'studio' ? 0xe6e4e0 : 0x000000, b === 'none' ? 0 : 1)
     this.renderer.render(this.scene, this.camera)
   }
 
@@ -516,6 +658,7 @@ export class ButtonScene {
       const m = o as THREE.Mesh
       if (m.geometry) m.geometry.dispose()
     })
+    for (const m of this.extraMats) m.dispose()
     this.faceMat?.dispose()
     this.bodyMat?.dispose()
     this.holeMat?.dispose()
@@ -526,7 +669,31 @@ export class ButtonScene {
     this.contact.material.map?.dispose()
     this.contact.material.dispose()
     this.envTex.dispose()
+    this.brightEnv?.dispose()
     this.pmrem.dispose()
+  }
+}
+
+/** The doc-level product fields a scene needs (light and backdrop come from the view). */
+export function specOfDoc(d: {
+  diameterMM: number
+  holeDiameterMM: number
+  product: Product
+  style: ProductStyle
+  material: Material
+  logoDisplay: LogoDisplay
+  distressed: boolean
+  finish: Finish
+}): Omit<ButtonSpec, 'lightDeg' | 'backdrop'> {
+  return {
+    diameterMM: d.diameterMM,
+    holeDiameterMM: d.holeDiameterMM,
+    product: d.product,
+    style: d.style,
+    material: d.material,
+    logoDisplay: d.logoDisplay,
+    distressed: d.distressed,
+    finish: d.finish,
   }
 }
 

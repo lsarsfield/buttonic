@@ -1,4 +1,5 @@
 import type { ButtonDoc } from '../model/types'
+import { CENTRE_LABELS, centreKindOf, isOpening } from '../model/product'
 import { clipCompiled } from '../geometry/clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import {
@@ -17,6 +18,7 @@ import { distToSegment, flattenSegs } from '../geometry/flatten'
 import { parsePathData, transformSegs } from '../geometry/pathData'
 import { fillPaint, type Paint, type Shape } from '../geometry/shapes'
 import { stringifyDoc } from '../model/serialize'
+import { specSheet } from './specSheet'
 import { getLoadedFont } from './fonts'
 import { getSvgAsset } from './svgAssets'
 
@@ -167,7 +169,9 @@ function shapeMinRadius(shape: Shape): number {
 export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SVG_OPTIONS): SvgExportResult {
   const warnings: string[] = []
   const R = doc.diameterMM / 2
-  const holeR = doc.holeDiameterMM / 2
+  const centre = centreKindOf(doc)
+  const holeR = centre === 'none' ? 0 : doc.holeDiameterMM / 2
+  const centreName = centre === 'none' ? '' : CENTRE_LABELS[centre].toLowerCase()
   const ctx: CompileCtx = {
     diameterMM: doc.diameterMM,
     toleranceMM: EXPORT_TOLERANCE_MM,
@@ -226,7 +230,7 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
         warnings.push(`${layer.name}: geometry extends beyond the button face`)
       }
       if (holeR > 0 && shapeMinRadius(shape) < holeR - 0.01) {
-        warnings.push(`${layer.name}: geometry extends into the centre hole`)
+        warnings.push(`${layer.name}: geometry extends into the ${centreName}`)
       }
       if (shape.kind === 'instanced' && options.expandInstances) {
         for (const flat of expandInstanced(shape)) shapeToMarkup(flat, '', body, defs)
@@ -244,12 +248,14 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
 
   const outline = options.includeBlankOutline
     ? `<circle r="${fmt(R)}" fill="none" stroke="#000000" stroke-width="0.02" data-name="blank outline"/>` +
-      (holeR > 0
-        ? `\n<circle r="${fmt(holeR)}" fill="none" stroke="#000000" stroke-width="0.02" data-name="centre hole"/>`
+      (holeR > 0 && isOpening(centre)
+        ? `\n<circle r="${fmt(holeR)}" fill="none" stroke="#000000" stroke-width="0.02" data-name="${centreName}"/>`
         : '')
     : ''
   const mirror = options.mirrorForDie ? ` transform="scale(-1 1)"` : ''
   const defsBlock = defs.length > 0 ? `<defs>\n${defs.join('\n')}\n</defs>\n` : ''
+  // the order spec travels with the artwork (skipped for thumbnails / rasters)
+  const desc = options.embedProject === false ? '' : `<desc>${xmlEscape(specSheet(doc))}</desc>\n`
   const meta =
     options.embedProject === false
       ? ''
@@ -260,7 +266,7 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
     doc.diameterMM,
   )}" width="${fmt(doc.diameterMM)}mm" height="${fmt(doc.diameterMM)}mm">
 <title>${xmlEscape(doc.name)}</title>
-${meta}
+${desc}${meta}
 ${defsBlock}<g id="engraving"${mirror}>
 ${outline}
 ${layerMarkup.join('\n')}

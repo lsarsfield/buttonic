@@ -19,7 +19,11 @@ function docWithEverything(): ButtonDoc {
     diameterMM: 17,
     finish: 'gunmetal',
     holeDiameterMM: 0,
-    relief: 'raised',
+    product: 'button',
+    style: 'flat-cap',
+    material: 'brass',
+    logoDisplay: 'embossed',
+    distressed: false,
     layers: [
       makeCenterLayer(),
       makeRingTextLayer(),
@@ -273,32 +277,50 @@ describe('parseDoc failure modes', () => {
   })
 })
 
-describe('schema v10: centre hole + relief + nickel', () => {
-  it('v9 documents become solid, raised caps without touching anything else', () => {
-    const v9 = { ...makeBlankDoc(), version: 9 } as Record<string, unknown>
-    delete v9.holeDiameterMM
-    delete v9.relief
-    v9.finish = 'brass'
-    const r = parseDoc(JSON.stringify(v9))
+describe('schema v11: product options (the trade guides)', () => {
+  it('v10 documents migrate: raised → embossed, recessed → debossed, a hole → open top', () => {
+    const v10 = { ...makeBlankDoc(), version: 10, relief: 'recessed', holeDiameterMM: 7 } as Record<string, unknown>
+    for (const k of ['product', 'style', 'material', 'logoDisplay', 'distressed']) delete v10[k]
+    const r = parseDoc(JSON.stringify(v10))
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.doc.version).toBe(DOC_VERSION)
-    expect(r.doc.holeDiameterMM).toBe(0)
-    expect(r.doc.relief).toBe('raised')
-    expect(r.doc.finish).toBe('brass')
+    expect(r.doc).toMatchObject({
+      product: 'button',
+      style: 'open-top',
+      material: 'brass',
+      logoDisplay: 'debossed',
+      distressed: false,
+      holeDiameterMM: 7,
+    })
+    expect('relief' in r.doc).toBe(false)
+    const solid = { ...v10, relief: 'raised', holeDiameterMM: 0 }
+    const r2 = parseDoc(JSON.stringify(solid))
+    expect(r2.ok && r2.doc).toMatchObject({ style: 'flat-cap', logoDisplay: 'embossed' })
   })
 
-  it('round-trips a donut, recessed, nickel cap', () => {
-    const doc: ButtonDoc = { ...makeBlankDoc(), finish: 'nickel', holeDiameterMM: 7, relief: 'recessed' }
+  it('round-trips a die-cast lasered distressed nipple rivet', () => {
+    const doc: ButtonDoc = {
+      ...makeBlankDoc(),
+      diameterMM: 9,
+      finish: 'antique-copper',
+      product: 'rivet',
+      style: 'nipple',
+      material: 'die-cast',
+      logoDisplay: 'lasered',
+      distressed: true,
+      holeDiameterMM: 2.7,
+    }
     const r = parseDoc(stringifyDoc(doc))
     expect(r.ok && r.doc).toEqual(doc)
   })
 
-  it('an unknown finish degrades to steel; a bad relief or hole is rejected', () => {
+  it('degrades unknown or mismatched options softly; rejects a bad hole', () => {
     const base = JSON.parse(stringifyDoc(makeBlankDoc())) as Record<string, unknown>
-    const odd = parseDoc(JSON.stringify({ ...base, finish: 'unobtainium' }))
-    expect(odd.ok && odd.doc.finish).toBe('steel')
-    expect(parseDoc(JSON.stringify({ ...base, relief: 'sideways' })).ok).toBe(false)
+    const odd = parseDoc(
+      JSON.stringify({ ...base, finish: 'unobtainium', product: 'rivet', style: 'domed-cap', material: 'tin', logoDisplay: 'glow' }),
+    )
+    expect(odd.ok && odd.doc).toMatchObject({ finish: 'steel', product: 'rivet', style: 'capped', material: 'brass', logoDisplay: 'embossed' })
     expect(parseDoc(JSON.stringify({ ...base, holeDiameterMM: -1 })).ok).toBe(false)
   })
 })

@@ -2,12 +2,13 @@ import { create } from 'zustand'
 import { useStore } from 'zustand'
 import { temporal } from 'zundo'
 import { immer } from 'zustand/middleware/immer'
-import type { Asset, AssetId, ButtonDoc, FontId, Layer, LayerId, LayerType, LocalFontRef } from '../model/types'
+import type { Asset, AssetId, ButtonDoc, FontId, Layer, LayerId, LayerType, LocalFontRef, Product, ProductStyle } from '../model/types'
+import { defaultCentreMM, PRODUCTS, STYLES } from '../model/product'
 import { LAYER_FACTORIES, makeBlankDoc, newId } from '../model/types'
 
 export type ViewMode = 'flat' | '3d'
-/** Ground under the 3D button: raw indigo denim, ecru denim, or nothing (transparent). */
-export type Backdrop = 'raw' | 'ecru' | 'none'
+/** Ground under the 3D button: raw / ecru denim, a white studio sweep (standing on its shank), or nothing. */
+export type Backdrop = 'raw' | 'ecru' | 'studio' | 'none'
 
 export interface ViewState {
   mode: ViewMode
@@ -35,7 +36,18 @@ export interface EngraverState {
   reliefPending: boolean
 
   setDoc: (doc: ButtonDoc) => void
-  updateDocMeta: (patch: Partial<Pick<ButtonDoc, 'name' | 'diameterMM' | 'finish' | 'holeDiameterMM' | 'relief'>>) => void
+  updateDocMeta: (
+    patch: Partial<
+      Pick<
+        ButtonDoc,
+        'name' | 'diameterMM' | 'finish' | 'holeDiameterMM' | 'product' | 'style' | 'material' | 'logoDisplay' | 'distressed'
+      >
+    >,
+  ) => void
+  /** Switch button ↔ rivet: resets shape, size and centre feature to the product's defaults. */
+  setProduct: (product: Product) => void
+  /** Change cap shape: the centre feature follows the style's default proportion. */
+  setStyle: (style: ProductStyle) => void
   addLayer: (type: LayerType) => void
   removeLayer: (id: LayerId) => void
   duplicateLayer: (id: LayerId) => void
@@ -83,6 +95,24 @@ export const useEngraver = create<EngraverState>()(
       updateDocMeta: (patch) =>
         set((s) => {
           Object.assign(s.doc, patch)
+        }),
+
+      setProduct: (product) =>
+        set((s) => {
+          if (s.doc.product === product) return
+          const style = PRODUCTS[product].defaultStyle
+          s.doc.product = product
+          s.doc.style = style
+          s.doc.diameterMM = PRODUCTS[product].defaultDiameterMM
+          s.doc.holeDiameterMM = defaultCentreMM(style, s.doc.diameterMM)
+          if (STYLES[style].material) s.doc.material = STYLES[style].material!
+        }),
+
+      setStyle: (style) =>
+        set((s) => {
+          s.doc.style = style
+          s.doc.holeDiameterMM = defaultCentreMM(style, s.doc.diameterMM)
+          if (STYLES[style].material) s.doc.material = STYLES[style].material!
         }),
 
       addLayer: (type) =>

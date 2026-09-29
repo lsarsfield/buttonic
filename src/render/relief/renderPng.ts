@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { ButtonDoc } from '../../model/types'
 import { computeHeightField } from './heightAsync'
-import { ButtonScene, lastPose, type Backdrop } from './scene'
+import { ButtonScene, lastPose, specOfDoc, type Backdrop } from './scene'
 
 /**
  * 3D PNG mockup: the same scene as the 3D view, rendered offscreen at the
@@ -20,13 +20,7 @@ export async function renderButtonPng(
   renderer.setSize(opts.px, opts.px, false)
   const scene = new ButtonScene(renderer)
   try {
-    scene.setSpec({
-      diameterMM: doc.diameterMM,
-      holeDiameterMM: doc.holeDiameterMM,
-      finish: doc.finish,
-      lightDeg: opts.lightDeg,
-      backdrop: opts.backdrop,
-    })
+    scene.setSpec({ ...specOfDoc(doc), lightDeg: opts.lightDeg, backdrop: opts.backdrop })
     scene.setHeightField(field)
     scene.setPose(lastPose.pose, 1)
     if (lastPose.position && lastPose.target) {
