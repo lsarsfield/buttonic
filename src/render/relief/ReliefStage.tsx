@@ -59,6 +59,18 @@ export default function ReliefStage() {
         scene.render()
       })
     }
+    // a click (not a drag) on the 3D canvas deselects → back to the Button panel
+    let down: { x: number; y: number } | null = null
+    const onDown = (e: PointerEvent) => {
+      down = { x: e.clientX, y: e.clientY }
+    }
+    const onUp = (e: PointerEvent) => {
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) useEngraver.getState().select(null)
+      down = null
+    }
+    renderer.domElement.addEventListener('pointerdown', onDown)
+    renderer.domElement.addEventListener('pointerup', onUp)
+
     controls.addEventListener('change', () => {
       lastPose.position = scene.camera.position.clone()
       lastPose.target = controls.target.clone()
@@ -96,6 +108,8 @@ export default function ReliefStage() {
 
     return () => {
       ro.disconnect()
+      renderer.domElement.removeEventListener('pointerdown', onDown)
+      renderer.domElement.removeEventListener('pointerup', onUp)
       if (frame) cancelAnimationFrame(frame)
       controls.dispose()
       scene.dispose()

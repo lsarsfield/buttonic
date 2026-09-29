@@ -209,6 +209,10 @@ export const useEngraver = create<EngraverState>()(
 
       setView: (patch) =>
         set((s) => {
+          // entering 3D shows the Button panel (shape, finish, backdrop…): the 3D
+          // canvas has no layer hit-testing, so a lingering selection would
+          // leave the sidebar stuck on a layer
+          if (patch.mode === '3d' && s.view.mode !== '3d') s.selection = null
           Object.assign(s.view, patch)
         }),
 
