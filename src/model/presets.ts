@@ -18,7 +18,7 @@ export function presetBlank(): ButtonDoc {
     material: 'brass',
     logoDisplay: 'embossed',
     distressed: false,
-    postMetal: 'silver',
+    postFinish: 'nickel',
     holeDiameterMM: 0,
     layers: [
       {
@@ -43,7 +43,7 @@ export function presetReferenceA(): ButtonDoc {
     material: 'brass',
     logoDisplay: 'embossed',
     distressed: false,
-    postMetal: 'silver',
+    postFinish: 'nickel',
     holeDiameterMM: 0,
     layers: [
       {
@@ -107,7 +107,7 @@ export function presetReferenceB(): ButtonDoc {
     material: 'brass',
     logoDisplay: 'embossed',
     distressed: false,
-    postMetal: 'silver',
+    postFinish: 'nickel',
     holeDiameterMM: 0,
     layers: [
       {
@@ -150,7 +150,7 @@ export function presetGroovy(): ButtonDoc {
     material: 'brass',
     logoDisplay: 'embossed',
     distressed: false,
-    postMetal: 'silver',
+    postFinish: 'nickel',
     holeDiameterMM: 0,
     layers: [
       {
@@ -202,7 +202,7 @@ export function presetOldBook(): ButtonDoc {
     material: 'brass',
     logoDisplay: 'embossed',
     distressed: false,
-    postMetal: 'silver',
+    postFinish: 'nickel',
     holeDiameterMM: 0,
     layers: [
       {

@@ -24,7 +24,7 @@ function docWithEverything(): ButtonDoc {
     material: 'brass',
     logoDisplay: 'embossed',
     distressed: false,
-    postMetal: 'silver',
+    postFinish: 'nickel',
     layers: [
       makeCenterLayer(),
       makeRingTextLayer(),
@@ -281,7 +281,7 @@ describe('parseDoc failure modes', () => {
 describe('schema v11: product options (the trade guides)', () => {
   it('v10 documents migrate: raised → embossed, recessed → debossed, a hole → open top', () => {
     const v10 = { ...makeBlankDoc(), version: 10, relief: 'recessed', holeDiameterMM: 7 } as Record<string, unknown>
-    for (const k of ['product', 'style', 'material', 'logoDisplay', 'distressed', 'postMetal']) delete v10[k]
+    for (const k of ['product', 'style', 'material', 'logoDisplay', 'distressed', 'postFinish']) delete v10[k]
     const r = parseDoc(JSON.stringify(v10))
     expect(r.ok).toBe(true)
     if (!r.ok) return
@@ -292,7 +292,7 @@ describe('schema v11: product options (the trade guides)', () => {
       material: 'brass',
       logoDisplay: 'debossed',
       distressed: false,
-      postMetal: 'copper', // existing docs keep the copper post they were drawn with
+      postFinish: 'copper', // existing docs keep the copper post they were drawn with
       holeDiameterMM: 7,
     })
     expect('relief' in r.doc).toBe(false)
@@ -324,5 +324,20 @@ describe('schema v11: product options (the trade guides)', () => {
     )
     expect(odd.ok && odd.doc).toMatchObject({ finish: 'steel', product: 'rivet', style: 'capped', material: 'brass', logoDisplay: 'embossed' })
     expect(parseDoc(JSON.stringify({ ...base, holeDiameterMM: -1 })).ok).toBe(false)
+  })
+})
+
+describe('schema v13: the post takes any finish', () => {
+  it('v12 silver → dull nickel, copper → polished copper; any finish round-trips', () => {
+    const base = { ...makeBlankDoc(), version: 12, style: 'open-top', holeDiameterMM: 7 } as Record<string, unknown>
+    delete base.postFinish
+    const silver = parseDoc(JSON.stringify({ ...base, postMetal: 'silver' }))
+    const copper = parseDoc(JSON.stringify({ ...base, postMetal: 'copper' }))
+    expect(silver.ok && silver.doc.postFinish).toBe('nickel')
+    expect(copper.ok && copper.doc.postFinish).toBe('copper')
+    expect(copper.ok && 'postMetal' in copper.doc).toBe(false)
+    const doc: ButtonDoc = { ...makeBlankDoc(), style: 'open-top', holeDiameterMM: 7, postFinish: 'antique-brass' }
+    const r = parseDoc(stringifyDoc(doc))
+    expect(r.ok && r.doc.postFinish).toBe('antique-brass')
   })
 })

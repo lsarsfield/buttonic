@@ -1,8 +1,8 @@
 import * as THREE from 'three'
 import { STYLES } from '../../model/product'
-import type { Finish, LogoDisplay, Material, PostMetal, Product, ProductStyle } from '../../model/types'
+import type { Finish, LogoDisplay, Material, Product, ProductStyle } from '../../model/types'
 import { makeDenim, TILE_MM, type DenimKind } from './denim'
-import { COPPER, finishOf, METAL_FINISHES, POST_SILVER, type MetalFinish } from './finishes'
+import { finishOf, METAL_FINISHES, type MetalFinish } from './finishes'
 import {
   baseProfile,
   capGeometry,
@@ -46,7 +46,7 @@ export interface ButtonSpec {
   material: Material
   logoDisplay: LogoDisplay
   distressed: boolean
-  postMetal: PostMetal
+  postFinish: Finish
   finish: Finish
   lightDeg: number
   backdrop: Backdrop
@@ -436,7 +436,7 @@ export class ButtonScene {
     const prev = this.spec
     this.spec = spec
     this.params = reliefParamsOf(spec)
-    const geoKey = [spec.diameterMM, spec.holeDiameterMM, spec.product, spec.style, spec.material, spec.postMetal].join('|')
+    const geoKey = [spec.diameterMM, spec.holeDiameterMM, spec.product, spec.style, spec.material, spec.postFinish].join('|')
     if (geoKey !== this.geoKey) {
       this.geoKey = geoKey
       this.rebuildButton()
@@ -506,7 +506,12 @@ export class ButtonScene {
     if (p.centre === 'hole') {
       const lipBottom = capGeometry(p).lip?.cy ?? baseProfile(p.centreR, p).y
       const { copper, bore } = buildPostGeometries(p.centreR, p.capH, lipBottom)
-      const cmat = metalMaterial(this.spec!.postMetal === 'copper' ? COPPER : POST_SILVER)
+      // the post takes any cap finish, darkened for sitting down a pit (and
+      // oxidised like a side wall on antiqued finishes)
+      const pf = finishOf(this.spec!.postFinish)
+      const ox = pf.patina.field * pf.patina.darken
+      const pk = 0.75 * (1 - 0.6 * ox)
+      const cmat = metalMaterial({ ...pf, color: [pf.color[0] * pk, pf.color[1] * pk, pf.color[2] * pk], roughness: Math.min(1, pf.roughness + 0.1) })
       cmat.side = THREE.DoubleSide
       cmat.envMapIntensity = 0.3 // down a pit: it sees mostly the inside of the cap
       this.extraMats.push(cmat)
@@ -775,7 +780,7 @@ export function specOfDoc(d: {
   material: Material
   logoDisplay: LogoDisplay
   distressed: boolean
-  postMetal: PostMetal
+  postFinish: Finish
   finish: Finish
 }): Omit<ButtonSpec, 'lightDeg' | 'backdrop'> {
   return {
@@ -786,7 +791,7 @@ export function specOfDoc(d: {
     material: d.material,
     logoDisplay: d.logoDisplay,
     distressed: d.distressed,
-    postMetal: d.postMetal,
+    postFinish: d.postFinish,
     finish: d.finish,
   }
 }

@@ -29,7 +29,7 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **11**), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **13**), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
   `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
   v8 centre `motifId` (built-in motif as a third centre source, inert unless
@@ -172,8 +172,9 @@ param, not an error.)
     open-top post seats below the lip's lowest point; the relief-wall limiter searches
     far enough to reach a feature's medial axis and smooths the width map (a short
     reach halved and combed every wall — `relief walls` test guards it); the shadow
-    pass uses a low-res proxy face mesh. Post: Silver|Copper (v12; existing docs
-    migrate to copper).
+    pass uses a low-res proxy face mesh. `postFinish` (v13, was v12 `postMetal`):
+    the open-top post takes ANY cap finish (silver→dull nickel, copper→the new
+    'copper' Polished copper), rendered darkened for sitting down a pit.
     `studio` backdrop = white sweep + a bright PMREM
     environment, the button standing on its tack/swivel shank, shot low (62°).
   - `heightAsync.ts` rasterizes the EXACT `exportSvg` die (halos/cut-outs/inverts

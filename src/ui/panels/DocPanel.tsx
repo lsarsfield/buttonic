@@ -5,7 +5,6 @@ import {
   FINISH_LABELS,
   LOGO_DISPLAYS,
   MATERIALS,
-  POST_METALS,
   PRODUCTS,
   STYLES,
 } from '../../model/product'
@@ -90,11 +89,11 @@ export function DocPanel() {
           />
         )}
         {style.centre === 'hole' && (
-          <SegmentedControl
-            label="Post"
-            value={doc.postMetal}
-            options={POST_METALS.map((m) => ({ ...m, title: `${m.label} tack post seen through the hole` }))}
-            onChange={(postMetal) => updateDocMeta({ postMetal })}
+          <GroupedSelect
+            label="Post finish"
+            value={doc.postFinish}
+            groups={FINISH_OPTION_GROUPS}
+            onChange={(postFinish) => updateDocMeta({ postFinish })}
           />
         )}
         <div className="readout">{style.blurb}</div>

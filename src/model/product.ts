@@ -1,4 +1,4 @@
-import type { Finish, LogoDisplay, Material, PostMetal, Product, ProductStyle } from './types'
+import { FINISH_IDS, type Finish, type LogoDisplay, type Material, type Product, type ProductStyle } from './types'
 
 /**
  * The trade's product options for jeans hardware — the vocabulary jeans-button
@@ -107,12 +107,6 @@ export const PRODUCTS: Record<Product, ProductSpec> = {
   },
 }
 
-/** The tack post seen through an open top: most makers plate it silver; some (Stevenson) copper. */
-export const POST_METALS: readonly { value: PostMetal; label: string }[] = [
-  { value: 'silver', label: 'Silver' },
-  { value: 'copper', label: 'Copper' },
-]
-
 export const MATERIALS: Record<Material, { label: string; blurb: string }> = {
   brass: { label: 'Brass', blurb: 'Thin pressed brass — best for simple text designs.' },
   'die-cast': { label: 'Die-cast', blurb: 'Die-cast alloy — thicker and stronger, holds complex art.' },
@@ -153,6 +147,7 @@ export const LOGO_DISPLAYS: readonly { value: LogoDisplay; label: string; title:
 export const FINISH_LABELS: Record<Finish, string> = {
   'antique-brass': 'Antique brass',
   'antique-copper': 'Antique copper',
+  copper: 'Polished copper',
   'copper-oxide': 'Copper oxide',
   pewter: 'Pewter',
   'dark-pewter': 'Dark pewter',
@@ -166,7 +161,7 @@ export const FINISH_LABELS: Record<Finish, string> = {
 
 export const FINISH_GROUPS: readonly { label: string; options: readonly Finish[] }[] = [
   { label: 'Standard', options: ['antique-brass', 'antique-copper', 'copper-oxide', 'pewter', 'dark-pewter', 'nickel'] },
-  { label: 'Polished', options: ['polished-nickel', 'polished-gold', 'gunmetal', 'brass', 'steel'] },
+  { label: 'Polished', options: ['polished-nickel', 'polished-gold', 'copper', 'gunmetal', 'brass', 'steel'] },
 ]
 
 /** A style's default centre-feature diameter for a cap of diameter D (0.1 mm steps). */
@@ -197,14 +192,14 @@ export function coerceProductOptions(raw: {
   material: unknown
   logoDisplay: unknown
   distressed: unknown
-  postMetal: unknown
+  postFinish: unknown
 }): {
   product: Product
   style: ProductStyle
   material: Material
   logoDisplay: LogoDisplay
   distressed: boolean
-  postMetal: PostMetal
+  postFinish: Finish
 } {
   const product: Product = raw.product === 'rivet' ? 'rivet' : 'button'
   const style =
@@ -214,6 +209,8 @@ export function coerceProductOptions(raw: {
   const material: Material = raw.material === 'die-cast' ? 'die-cast' : 'brass'
   const logoDisplay: LogoDisplay =
     raw.logoDisplay === 'debossed' || raw.logoDisplay === 'lasered' ? raw.logoDisplay : 'embossed'
-  const postMetal: PostMetal = raw.postMetal === 'copper' ? 'copper' : 'silver'
-  return { product, style, material, logoDisplay, distressed: raw.distressed === true, postMetal }
+  const postFinish: Finish = (FINISH_IDS as readonly string[]).includes(raw.postFinish as string)
+    ? (raw.postFinish as Finish)
+    : 'nickel'
+  return { product, style, material, logoDisplay, distressed: raw.distressed === true, postFinish }
 }

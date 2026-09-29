@@ -98,7 +98,7 @@ function productOptions(value: Record<string, unknown>) {
     material: value.material,
     logoDisplay: value.logoDisplay,
     distressed: value.distressed,
-    postMetal: value.postMetal,
+    postFinish: value.postFinish,
   })
 }
 

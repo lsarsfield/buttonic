@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 12
+export const DOC_VERSION = 13
 
 /** Whether a content layer engraves its geometry or subtracts it from below. */
 export type BooleanRole = 'draw' | 'subtract'
@@ -60,6 +60,7 @@ export type Finish =
   | 'brass'
   | 'polished-gold'
   | 'antique-copper'
+  | 'copper'
   | 'copper-oxide'
   | 'pewter'
   | 'dark-pewter'
@@ -72,6 +73,7 @@ export const FINISH_IDS: readonly Finish[] = [
   'brass',
   'polished-gold',
   'antique-copper',
+  'copper',
   'copper-oxide',
   'pewter',
   'dark-pewter',
@@ -89,8 +91,6 @@ export type ProductStyle = ButtonStyle | RivetStyle
 export type Material = 'brass' | 'die-cast'
 /** How the die art appears: raised, sunk into the face, or laser-marked flat. */
 export type LogoDisplay = 'embossed' | 'debossed' | 'lasered'
-/** Plating of the tack post seen through an open-top button. */
-export type PostMetal = 'silver' | 'copper'
 
 export interface ButtonDoc {
   version: number
@@ -108,8 +108,8 @@ export interface ButtonDoc {
   logoDisplay: LogoDisplay
   /** Worn / distressed treatment over the finish. */
   distressed: boolean
-  /** Open tops: the tack post seen through the hole. */
-  postMetal: PostMetal
+  /** Open tops: the finish of the tack post seen through the hole (any cap finish). */
+  postFinish: Finish
   /** Diameter of the style's centre feature — open-top hole, nipple, cup or pin hole (0 = none). */
   holeDiameterMM: number
   layers: Layer[]
@@ -487,7 +487,7 @@ export function makeBlankDoc(): ButtonDoc {
     material: 'brass',
     logoDisplay: 'embossed',
     distressed: false,
-    postMetal: 'silver',
+    postFinish: 'nickel',
     holeDiameterMM: 0,
     layers: [makeRingLayer({ name: 'Rim', radiusMM: 8.2, strokeMM: 0.3 })],
     assets: {},

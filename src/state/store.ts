@@ -49,7 +49,7 @@ export interface EngraverState {
         | 'material'
         | 'logoDisplay'
         | 'distressed'
-        | 'postMetal'
+        | 'postFinish'
       >
     >,
   ) => void

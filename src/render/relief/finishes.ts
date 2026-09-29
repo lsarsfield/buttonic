@@ -30,6 +30,8 @@ export const METAL_FINISHES: Record<Finish, MetalFinish> = {
   nickel: { color: [0.68, 0.68, 0.66], roughness: 0.34, oxide: 0.9, patina: LIGHT_PATINA, grain: 1 },
   'polished-nickel': { color: [0.66, 0.65, 0.62], roughness: 0.1, oxide: 0.8, patina: POLISHED_PATINA, grain: 0 },
   'polished-gold': { color: [0.95, 0.74, 0.36], roughness: 0.1, oxide: 0.8, patina: POLISHED_PATINA, grain: 0 },
+  // bright copper plate (browner than raw copper F0, as plated hardware reads) — the Stevenson post
+  copper: { color: [0.6, 0.3, 0.15], roughness: 0.2, oxide: 0.8, patina: POLISHED_PATINA, grain: 0.2 },
   steel: { color: [0.56, 0.57, 0.58], roughness: 0.3, oxide: 0.7, patina: LIGHT_PATINA, grain: 0.5 },
   gunmetal: { color: [0.2, 0.2, 0.22], roughness: 0.2, oxide: 0.9, patina: LIGHT_PATINA, grain: 0.2 },
   brass: { color: [0.86, 0.72, 0.4], roughness: 0.3, oxide: 1, patina: LIGHT_PATINA, grain: 0.4 },
@@ -62,8 +64,5 @@ export const METAL_FINISHES: Record<Finish, MetalFinish> = {
   },
 }
 
-/** The tack post seen through an open top: copper (browner, not orange) or silver plating. */
-export const COPPER: MetalFinish = { color: [0.36, 0.14, 0.05], roughness: 0.45, oxide: 1, patina: LIGHT_PATINA }
-export const POST_SILVER: MetalFinish = { color: [0.62, 0.62, 0.6], roughness: 0.3, oxide: 1, patina: LIGHT_PATINA }
 
 export const finishOf = (f: Finish): MetalFinish => METAL_FINISHES[f] ?? METAL_FINISHES.steel
