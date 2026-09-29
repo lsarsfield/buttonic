@@ -66,7 +66,7 @@ export function reliefParamsOf(d: {
   const { capH, roll, depthMM } = capProportions(d.product, d.material, d.diameterMM, d.style)
   const centre = centreKindOf(d)
   const centreR = centre === 'none' ? 0 : d.holeDiameterMM / 2
-  return {
+  const params: ReliefParams = {
     display: d.logoDisplay,
     depthMM,
     wallMM: WALL_MM,
@@ -82,6 +82,13 @@ export function reliefParamsOf(d: {
     plateauR: (st.plateauFrac ?? 0) * (d.diameterMM / 2),
     plateauH: (st.plateauHFrac ?? 0) * d.diameterMM,
   }
+  // the cap must be deeper than its lowest rolled curve (a domed edge or a
+  // concave funnel that ends below the underside folds the body back up)
+  const g = capGeometry(params)
+  const lowest = Math.min(g.outer ? g.outer.cy : 0, g.lip ? g.lip.cy : 0)
+  params.capH = Math.max(params.capH, -lowest + 0.15)
+  geoCache.delete(params)
+  return params
 }
 
 /** Where the face mesh starts: at a hole / pin hole's edge, else the axis. */
@@ -122,8 +129,10 @@ export const ROUGH_HEADROOM = 1.8
 // ---------------------------------------------------------------------------
 
 /** Nipple: a drafted cylinder (height ×c) under a hemispherical head (radius ×c). */
-export const NIPPLE_WALL_H = 1.1
-const NIPPLE_HEAD_R = 0.9
+export const NIPPLE_WALL_H = 0.5
+const NIPPLE_HEAD_R = 0.95
+/** A small fillet where the nail head meets the plate (no serrated base ring). */
+const NIPPLE_FILLET = 0.08
 /** Inverted nipple: bowl depth, the rolled ring around it, and the nail head at its bottom (fractions of the cup radius). */
 export const CUP_D = 0.5
 const CUP_RING_H = 0.28
@@ -230,9 +239,15 @@ function profileY(r: number, p: ReliefParams): number {
       if (r < c) {
         // the nail head: a drafted cylinder wall capped by a hemisphere
         const hr = NIPPLE_HEAD_R * c
-        const wallTop = g.flat(c) + NIPPLE_WALL_H * c
-        if (r > hr) return g.flat(c) + (NIPPLE_WALL_H * c * (c - r)) / (c - hr)
+        const base = g.flat(c) + NIPPLE_FILLET * c * 0.5 // meets the fillet
+        const wallTop = base + NIPPLE_WALL_H * c
+        if (r > hr) return base + (NIPPLE_WALL_H * c * (c - r)) / (c - hr)
         return wallTop + Math.sqrt(Math.max(0, hr * hr - r * r))
+      }
+      if (r < c * (1 + NIPPLE_FILLET)) {
+        // concave fillet into the plate
+        const t = (c * (1 + NIPPLE_FILLET) - r) / (c * NIPPLE_FILLET)
+        return g.flat(r) + NIPPLE_FILLET * c * 0.5 * t * t
       }
       break
     case 'cup': {
@@ -447,7 +462,10 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
   // local feature half-width: the deepest inside-distance nearby (a separable
   // max filter over the wall's reach). A wall never takes more than WALL_SHARE
   // of the feature's width — else a 1 mm star or a full stop becomes a tent.
-  const reach = Math.max(1, Math.ceil(p.wallMM / mmPerPx))
+  // the search must reach a feature's medial axis from its edge: a feature is
+  // only limited when narrower than wall/(2·share), so that plus a wall is
+  // far enough. (Reaching only a wall halved every wall and kinked its base.)
+  const reach = Math.max(1, Math.ceil((p.wallMM / (2 * WALL_SHARE) + p.wallMM) / mmPerPx))
   const half = new Float32Array(n * n)
   for (let i = 0; i < n * n; i++) half[i] = Math.max(0, sd[i]!)
   maxFilter(half, n, reach)
@@ -456,6 +474,18 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
   for (let i = 0; i < n * n; i++) gap[i] = Math.max(0, -sd[i]!)
   maxFilter(gap, n, reach)
 
+  // per-pixel wall width, then smoothed so it is constant across any one wall
+  // (a varying width is what combed the walls and frayed their bases)
+  const wmap = new Float32Array(n * n)
+  for (let i = 0; i < n * n; i++) {
+    const hw = half[i]! > 0 ? half[i]! : Infinity
+    const gw = gap[i]! > 0 ? gap[i]! : Infinity
+    wmap[i] = Math.max(0.02, Math.min(p.wallMM, WALL_SHARE * 2 * Math.min(hw, gw)))
+  }
+  const smoothR = Math.max(1, Math.round(p.wallMM / mmPerPx / 2))
+  boxBlur(wmap, n, smoothR)
+  boxBlur(wmap, n, smoothR)
+
   const sign = p.display === 'embossed' ? 1 : p.display === 'debossed' ? -1 : 0
   // F: 1 on the HIGH ground, 0 on the low (for debossed art the field is high;
   // lasered art is flush, so everything is high ground)
@@ -463,9 +493,7 @@ export function buildHeightField(cov: Float32Array, n: number, spanMM: number, p
   const h = new Float32Array(n * n)
   const art = new Float32Array(n * n)
   for (let i = 0; i < n * n; i++) {
-    // feature width = 2 × half-width; the wall may take WALL_SHARE of it
-    const w = Math.max(0.02, Math.min(p.wallMM, WALL_SHARE * 2 * Math.min(half[i]! || p.wallMM, gap[i]! || p.wallMM)))
-    const occ = wallProfile(sd[i]!, w)
+    const occ = wallProfile(sd[i]!, wmap[i]!)
     art[i] = occ
     h[i] = sign * p.depthMM * occ
     F[i] = sign > 0 ? occ : sign < 0 ? 1 - occ : 1
@@ -622,8 +650,8 @@ export function finishMaps(field: HeightField, look: SurfaceLook | Patina): { su
       const x = -V + ((i % n) + 0.5) * mmPerPx
       const y = -V + (Math.floor(i / n) + 0.5) * mmPerPx
       const g = 0.6 * valueNoise(x / 0.03, y / 0.03, 31) + 0.4 * hash2(i % n, Math.floor(i / n), 32) - 0.5
-      rough = Math.min(1, Math.max(0, rough + L.grain * 0.1 * g))
-      dark = Math.min(1, Math.max(0, dark + L.grain * 0.05 * (g + 0.5)))
+      rough = Math.min(1, Math.max(0, rough + L.grain * 0.18 * g))
+      dark = Math.min(1, Math.max(0, dark + L.grain * 0.08 * (g + 0.5)))
     }
     if (L.lasered && art > 0) {
       dark = dark + (0.78 - dark) * art

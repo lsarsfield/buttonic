@@ -288,11 +288,25 @@ describe('shape realism (adversarial review fixes)', { timeout: 30_000 }, () => 
     expect(slopeJump(p, f.start)).toBeLessThan(0.05)
   })
 
-  it('nipple: a nail head about as tall as it is wide', () => {
-    const p = styleParams('nipple', 9, 3.2)
-    const h = baseProfile(0, p).y - baseProfile(p.centreR + 0.3, p).y
-    expect(h / (2 * p.centreR)).toBeGreaterThan(0.9)
-    expect(h / (2 * p.centreR)).toBeLessThan(1.2)
+  it('nipple: a domed nail head ~0.6–0.85 × as tall as it is wide (the P&C photo)', () => {
+    const p = styleParams('nipple', 9, 3.8)
+    const h = baseProfile(0, p).y - baseProfile(p.centreR * 1.2, p).y
+    expect(h / (2 * p.centreR)).toBeGreaterThan(0.6)
+    expect(h / (2 * p.centreR)).toBeLessThan(0.85)
+  })
+
+  it('no rolled curve reaches below the cap underside (domed edge, concave funnel)', () => {
+    for (const [style, d, hole] of [
+      ['domed-cap', 17, 0],
+      ['domed-cap', 14, 0],
+      ['open-top-concave', 17, 6.5],
+      ['moveable-shank', 17, 0],
+    ] as const) {
+      const p = styleParams(style, d, hole)
+      const g = capGeometry(p)
+      const lowest = Math.min(g.outer?.cy ?? 0, g.lip?.cy ?? 0)
+      expect(lowest).toBeGreaterThan(-p.capH + 0.1)
+    }
   })
 
   it('inverted nipple: a pronounced rolled ring (~0.28 c) rims the bowl', () => {
@@ -315,5 +329,52 @@ describe('shape realism (adversarial review fixes)', { timeout: 30_000 }, () => 
     const f = buildHeightField(discCoverage(0.1), N, SPAN, params({ wallMM: WALL_MM }))
     const n = f.dispN
     expect(f.disp[(n / 2) * n + n / 2]).toBeCloseTo(DEPTH, 2) // reaches full height, not a tent
+  })
+})
+
+describe('relief walls', { timeout: 60_000 }, () => {
+  it('a large feature gets the full drafted wall, the same shape at 0°, 22.5° and 45° edges', () => {
+    // a big square rotated to each angle: sample the height across its edge
+    const n = 512
+    const span = 8
+    const mmpx = span / n
+    for (const deg of [0, 22.5, 45]) {
+      const a = (deg * Math.PI) / 180
+      const cov = new Float32Array(n * n)
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+          let hit = 0
+          for (let sy = 0; sy < 4; sy++) {
+            for (let sx = 0; sx < 4; sx++) {
+              const wx = -span / 2 + (x + (sx + 0.5) / 4) * mmpx
+              const wy = -span / 2 + (y + (sy + 0.5) / 4) * mmpx
+              const u = wx * Math.cos(a) + wy * Math.sin(a)
+              const v = -wx * Math.sin(a) + wy * Math.cos(a)
+              if (Math.abs(u) < 2 && Math.abs(v) < 2) hit++
+            }
+          }
+          cov[y * n + x] = hit / 16
+        }
+      }
+      const f = buildHeightField(cov, n, span, params({ faceR: 3.9, wallMM: WALL_MM }))
+      const dn = f.dispN
+      for (const off of [-0.06, -0.03, 0, 0.03, 0.06]) {
+        // along the square's u axis, through the middle of one edge
+        const u = 2 + off
+        const wx = u * Math.cos(a)
+        const wy = u * Math.sin(a)
+        const px = Math.floor(((wx + span / 2) / span) * dn)
+        const py = Math.floor(((wy + span / 2) / span) * dn)
+        const got = f.disp[py * dn + px]! / DEPTH
+        // compare at the texel's TRUE distance from the edge (it snaps off the nominal point)
+        const tx = -span / 2 + ((px + 0.5) / dn) * span
+        const ty = -span / 2 + ((py + 0.5) / dn) * span
+        const uTrue = tx * Math.cos(a) + ty * Math.sin(a)
+        const want = wallProfile(2 - uTrue, WALL_MM)
+        // 0.13 ≈ 10 µm of edge shift — the EDT's sub-pixel accuracy at this 16 µm/px
+        // test raster (live is 8 µm/px). A halved or kinked wall misses by 0.2–0.35.
+        expect(Math.abs(got - want)).toBeLessThan(0.13)
+      }
+    }
   })
 })

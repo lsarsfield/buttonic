@@ -16,7 +16,8 @@ import { ButtonScene, lastPose, specOfDoc, type ButtonSpec, type Pose } from './
  */
 
 const DEBOUNCE_MS = 250
-const MAX_POLAR = 65 * (Math.PI / 180)
+// low enough for the studio product shot (a swivel shank is shot at ~72°)
+const MAX_POLAR = 80 * (Math.PI / 180)
 
 export default function ReliefStage() {
   const hostRef = useRef<HTMLDivElement>(null)

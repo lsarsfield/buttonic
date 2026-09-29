@@ -49,7 +49,7 @@ export const STYLES: Record<ProductStyle, StyleSpec> = {
   },
   'open-top-concave': {
     product: 'button', label: 'Open top concave', blurb: 'Donut cap dished down toward the hole.',
-    centre: 'hole', centreFrac: 0.38, domeFrac: 0, concaveFrac: 0.06, back: 'tack', capHFrac: 0.075, rollFrac: 0.02,
+    centre: 'hole', centreFrac: 0.38, domeFrac: 0, concaveFrac: 0.06, back: 'tack', capHFrac: 0.11, rollFrac: 0.02,
   },
   'moveable-shank': {
     product: 'button', label: 'Moveable shank', blurb: 'Slightly domed cap on a swivelling shank.',
@@ -61,11 +61,11 @@ export const STYLES: Record<ProductStyle, StyleSpec> = {
   },
   nipple: {
     product: 'rivet', label: 'Nipple', blurb: 'The nail head stands up as a knob at the centre.',
-    centre: 'nipple', centreFrac: 0.36, domeFrac: 0, concaveFrac: 0, back: 'nail', capHFrac: 0.07, rollFrac: 0.025,
+    centre: 'nipple', centreFrac: 0.42, domeFrac: 0, concaveFrac: 0, back: 'nail', capHFrac: 0.07, rollFrac: 0.025,
   },
   'inverted-nipple': {
-    product: 'rivet', label: 'Inverted nipple', blurb: 'A rolled ring around a sunk cup, the nail head at its bottom.',
-    centre: 'cup', centreFrac: 0.42, domeFrac: 0, concaveFrac: 0, back: 'nail', rollFrac: 0.045,
+    product: 'rivet', label: 'Inverted nipple', blurb: 'A wide sunk cup in a rolled ring, the nail head at its bottom — lettering runs round the ring.',
+    centre: 'cup', centreFrac: 0.7, domeFrac: 0, concaveFrac: 0, back: 'nail', rollFrac: 0.045,
   },
   'die-cast': {
     product: 'rivet', label: 'Die-cast', blurb: 'Thick cast cap: a raised centre plateau and a collared pin hole.',

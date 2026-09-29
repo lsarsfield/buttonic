@@ -163,6 +163,17 @@ param, not an error.)
     0.2 D; proportions tuned against the supplier guides' page-2 shape photos. Side
     walls are duller than the face and carry the finish's field oxide. Displacement
     uses linear float filtering where supported (nearest = jagged walls at depth).
+    TWO ADVERSARIAL REVIEWS against the supplier photos drove the current forms —
+    keep these invariants: rolled edges are TANGENT fillets (`capGeometry`/`Fillet`:
+    leave the face on its own slope, end vertical at the edge — no dome crease); the
+    cap is always deeper than its lowest fillet (`reliefParamsOf` guard); the face mesh
+    ends halfway round the roll and the body lathes the rest (one dull side band);
+    LatheGeometry profiles for FrontSide parts run bottom→top (else inside-out); the
+    open-top post seats below the lip's lowest point; the relief-wall limiter searches
+    far enough to reach a feature's medial axis and smooths the width map (a short
+    reach halved and combed every wall — `relief walls` test guards it); the shadow
+    pass uses a low-res proxy face mesh. Post: Silver|Copper (v12; existing docs
+    migrate to copper).
     `studio` backdrop = white sweep + a bright PMREM
     environment, the button standing on its tack/swivel shank, shot low (62°).
   - `heightAsync.ts` rasterizes the EXACT `exportSvg` die (halos/cut-outs/inverts

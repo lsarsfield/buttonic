@@ -75,13 +75,13 @@ function faceOuterEnd(p: ReliefParams): { r: number; phi: number } {
 }
 
 /** Radii for the face grid: dense enough for 0.05 mm art, extra samples on every curve. */
-function faceRadii(p: ReliefParams): number[] {
+function faceRadii(p: ReliefParams, stepOverride?: number): number[] {
   const pts: number[] = []
   const g = capGeometry(p)
   const r0 = faceInnerR(p)
   const end = faceOuterEnd(p)
   // ~0.02 mm rings: a 0.1 mm relief wall gets 5+ vertices, not 2–3 (saw-tooth wall bases)
-  const step = Math.min(0.02, p.faceR / 300)
+  const step = stepOverride ?? Math.min(0.02, p.faceR / 300)
   pts.push(r0, end.r)
   const n = Math.max(1, Math.ceil((end.r - r0) / step))
   for (let k = 1; k < n; k++) pts.push(r0 + ((end.r - r0) * k) / n)
@@ -105,8 +105,8 @@ function faceRadii(p: ReliefParams): number[] {
   return out
 }
 
-function buildFaceGeometry(p: ReliefParams, segments = 1024): THREE.BufferGeometry {
-  const radii = faceRadii(p)
+function buildFaceGeometry(p: ReliefParams, segments = 1024, step?: number): THREE.BufferGeometry {
+  const radii = faceRadii(p, step)
   const rows = radii.length
   const cols = segments + 1
   const pos = new Float32Array(rows * cols * 3)
@@ -177,27 +177,38 @@ function buildBodyGeometries(p: ReliefParams): { outer: THREE.BufferGeometry; in
   return { outer: new THREE.LatheGeometry(outer, 256), inner }
 }
 
-/** The flared copper tack post under an open top: flange floor, rolled lip, hollow bore. */
-function buildPostGeometries(holeR: number, capH: number): { copper: THREE.BufferGeometry; bore: THREE.BufferGeometry } {
+/**
+ * The tack post seen through an open top: a wide eyelet — a deep tube whose
+ * rolled mouth nearly fills the hole (the Stevenson reference reads as the
+ * inside of a copper tube right up to the lip) — over a dished skirt, with a
+ * dark bore. Seated BELOW the lip's lowest point, so a deep concave funnel is
+ * never capped by a floating washer.
+ */
+function buildPostGeometries(
+  holeR: number,
+  capH: number,
+  lipBottomY: number,
+): { copper: THREE.BufferGeometry; bore: THREE.BufferGeometry } {
   const h = holeR
-  const k = capH / 1.15 // tuned at the 17 mm brass cap
-  const lipR = 0.5 * h
-  const tube = 0.1 * h
-  const pts: THREE.Vector2[] = [new THREE.Vector2(h * 0.995, -0.95 * k), new THREE.Vector2(lipR + tube * 1.6, -0.9 * k)]
-  // rolled lip: a half torus section from the outside over the top into the bore
+  const lipR = 0.78 * h
+  const tube = 0.08 * h
+  const top = lipBottomY - 0.12
+  const skirt = Math.max(top - 0.35, -capH + 0.03)
+  const pts: THREE.Vector2[] = [
+    new THREE.Vector2(h * 0.995, skirt),
+    new THREE.Vector2(lipR + tube * 1.6, skirt + (top - tube - skirt) * 0.6),
+  ]
+  // rolled mouth: a half torus from the outside over the top into the bore
   for (let i = 0; i <= 16; i++) {
     const a = Math.PI * (i / 16) // 0 = outer side, π = inner side
-    pts.push(new THREE.Vector2(lipR + tube * Math.cos(a), -0.72 * k + tube * Math.sin(a)))
+    pts.push(new THREE.Vector2(lipR + tube * Math.cos(a), top - tube + tube * Math.sin(a)))
   }
-  pts.push(new THREE.Vector2(lipR - tube * 1.05, -0.95 * k))
-  const copper = new THREE.LatheGeometry(pts, 128)
-  // closed just above the cap underside — never through the ground plane
-  const floor = -capH * 0.97
+  const floor = -capH * 0.97 // closed above the cap underside — never through the ground
   const bore = new THREE.LatheGeometry(
-    [new THREE.Vector2(lipR - tube * 1.05, -0.95 * k), new THREE.Vector2(lipR - tube * 1.1, floor), new THREE.Vector2(0, floor)],
+    [new THREE.Vector2(lipR - tube, top - tube), new THREE.Vector2(lipR - tube * 1.05, floor), new THREE.Vector2(0, floor)],
     96,
   )
-  return { copper, bore }
+  return { copper: new THREE.LatheGeometry(pts, 128), bore }
 }
 
 /**
@@ -213,7 +224,7 @@ function buildShank(R: number, capH: number, swivel: boolean): { geo: THREE.Buff
   const pts: THREE.Vector2[] = []
   let height: number
   if (swivel) {
-    height = 0.2 * R
+    height = 0.4 * R // enough to show under the rim at a product-shot angle
     const w1 = 0.34 * R
     const w2 = 0.26 * R
     pts.push(
@@ -255,7 +266,7 @@ function studioScene(bright = false): THREE.Scene {
   // not uniformly bright: curved metal needs dark to read its form against
   // dark room lifted off black so steep relief walls read grey, not pitch black;
   // bright room held below the white sweep so nickel doesn't outshine the paper
-  const wall: [number, number, number] = bright ? [0.12, 0.12, 0.125] : [0.07, 0.07, 0.075]
+  const wall: [number, number, number] = bright ? [0.12, 0.12, 0.125] : [0.12, 0.12, 0.125]
   const room = new THREE.Mesh(
     new THREE.SphereGeometry(50, 32, 16),
     new THREE.MeshBasicMaterial({ color: new THREE.Color(wall[0], wall[1], wall[2]), side: THREE.BackSide }),
@@ -283,10 +294,12 @@ function studioScene(bright = false): THREE.Scene {
   }
   panel(34, 24, 5.5, [1, 0.985, 0.96], 0, 36, 40) // key softbox
   panel(40, 40, 1.15, [0.97, 0.98, 1], 180, 72, 38) // overhead diffuser, behind the button
-  panel(8, 30, 2.2, [0.9, 0.95, 1], 165, 16, 40) // cool strip fill
+  // cool strip fill — not on the white table: at the low product-shot angle
+  // the face mirrors straight into it and nickel outshines the paper
+  if (!bright) panel(8, 30, 2.2, [0.9, 0.95, 1], 165, 16, 40)
   panel(60, 20, 0.35, [1, 0.98, 0.95], 90, -8, 40) // low bounce card
   // a low ring of soft fill all round: relief walls face sideways and need it
-  for (let az = 0; az < 360; az += 45) panel(22, 7, 0.55, [1, 1, 1], az, 12, 42)
+  for (let az = 0; az < 360; az += 45) panel(22, 7, 1.1, [1, 1, 1], az, 12, 42)
   return scene
 }
 
@@ -464,10 +477,17 @@ export class ButtonScene {
     this.depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking })
 
     const face = new THREE.Mesh(buildFaceGeometry(p, p.faceR < 6 ? 1536 : 2048), this.faceMat)
-    face.castShadow = true
+    face.castShadow = false
     face.receiveShadow = true
-    face.customDepthMaterial = this.depthMat
     this.button.add(face)
+    // the shadow pass doesn't need 16 µm: a ~4× lighter proxy casts the face's
+    // shadow (drawn invisibly in the main pass) — the full mesh was drawn twice
+    const proxyMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })
+    this.extraMats.push(proxyMat)
+    const proxy = new THREE.Mesh(buildFaceGeometry(p, 1024, 0.035), proxyMat)
+    proxy.castShadow = true
+    proxy.customDepthMaterial = this.depthMat
+    this.button.add(proxy)
     const { outer, inner } = buildBodyGeometries(p)
     const om = new THREE.Mesh(outer, this.bodyMat)
     om.castShadow = om.receiveShadow = true
@@ -484,10 +504,11 @@ export class ButtonScene {
       return m
     }
     if (p.centre === 'hole') {
-      const { copper, bore } = buildPostGeometries(p.centreR, p.capH)
+      const lipBottom = capGeometry(p).lip?.cy ?? baseProfile(p.centreR, p).y
+      const { copper, bore } = buildPostGeometries(p.centreR, p.capH, lipBottom)
       const cmat = metalMaterial(this.spec!.postMetal === 'copper' ? COPPER : POST_SILVER)
       cmat.side = THREE.DoubleSide
-      cmat.envMapIntensity = 0.5 // down a pit: it sees mostly the inside of the cap
+      cmat.envMapIntensity = 0.3 // down a pit: it sees mostly the inside of the cap
       this.extraMats.push(cmat)
       const cm = new THREE.Mesh(copper, cmat)
       cm.castShadow = cm.receiveShadow = true
@@ -507,7 +528,9 @@ export class ButtonScene {
     this.shankH = 0
     const back = STYLES[this.spec!.style].back
     if (back !== 'nail') {
-      const shankMat = metalMaterial(METAL_FINISHES.steel)
+      // bright-drawn steel: dark enough to shade as a cylinder, glossy enough to
+      // streak with the studio's vertical highlights (not frosted plastic)
+      const shankMat = metalMaterial({ ...METAL_FINISHES.steel, color: [0.45, 0.45, 0.46], roughness: 0.15 })
       this.extraMats.push(shankMat)
       const { geo, height } = buildShank(p.faceR, p.capH, back === 'swivel')
       const sm = new THREE.Mesh(geo, shankMat)
@@ -616,6 +639,7 @@ export class ButtonScene {
     const studio = s.backdrop === 'studio'
     const el = (studio ? 64 : 48) * DEG
     this.key.shadow.intensity = studio ? 0.5 : 1
+    this.key.intensity = 1.6
     const d = 60
     this.key.position.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, -Math.cos(az) * Math.cos(el) * d)
     this.key.target.position.set(0, 0, 0)
@@ -644,6 +668,9 @@ export class ButtonScene {
       })
     }
     this.scene.environment = studio ? this.brightEnv : this.envTex
+    // nickel mustn't outshine the white sweep: dim what the metal mirrors in
+    // the studio, and let the paper take more of it back
+    this.scene.environmentIntensity = studio ? 0.5 : 1
     this.back.visible = studio
     // a button in the studio stands on its shank; everything else sits on its back
     const groundY = -p.capH - (studio ? this.shankH : 0)
@@ -664,8 +691,8 @@ export class ButtonScene {
         m.bumpMap = null
         m.needsUpdate = true
       }
-      m.color.setRGB(0.9, 0.89, 0.87)
-      m.envMapIntensity = 1.1
+      m.color.setRGB(1, 0.99, 0.97) // white paper: it must read brighter than satin nickel
+      m.envMapIntensity = 2.3
       return
     }
     const { color, bump } = denimTextures(b)
@@ -687,7 +714,9 @@ export class ButtonScene {
     const fit = (R * FRAME) / Math.min(1, aspect)
     const dist = fit / (2 * Math.tan((FOV * DEG) / 2))
     // studio: shot low like a supplier's product photo, so the shank shows
-    const photoPolar = this.spec?.backdrop === 'studio' && this.shankH > 0 ? 62 : 34
+    // (a swivel shank is squat — shot lower still, as the supplier does, or the rim hides it)
+    const swivel = this.spec ? STYLES[this.spec.style].back === 'swivel' : false
+    const photoPolar = this.spec?.backdrop === 'studio' && this.shankH > 0 ? (swivel ? 72 : 62) : 34
     const polar = pose === 'photo' ? photoPolar * DEG : 0.0001
     const az = pose === 'photo' ? 20 * DEG : 0
     const studioLift = this.spec?.backdrop === 'studio' ? this.shankH : 0
