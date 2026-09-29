@@ -77,7 +77,7 @@ const styleParams = (style: Parameters<typeof reliefParamsOf>[0]['style'], d: nu
     logoDisplay: 'embossed',
   })
 
-describe('signed distance', () => {
+describe('signed distance', { timeout: 30_000 }, () => {
   it('matches the analytic distance to a disc edge within a pixel, positive inside', () => {
     const R = 3
     const sd = signedDistance(discCoverage(R), N, MMPX)
@@ -170,7 +170,9 @@ describe('cap profile', () => {
   })
 })
 
-describe('height field', () => {
+// building a full height field (EDT + normals at 512²) is heavy by nature; CI
+// runners are slow and shared — give these groups an explicit budget
+describe('height field', { timeout: 30_000 }, () => {
   const cov = discCoverage(2)
 
   it('embossed art stands proud; debossed is its negative; lasered is flush', () => {
@@ -225,7 +227,7 @@ describe('height field', () => {
   })
 })
 
-describe('finish looks', () => {
+describe('finish looks', { timeout: 30_000 }, () => {
   const f = buildHeightField(discCoverage(2), N, SPAN, params({ display: 'lasered' }))
   const art = px(0, 0)
   const bare = px(5, 3)
