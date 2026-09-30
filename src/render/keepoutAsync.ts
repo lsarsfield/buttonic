@@ -1,9 +1,10 @@
-import type { Layer } from '../model/types'
+import type { Layer, LogoDisplay } from '../model/types'
 import { clearancesAbove } from '../geometry/clip'
 import { compileCtxKey, compileLayer, type CompileCtx } from '../geometry/compile'
 import {
   adoptKeepoutRegion,
   castsRegion,
+  clipsAcrossRelief,
   haloOf,
   layerKeepoutRegion,
   outlineOf,
@@ -177,12 +178,13 @@ export function getRegionAsync(
 }
 
 /** keepoutsAbove, but contributors resolve via the stale-while-recomputing cache. */
-export function keepoutsAboveAsync(layers: Layer[], index: number, ctx: CompileCtx): Keepouts {
+export function keepoutsAboveAsync(layers: Layer[], index: number, ctx: CompileCtx, logoDisplay?: LogoDisplay): Keepouts {
   const discs = clearancesAbove(layers, index)
   const contributors: RegionContributor[] = []
+  const consumer = layers[index]!
   for (let i = index + 1; i < layers.length; i++) {
     const l = layers[i]!
-    if (!l.visible || !castsRegion(l)) continue
+    if (!l.visible || (!castsRegion(l) && !clipsAcrossRelief(l, consumer, logoDisplay))) continue
     const { region } = getRegionAsync(l, ctx)
     if (region && region.length > 0) contributors.push({ layer: l, phaseDeg: l.phaseDeg, region })
   }

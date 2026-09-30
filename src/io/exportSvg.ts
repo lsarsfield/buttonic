@@ -219,7 +219,7 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
       const own = outlineShapes(layerKeepoutRegion(layer, ctx).outline)
       if (own.length > 0) compiled = { shapes: [...compiled.shapes, ...own], warnings: compiled.warnings }
     }
-    const keepouts = keepoutsAbove(doc.layers, index, ctx)
+    const keepouts = keepoutsAbove(doc.layers, index, ctx, doc.logoDisplay)
     const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
     if (keepouts.discs.length > 0 || regions.length > 0) {
       compiled = clipCompiled(compiled, { discs: keepouts.discs, regions }, ctx.toleranceMM)

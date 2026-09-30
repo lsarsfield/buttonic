@@ -1,4 +1,5 @@
-import type { Layer } from '../model/types'
+import { layerRelief } from '../model/product'
+import type { Layer, LogoDisplay } from '../model/types'
 import { clearancesAbove, type ClearanceDisc } from './clip'
 import { compileCtxKey, compileLayer, type CompileCtx } from './compile'
 import { buildKeepoutRegion, keepoutTolerances, regionKey } from './keepoutRegion'
@@ -111,13 +112,26 @@ export function pruneKeepoutCache(validIds: ReadonlySet<string>): void {
   }
 }
 
+/**
+ * Layers struck at DIFFERENT depths can't share metal (a point on the die is
+ * raised, sunk or lasered — never two at once): the one on top wins at its exact
+ * outline, no gap needed. Raised text over a sunk hatch = clean letters, grooves
+ * right up to their edges. Same-depth layers still merge (a Gap clears them).
+ * `logoDisplay` resolves 'inherit'; omitted = no cross-relief clipping.
+ */
+export function clipsAcrossRelief(upper: Layer, lower: Layer, logoDisplay: LogoDisplay | undefined): boolean {
+  if (!logoDisplay || isSubtractLayer(upper) || isSubtractLayer(lower)) return false
+  return layerRelief(upper, { logoDisplay }) !== layerRelief(lower, { logoDisplay })
+}
+
 /** Discs + region contributors cast by visible layers ABOVE index (paint order). */
-export function keepoutsAbove(layers: Layer[], index: number, ctx: CompileCtx): Keepouts {
+export function keepoutsAbove(layers: Layer[], index: number, ctx: CompileCtx, logoDisplay?: LogoDisplay): Keepouts {
   const discs = clearancesAbove(layers, index)
   const contributors: RegionContributor[] = []
+  const consumer = layers[index]!
   for (let i = index + 1; i < layers.length; i++) {
     const l = layers[i]!
-    if (!l.visible || !castsRegion(l)) continue
+    if (!l.visible || (!castsRegion(l) && !clipsAcrossRelief(l, consumer, logoDisplay))) continue
     const { region } = layerKeepoutRegion(l, ctx)
     if (region && region.length > 0) contributors.push({ layer: l, phaseDeg: l.phaseDeg, region })
   }

@@ -55,7 +55,7 @@ export function DocRenderer() {
           key={layer.id}
           layer={layer}
           ctx={ctx}
-          keepouts={keepoutsAboveAsync(doc.layers, index, ctx)}
+          keepouts={keepoutsAboveAsync(doc.layers, index, ctx, doc.logoDisplay)}
           ownOutline={outlineOf(layer) > 0 ? outlineFor(layer) : null}
           overBare={layer.visible && invertsBare(layer) ? bareInvertRegion(doc.layers, index, ctx, regionOf, outlineFor) : null}
           tone={tone(layer)}

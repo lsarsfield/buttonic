@@ -105,6 +105,39 @@ describe('reversed monogram (cut-out)', () => {
   })
 })
 
+describe('mixed relief: the layer on top wins at its exact outline', () => {
+  const hatch = (relief: Layer['relief']) => makeHatchLayer({ id: 'h', count: 180, rInnerMM: 4, rOuterMM: 8, strokeMM: 0.08, relief })
+  const text = () => makeRingTextLayer({ id: 't', text: 'BUTTONIC', fontId: 'cinzel', sizeMM: 1.8, radiusMM: 5.6, haloMM: 0, relief: 'inherit' })
+  const ink = (shapes: Shape[]) =>
+    shapes.reduce((a, s) => {
+      if (s.kind === 'path' && s.paint.fill) return a + multiPolygonArea(pathToMultiPolygon(s.d, s.fillRule ?? 'nonzero', EXPORT_TOLERANCE_MM))
+      return a
+    }, 0)
+
+  it('raised text (Gap 0) clears a SUNK hatch beneath it — no grooves on the letters', () => {
+    const layers: Layer[] = [hatch('debossed'), text()]
+    const c = ctx()
+    const k = keepoutsAbove(layers, 0, c, 'embossed')
+    expect(k.contributors.length).toBe(1)
+    const letters = layerKeepoutRegion(layers[1]!, c).region!
+    const out = clipCompiled(compileLayer(layers[0]!, c), { discs: k.discs, regions: k.contributors.map((x) => x.region) }, c.toleranceMM).shapes
+    for (const s of out) {
+      if (s.kind !== 'path' || !s.paint.fill) continue
+      const mp = pathToMultiPolygon(s.d, s.fillRule ?? 'nonzero', EXPORT_TOLERANCE_MM)
+      // pieces TOUCH the letters along the cut; only re-parse/rounding noise may overlap
+      expect(multiPolygonArea(mp) - multiPolygonArea(safeDifference(mp, letters) ?? mp)).toBeLessThan(5e-5)
+    }
+    expect(ink(out)).toBeGreaterThan(0) // ticks cut at the letters are filled remnants
+  })
+
+  it('lasered hatch under raised text is cleared too; SAME-depth layers still merge (a Gap clears those)', () => {
+    const c = ctx()
+    expect(keepoutsAbove([hatch('lasered'), text()], 0, c, 'embossed').contributors.length).toBe(1)
+    expect(keepoutsAbove([hatch('inherit'), text()], 0, c, 'embossed').contributors.length).toBe(0)
+    expect(keepoutsAbove([hatch('debossed'), text()], 0, c).contributors.length).toBe(0) // no doc relief given → off
+  })
+})
+
 describe('text halo over a pattern', () => {
   it('trims hatch ticks clear of the halo but leaves the far side untouched', () => {
     const layers = [

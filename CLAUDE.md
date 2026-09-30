@@ -200,6 +200,9 @@ param, not an error.)
     lands at face level. A mixed die file wraps layers in `relief-raised` /
     `relief-sunk` / `relief-lasered` groups (single-relief output unchanged); the
     spec sheet lists layers per depth. `regionKey` ignores `relief`.
+    Layers at DIFFERENT depths never share metal: the upper one clips the lower at its
+    exact outline with no Gap (`clipsAcrossRelief` in keepout.ts, via
+    `keepoutsAbove(…, doc.logoDisplay)`); same-depth layers still merge unless a Gap is set.
     `studio` backdrop = white sweep + a bright PMREM
     environment, the button standing on its tack/swivel shank, shot low (62°).
   - `heightAsync.ts` rasterizes the EXACT `exportSvg` die (halos/cut-outs/inverts
