@@ -31,6 +31,7 @@ export function Inspector() {
 function LayerInspector({ layer }: { layer: Layer }) {
   const updateLayer = useEngraver((s) => s.updateLayer)
   const logoDisplay = useEngraver((s) => s.doc.logoDisplay)
+  const isMask = 'booleanRole' in layer && layer.booleanRole === 'mask'
   return (
     <>
       <div className="field-group">
@@ -53,20 +54,23 @@ function LayerInspector({ layer }: { layer: Layer }) {
           onChange={(phaseDeg) => updateLayer(layer.id, { phaseDeg })}
         />
       </div>
-      <div className="field-group">
-        <SegmentedControl
-          label="Relief"
-          stack
-          value={layer.relief}
-          options={LAYER_RELIEFS}
-          onChange={(relief) => updateLayer(layer.id, { relief })}
-        />
-        <div className="readout">
-          {layer.relief === 'inherit'
-            ? `Follows the button's logo display (${LOGO_DISPLAYS.find((l) => l.value === logoDisplay)!.label.toLowerCase()}). Set raised / sunk per layer for a mixed-relief die.`
-            : 'Struck differently from the button default — the die file groups each depth separately.'}
+      {/* a mask is a window, never struck — relief doesn't apply */}
+      {!isMask && (
+        <div className="field-group">
+          <SegmentedControl
+            label="Relief"
+            stack
+            value={layer.relief}
+            options={LAYER_RELIEFS}
+            onChange={(relief) => updateLayer(layer.id, { relief })}
+          />
+          <div className="readout">
+            {layer.relief === 'inherit'
+              ? `Follows the button's logo display (${LOGO_DISPLAYS.find((l) => l.value === logoDisplay)!.label.toLowerCase()}). Set raised / sunk per layer for a mixed-relief die.`
+              : 'Struck differently from the button default — the die file groups each depth separately.'}
+          </div>
         </div>
-      </div>
+      )}
       <TypePanel layer={layer} />
     </>
   )

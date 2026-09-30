@@ -104,7 +104,12 @@ export function keepoutTolerances(haloMM: number, ctxTolMM: number): { srcTol: n
  * Union the shapes' regions, dilate by the halo. With `outlineMM` > 0 (halo
  * 'outline'), also the engraved outline as an exact filled RING from the gap's
  * edge out to gap + outline width — so the stated gap really is clear metal,
- * and the ring is geometry the layers above can cut. Pure — safe in a worker.
+ * and the ring is geometry the layers above can cut. With `maskDiscRMM` > 0
+ * (a mask layer) the result is the COMPLEMENT of the grown shape within that
+ * origin-centred disc: subtracting it keeps what's below only inside the
+ * shape. The disc is rotation-invariant, so the pre-phase caching and
+ * phase-at-clip-time rotation carry over untouched; an empty shape keeps
+ * nothing. Pure — safe in a worker.
  */
 export function buildKeepoutRegion(
   shapes: Shape[],
@@ -112,6 +117,7 @@ export function buildKeepoutRegion(
   srcTol: number,
   arcTol: number,
   outlineMM = 0,
+  maskDiscRMM = 0,
 ): { region: MultiPolygon | null; outline: MultiPolygon | null; warnings: string[] } {
   const parts: MultiPolygon[] = []
   for (const shape of shapes) {
@@ -124,8 +130,12 @@ export function buildKeepoutRegion(
     // ~0.75·srcTol at our radii) — grow by that too so the margin never undershoots
     region = dilateMultiPolygon(region, haloMM + 0.75 * srcTol, arcTol)
   }
+  if (region !== null && maskDiscRMM > 0) {
+    // the far ring never meets geometry, so its chord count is irrelevant
+    region = safeDifference([[circleRing(maskDiscRMM, 64)]], region)
+  }
   let outline: MultiPolygon | null = null
-  if (region !== null && region.length > 0 && outlineMM > 0) {
+  if (region !== null && region.length > 0 && outlineMM > 0 && maskDiscRMM <= 0) {
     const outer = dilateMultiPolygon(region, outlineMM, arcTol)
     outline = safeDifference(outer, region)
   }

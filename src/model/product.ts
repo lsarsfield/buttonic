@@ -229,14 +229,17 @@ export function layerRelief(layer: { relief?: string }, doc: { logoDisplay: Logo
   return r === 'embossed' || r === 'debossed' || r === 'lasered' ? r : doc.logoDisplay
 }
 
-/** The visible layers grouped by how they're struck (a mixed-relief die has more than one group). */
+/**
+ * The visible layers grouped by how they're struck (a mixed-relief die has
+ * more than one group). Masks are windows, never struck — they join no group.
+ */
 export function reliefGroups(doc: {
   logoDisplay: LogoDisplay
-  layers: readonly { id: string; name: string; visible: boolean; relief?: string }[]
+  layers: readonly { id: string; name: string; visible: boolean; relief?: string; booleanRole?: string }[]
 }): Map<LogoDisplay, { id: string; name: string }[]> {
   const out = new Map<LogoDisplay, { id: string; name: string }[]>()
   for (const l of doc.layers) {
-    if (!l.visible) continue
+    if (!l.visible || l.booleanRole === 'mask') continue
     const r = layerRelief(l, doc)
     if (!out.has(r)) out.set(r, [])
     out.get(r)!.push({ id: l.id, name: l.name })

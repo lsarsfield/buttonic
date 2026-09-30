@@ -17,6 +17,8 @@ export interface KeepoutJob {
   srcTol: number
   arcTol: number
   outlineMM: number
+  /** > 0: a mask layer — the region is the complement of the shape within this disc. */
+  maskDiscRMM: number
 }
 
 export interface KeepoutDone {
@@ -34,9 +36,9 @@ const scope = self as unknown as {
 }
 
 scope.onmessage = (e) => {
-  const { jobId, layerId, shapes, haloMM, srcTol, arcTol, outlineMM } = e.data
+  const { jobId, layerId, shapes, haloMM, srcTol, arcTol, outlineMM, maskDiscRMM } = e.data
   try {
-    const { region, outline, warnings } = buildKeepoutRegion(shapes, haloMM, srcTol, arcTol, outlineMM)
+    const { region, outline, warnings } = buildKeepoutRegion(shapes, haloMM, srcTol, arcTol, outlineMM, maskDiscRMM)
     scope.postMessage({ jobId, layerId, region, outline, warnings })
   } catch (err) {
     scope.postMessage({ jobId, layerId, region: null, outline: null, warnings: [], error: String(err) })

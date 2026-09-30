@@ -1,5 +1,5 @@
 import type { Asset, ButtonDoc, Finish, Layer, LayerType, LocalFontRef } from './types'
-import { FINISH_IDS, LAYER_TYPE_LABELS } from './types'
+import { BOOLEAN_ROLES, FINISH_IDS, LAYER_TYPE_LABELS } from './types'
 import { coerceProductOptions } from './product'
 
 export type ValidationResult =
@@ -35,7 +35,7 @@ const REQUIRED: Record<LayerType, Record<string, 'n' | 's' | 'b'>> = {
     booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n', invertOverBare: 'b',
   },
   center: {
-    sourceType: 's', motifId: 's', text: 's', fontId: 's', sizeMM: 'n', rotationDeg: 'n',
+    sourceType: 's', motifId: 's', starPoints: 'n', starInner: 'n', starBulge: 'n', text: 's', fontId: 's', sizeMM: 'n', rotationDeg: 'n',
     offsetXMM: 'n', offsetYMM: 'n', render: 's', strokeMM: 'n', clearanceMM: 'n',
     booleanRole: 's', haloMM: 'n', haloMode: 's', haloStrokeMM: 'n', invertOverBare: 'b',
   },
@@ -78,6 +78,12 @@ function checkLayer(value: unknown, index: number): string | null {
     }
   }
   return null
+}
+
+/** An unknown boolean role (e.g. from a newer app) degrades to plain engraving, never a crash. */
+function coerceBooleanRole(layer: Layer): Layer {
+  if (!('booleanRole' in layer) || (BOOLEAN_ROLES as readonly string[]).includes(layer.booleanRole)) return layer
+  return { ...layer, booleanRole: 'draw' }
 }
 
 function checkAsset(id: string, value: unknown): string | null {
@@ -151,7 +157,7 @@ export function validateDoc(value: unknown): ValidationResult {
       // product options degrade softly (a newer app's value → a sane default)
       ...productOptions(value),
       holeDiameterMM: value.holeDiameterMM,
-      layers: value.layers as Layer[],
+      layers: (value.layers as Layer[]).map(coerceBooleanRole),
       assets: assets as Record<string, Asset>,
       localFonts: localFonts as Record<string, LocalFontRef>,
     },

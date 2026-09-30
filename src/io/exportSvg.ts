@@ -4,6 +4,7 @@ import { clipCompiled } from '../geometry/clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import {
   castsRegion,
+  isMaskLayer,
   isSubtractLayer,
   keepoutsAbove,
   layerKeepoutRegion,
@@ -193,12 +194,19 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
   doc.layers.forEach((layer, index) => {
     if (!layer.visible) return
 
-    // cut-out layers emit no markup of their own (bar any invert-over-bare
-    // overhang) — but still compile so an empty knockout is a LOUD warning
-    // (a silently-missing knockout is a scrapped die)
+    // cut-out and mask layers emit no markup of their own (bar any cut-out's
+    // invert-over-bare overhang) — but still compile so an empty knockout is a
+    // LOUD warning (a silently-missing knockout is a scrapped die)
     if (castsRegion(layer)) {
       const { region, warnings: rw } = layerKeepoutRegion(layer, ctx)
       for (const w of rw) warnings.push(`${layer.name}: ${w}`)
+      if (isMaskLayer(layer)) {
+        if (!region) warnings.push(`${layer.name}: mask could not be computed — the layers beneath are UNMASKED in this export`)
+        else if (compileLayer(layer, ctx).shapes.length === 0) {
+          warnings.push(`${layer.name}: mask has no shape — everything beneath it is hidden`)
+        }
+        return // a mask is a window, never engraving
+      }
       if (!region || region.length === 0) {
         warnings.push(
           `${layer.name}: ${isSubtractLayer(layer) ? 'cut-out' : 'halo'} produced no geometry — the knockout is MISSING from this export`,

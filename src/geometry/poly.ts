@@ -509,7 +509,9 @@ export function mpBounds(mp: MultiPolygon): Bounds | null {
 
 /** Radial band from the origin. rMax at vertices (exact for polygons); rMin
  *  from edge distances (an edge can dip closer than any vertex) so the band is
- *  conservative — a prefilter must never miss a real overlap. */
+ *  conservative — a prefilter must never miss a real overlap. A region that
+ *  CONTAINS the origin reaches in to r = 0 (a solid centre cut-out, a mask's
+ *  complement): geometry nearer the axis than its boundary lies inside it. */
 export function mpRadialBand(mp: MultiPolygon): { rMin: number; rMax: number } | null {
   let rMin = Infinity
   let rMax = 0
@@ -525,7 +527,8 @@ export function mpRadialBand(mp: MultiPolygon): { rMin: number; rMax: number } |
       }
     }
   }
-  return Number.isFinite(rMin) && rMax > 0 ? { rMin, rMax } : null
+  if (!Number.isFinite(rMin) || rMax <= 0) return null
+  return { rMin: pointInMultiPolygon(0, 0, mp) ? 0 : rMin, rMax }
 }
 
 export function rotateMultiPolygon(mp: MultiPolygon, deg: number): MultiPolygon {

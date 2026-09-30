@@ -1,4 +1,5 @@
 import type { CenterLayer } from '../../model/types'
+import { STAR_MAX_POINTS, STAR_MIN_POINTS } from '../../geometry/star'
 import { useEngraver } from '../../state/store'
 import { FontPicker } from '../controls/FontPicker'
 import { MotifPicker } from '../controls/MotifPicker'
@@ -21,8 +22,9 @@ export function CenterPanel({ layer }: { layer: CenterLayer }) {
           stack
           value={layer.sourceType}
           options={[
-            { value: 'glyph', label: 'Monogram' },
+            { value: 'glyph', label: 'Letters' },
             { value: 'builtin', label: 'Motif' },
+            { value: 'star', label: 'Star' },
             { value: 'asset', label: 'SVG' },
           ]}
           onChange={(sourceType) => update({ sourceType })}
@@ -39,6 +41,8 @@ export function CenterPanel({ layer }: { layer: CenterLayer }) {
           </>
         ) : layer.sourceType === 'builtin' ? (
           <MotifPicker value={layer.motifId} onChange={(motifId) => update({ motifId })} />
+        ) : layer.sourceType === 'star' ? (
+          <StarFields layer={layer} update={update} />
         ) : (
           <SvgAssetPicker value={layer.assetId} onChange={(assetId) => update({ assetId })} />
         )}
@@ -48,7 +52,7 @@ export function CenterPanel({ layer }: { layer: CenterLayer }) {
           label="Size"
           value={layer.sizeMM}
           min={0.5}
-          max={maxD}
+          max={layer.sourceType === 'star' ? 2 * maxD : maxD}
           step={0.1}
           unit="mm"
           onChange={(sizeMM) => update({ sizeMM })}
@@ -125,6 +129,44 @@ export function CenterPanel({ layer }: { layer: CenterLayer }) {
           noun="shape"
           onChange={(patch) => update(patch)}
         />
+      </div>
+    </>
+  )
+}
+
+/** Parametric star: points, valley depth, side curvature (geometry/star.ts). */
+function StarFields({ layer, update }: { layer: CenterLayer; update: (patch: Partial<CenterLayer>) => void }) {
+  const polygon = Math.round(100 * Math.cos(Math.PI / Math.max(2, Math.round(layer.starPoints))))
+  return (
+    <>
+      <NumberField
+        label="Points"
+        value={layer.starPoints}
+        min={STAR_MIN_POINTS}
+        max={STAR_MAX_POINTS}
+        step={1}
+        onChange={(starPoints) => update({ starPoints: Math.round(starPoints) })}
+      />
+      <NumberField
+        label="Inner"
+        value={Math.round(layer.starInner * 1000) / 10}
+        min={1}
+        max={100}
+        step={1}
+        unit="%"
+        onChange={(v) => update({ starInner: v / 100 })}
+      />
+      <NumberField
+        label="Curve"
+        value={Math.round(layer.starBulge * 1000) / 10}
+        min={-100}
+        max={100}
+        step={5}
+        unit="%"
+        onChange={(v) => update({ starBulge: v / 100 })}
+      />
+      <div className="readout">
+        {`Size is point to point. Inner ${polygon}% makes a regular polygon. Curve bows each side: + swells, − caves in (±100% = semicircles).`}
       </div>
     </>
   )

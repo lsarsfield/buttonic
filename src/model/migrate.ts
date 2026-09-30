@@ -108,6 +108,16 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
       typeof layer === 'object' && layer !== null ? { relief: 'inherit', ...layer } : layer,
     ),
   }),
+  // v15: centre layers gain a parametric star source (inert unless sourceType === 'star').
+  // (booleanRole 'mask' arrived at the same time — a new enum value, no migration.)
+  15: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) =>
+      typeof layer === 'object' && layer !== null && (layer as { type?: string }).type === 'center'
+        ? { starPoints: 5, starInner: 0.5, starBulge: 0, ...layer }
+        : layer,
+    ),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

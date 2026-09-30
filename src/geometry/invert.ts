@@ -2,7 +2,7 @@ import type { HatchLayer, Layer } from '../model/types'
 import { clearancesAbove, clipCompiled, maxClearance, MIN_PIECE_MM } from './clip'
 import { compileCtxKey, compileLayer, type CompileCtx } from './compile'
 import { expandInstanced } from './expand'
-import { castsRegion, haloOf, isSubtractLayer, layerKeepoutRegion, outlineOf, outlineShapes } from './keepout'
+import { castsRegion, haloOf, isMaskLayer, isSubtractLayer, layerKeepoutRegion, outlineOf, outlineShapes } from './keepout'
 import { buildKeepoutRegion, keepoutTolerances, shapeToRegion } from './keepoutRegion'
 import { holdsDisc } from './strokePieces'
 import { segsControlBox, parsePathData } from './pathData'
@@ -129,6 +129,7 @@ function computeInvert(layers: Layer[], index: number, ctx: CompileCtx, regionOf
     if (!lj.visible) continue
 
     // a halo or knockout at j re-exposes bare metal in everything beneath it
+    // (a mask's region is its complement: everything outside the window is bare)
     if (castsRegion(lj) && cov.length > 0) {
       const K = regionOf(lj)
       if (K && K.length > 0) {
@@ -139,8 +140,8 @@ function computeInvert(layers: Layer[], index: number, ctx: CompileCtx, regionOf
     }
 
     const add: MultiPolygon[] = []
-    if (isSubtractLayer(lj)) {
-      // a cut-out below only engraves its own inverted overhang
+    if (isSubtractLayer(lj) || isMaskLayer(lj)) {
+      // a cut-out below only engraves its own inverted overhang; a mask engraves nothing
       if (invertsBare(lj)) {
         const inv = bareInvertRegion(layers, j, ctx, regionOf, outlineFor)
         if (inv.length > 0) add.push(rotateMultiPolygon(inv, lj.phaseDeg))

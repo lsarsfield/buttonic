@@ -2,7 +2,13 @@ import type { BooleanRole, HaloMode } from '../../model/types'
 import { NumberField } from '../controls/NumberField'
 import { SegmentedControl } from '../controls/SegmentedControl'
 
-/** Engrave vs Cut-out — shared by the four content-layer panels. */
+const MODE_OPTIONS: readonly { value: BooleanRole; label: string; title: string }[] = [
+  { value: 'draw', label: 'Engrave', title: 'Engrave this layer' },
+  { value: 'subtract', label: 'Cut out', title: 'Knock this shape out of the layers below' },
+  { value: 'mask', label: 'Mask', title: 'Keep the layers below only inside this shape' },
+]
+
+/** Engrave / Cut out / Mask — shared by the four content-layer panels. */
 export function BooleanModeControl({
   role,
   onChange,
@@ -11,15 +17,27 @@ export function BooleanModeControl({
   onChange: (role: BooleanRole) => void
 }) {
   return (
-    <SegmentedControl
-      label="Mode"
-      value={role}
-      options={[
-        { value: 'draw', label: 'Engrave', title: 'Engrave this layer' },
-        { value: 'subtract', label: 'Cut out', title: 'Knock this shape out of filled layers below' },
-      ]}
-      onChange={onChange}
-    />
+    <>
+      <SegmentedControl
+        label="Mode"
+        stack
+        value={role}
+        options={MODE_OPTIONS}
+        onChange={onChange}
+      />
+      {role === 'mask' && <MaskReadout />}
+    </>
+  )
+}
+
+/** What a mask does — also names the stacking rule, since it isn't visible. */
+function MaskReadout({ growMM = 0 }: { growMM?: number }) {
+  return (
+    <div className="readout">
+      {`A window: draws nothing; every layer below is kept only inside this shape${
+        growMM > 0 ? `, grown by ${growMM} mm` : ''
+      }. Stacked masks intersect. Select it in the layer list.`}
+    </div>
   )
 }
 
@@ -36,6 +54,8 @@ export interface OverlayValues {
  * Engrave: engraved, kept clear of the engraving beneath by a gap (the halo).
  * Cut out: knocked out of the engraving beneath; over bare metal it can
  * engrave instead (stamp reversal) so the shape never vanishes.
+ * Mask: a window — the layers beneath survive only inside the shape (grown
+ * by the halo); gap style and over-bare don't apply.
  */
 export function OverlayControls({
   values,
@@ -48,9 +68,35 @@ export function OverlayControls({
   onChange: (patch: Partial<OverlayValues>) => void
 }) {
   const cut = values.booleanRole === 'subtract'
+  const mode = (
+    <SegmentedControl
+      label="Mode"
+      stack
+      value={values.booleanRole}
+      options={MODE_OPTIONS}
+      onChange={(booleanRole) => onChange({ booleanRole })}
+    />
+  )
+  if (values.booleanRole === 'mask') {
+    return (
+      <>
+        {mode}
+        <NumberField
+          label="Grow"
+          value={values.haloMM}
+          min={0}
+          max={3}
+          step={0.05}
+          unit="mm"
+          onChange={(haloMM) => onChange({ haloMM })}
+        />
+        <MaskReadout growMM={values.haloMM} />
+      </>
+    )
+  }
   return (
     <>
-      <BooleanModeControl role={values.booleanRole} onChange={(booleanRole) => onChange({ booleanRole })} />
+      {mode}
       <NumberField
         label={cut ? 'Grow' : 'Gap'}
         value={values.haloMM}

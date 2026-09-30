@@ -29,7 +29,7 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **14**), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **15**), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
   `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
   v8 centre `motifId` (built-in motif as a third centre source, inert unless
@@ -119,6 +119,22 @@ param, not an error.)
     undershoot), `safe*` wrappers (martinez can throw; never let it reach React).
   - `keepout.ts` per-layer knockout/halo regions, WeakMap-memoized, cached PRE-PHASE;
     consumers rotate by `contributor.phaseDeg − consumer.phaseDeg` at clip time.
+    **Masks** (`booleanRole: 'mask'`, any content layer — Mode "Engrave | Cut out | Mask"):
+    a window — the layer draws nothing and everything BELOW it survives only inside its
+    shape (grown by the halo, "Grow"). Implemented as a subtract of the COMPLEMENT
+    (`buildKeepoutRegion(…, maskDiscRMM)`: disc of radius diameter + 1 mm minus the
+    shape; rotation-invariant, so pre-phase caching holds) — every exact-cut guarantee
+    comes free. Stacked masks intersect (each restricts all beneath; union = one layer
+    with several shapes, e.g. a repeat of dots = quatrefoil). An empty shape keeps
+    nothing (export warns). Masks never take part in cross-relief clipping, have no
+    outline mode, and count as bare metal outside the window for invert coverage; a mask
+    above a cut-out trims its inverted overhang like any engraving. `mpRadialBand`
+    reaches r = 0 for regions containing the axis (the band prefilter used to wave
+    through geometry nearer the axis than a solid region's edge).
+  - `star.ts` parametric star/polygon for the centre `'star'` source: N points on the
+    sizeMM circle (first at 12 o'clock), valleys at `starInner`·R (cos(180°/N) = regular
+    polygon), sides straight or exact circular arcs (`starBulge` = sagitta ÷ half-chord;
+    + swells, − caves in). Sized point-to-point, never bbox-recentred.
   - `invert.ts` — text over other layers, Cut out half. UI model (ringText + centre,
     `OverlayControls`): **Engrave** = engraved on top, kept clear of what's beneath by
     the Gap (= halo); **Cut out** = knocked out of what's beneath (Grow = halo) and, with
@@ -131,18 +147,21 @@ param, not an error.)
     tick ±½ stroke per arc block, twisted, moat-raised). Literal XOR over hatch would
     engrave the gaps between ticks (inverse duty cycle, illegible) — don't "fix" it.
     Without a halo, T IS the knockout region (shared flattening → no seam slivers);
-    pieces thinner than 0.025 mm mean width are dropped. Memo key = content of layers
+    pieces no 0.05 mm disc fits into are dropped (`holdsDisc`, the min-piece rule). Memo key = content of layers
     0..i + discs above + identity of the consumed regions (the canvas passes
     stale-while-recomputing regions, export passes exact ones). ~10–30 ms per export.
 - `src/io/` — fonts (bundled dozen in public/fonts + uploads + Local Font Access API
   with TTC extraction in `ttc.ts`), svgImport (capability whitelist, warn-and-skip),
-  workspace (IndexedDB multi-button store; saver captures (id, doc) pairs at schedule
+  (doc-embedded fonts are cached by id AND bytes: a different font re-embedded under the
+  same asset id is re-parsed, never served stale), workspace (IndexedDB multi-button store; saver captures (id, doc) pairs at schedule
   time — anti-corruption invariants are commented in-file and load-bearing),
   exportSvg (mm-true die files, instance expansion default ON, project JSON embedded
   in <metadata> so exports re-open as documents), exportPng, thumbnail.
 - `src/render/` — SvgStage (mm-true, `#doc` = export subtree, overlays separate),
   DocRenderer (per-layer memo; comparator: layer refs + disc values + contributor
-  REGION identity — no deep geometry compares). Keepout regions for the CANVAS are stale-while-recomputing
+  REGION identity — no deep geometry compares). Mask layers render nothing, take no
+  canvas clicks (a face-sized window on top would swallow them — select in the layer
+  list), and ghost their window outline (dashed) while selected. Keepout regions for the CANVAS are stale-while-recomputing
   (`keepoutAsync.ts` + `keepoutWorker.ts`): edits render immediately with the
   last-good region while the ~80–190ms union+dilation reruns in a Web Worker
   (120ms trailing debounce, latest-wins, sync fallback on worker failure);
@@ -200,6 +219,9 @@ param, not an error.)
     lands at face level. A mixed die file wraps layers in `relief-raised` /
     `relief-sunk` / `relief-lasered` groups (single-relief output unchanged); the
     spec sheet lists layers per depth. `regionKey` ignores `relief`.
+    v15: centre `sourceType: 'star'` (`starPoints`/`starInner`/`starBulge`, inert
+    otherwise; `geometry/star.ts`) + `booleanRole: 'mask'` (new enum value, no migration;
+    validate coerces an unknown role to 'draw'). Masks join no relief group.
     Layers at DIFFERENT depths never share metal: the upper one clips the lower at its
     exact outline with no Gap (`clipsAcrossRelief` in keepout.ts, via
     `keepoutsAbove(…, doc.logoDisplay)`); same-depth layers still merge unless a Gap is set.
@@ -232,6 +254,9 @@ param, not an error.)
   true-scale cross-section inset (flat view + guides on); DocRenderer tints sunk and
   lasered layers (raised = engrave colour) so mixed-relief dies read in 2D.
 - `src/ui/` — panels per layer type, workspace switcher, dialogs.
+- `designs/` and `liet/` — LOCAL, untracked (they hold Liam's reference photos and brand
+  assets; never commit): reference recreations and custom fonts built by scripts
+  (`npx vite-node designs/<script>.ts`, `node liet/<script>.mjs`).
 
 ## Invariants (violating these breaks real dies)
 
@@ -255,11 +280,13 @@ param, not an error.)
 
 ## Testing & verification culture
 
-274 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+296 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,
 pointed-hatch halo clipping), invert-over-bare analytic areas (`invert.test.ts`),
+masks (`mask.test.ts`: analytic tick/disc and star areas, Grow, mask + cut-out, stacked
+masks, phase tracking, invert interplay, schema, die output),
 3D height-field kernel (`relief/heightField.test.ts`: EDT vs analytic disc, polarity,
 normals, cavity, per-finish patina, cap profile), schema v10 + centre-hole export warnings.
 After code changes: typecheck + full suite, then ONE browser acceptance pass via the

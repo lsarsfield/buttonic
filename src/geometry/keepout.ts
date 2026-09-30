@@ -8,8 +8,12 @@ import type { CompiledLayer, Shape } from './shapes'
 import { fillPaint } from './shapes'
 
 /**
- * Cross-layer keepouts: the region that a cut-out or halo layer subtracts from
- * the FILLED geometry of layers below it (paint order). Regions are cached in
+ * Cross-layer keepouts: the region that a cut-out, mask or halo layer subtracts
+ * from the geometry of layers below it (paint order). A MASK casts the
+ * complement of its (grown) shape within a disc well past the button — so
+ * "keep only inside" rides the exact subtract machinery unchanged (tick and
+ * stroke boundary walks, min-piece rule, caps/joins). Masks stack by
+ * intersection: each restricts everything beneath it. Regions are cached in
  * the contributor's PRE-PHASE frame; consumers rotate them into their own frame
  * at clip time (see DocRenderer / exportSvg). Discs (the circular moat) are the
  * shipped mechanism, collected unchanged via clearancesAbove.
@@ -35,19 +39,34 @@ export function isSubtractLayer(l: Layer): boolean {
   return CONTENT.has(l.type) && (l as { booleanRole?: string }).booleanRole === 'subtract'
 }
 
+/** A window: draws nothing; the layers below survive only inside its shape. */
+export function isMaskLayer(l: Layer): boolean {
+  return CONTENT.has(l.type) && (l as { booleanRole?: string }).booleanRole === 'mask'
+}
+
+/**
+ * Past the button edge by a full radius: a mask's complement is cut from a
+ * disc of radius diameter + 1 mm, so nothing on (or hanging off) the face
+ * escapes it while its boundary ring stays far from any geometry.
+ */
+export const MASK_DISC_MARGIN_MM = 1
+export function maskDiscROf(l: Layer, diameterMM: number): number {
+  return isMaskLayer(l) ? diameterMM + MASK_DISC_MARGIN_MM : 0
+}
+
 export function haloOf(l: Layer): number {
   return (l.type === 'ringText' || l.type === 'center') && l.haloMM > 0 ? l.haloMM : 0
 }
 
 /** haloMode 'outline': the engraved ring's width (0 = no outline). */
 export function outlineOf(l: Layer): number {
-  if (haloOf(l) <= 0) return 0
+  if (haloOf(l) <= 0 || isMaskLayer(l)) return 0
   const h = l as { haloMode?: string; haloStrokeMM?: number }
   return h.haloMode === 'outline' && (h.haloStrokeMM ?? 0) > 0 ? h.haloStrokeMM! : 0
 }
 
 export function castsRegion(l: Layer): boolean {
-  return isSubtractLayer(l) || haloOf(l) > 0
+  return isSubtractLayer(l) || isMaskLayer(l) || haloOf(l) > 0
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +100,7 @@ export function layerKeepoutRegion(layer: Layer, ctx: CompileCtx): KeepoutRegion
   const halo = haloOf(layer)
   const { srcTol, arcTol } = keepoutTolerances(halo, ctx.toleranceMM)
   const compiled: CompiledLayer = compileLayer(layer, ctx)
-  const res = buildKeepoutRegion(compiled.shapes, halo, srcTol, arcTol, outlineOf(layer))
+  const res = buildKeepoutRegion(compiled.shapes, halo, srcTol, arcTol, outlineOf(layer), maskDiscROf(layer, ctx.diameterMM))
   const entry: RegionCache = { key, ...res }
   cache.set(layer, entry)
   cacheById.set(layer.id, entry)
@@ -117,10 +136,11 @@ export function pruneKeepoutCache(validIds: ReadonlySet<string>): void {
  * raised, sunk or lasered — never two at once): the one on top wins at its exact
  * outline, no gap needed. Raised text over a sunk hatch = clean letters, grooves
  * right up to their edges. Same-depth layers still merge (a Gap clears them).
- * `logoDisplay` resolves 'inherit'; omitted = no cross-relief clipping.
+ * `logoDisplay` resolves 'inherit'; omitted = no cross-relief clipping. Cut-outs
+ * and masks have no depth of their own, so they never take part.
  */
 export function clipsAcrossRelief(upper: Layer, lower: Layer, logoDisplay: LogoDisplay | undefined): boolean {
-  if (!logoDisplay || isSubtractLayer(upper) || isSubtractLayer(lower)) return false
+  if (!logoDisplay || isSubtractLayer(upper) || isSubtractLayer(lower) || isMaskLayer(upper) || isMaskLayer(lower)) return false
   return layerRelief(upper, { logoDisplay }) !== layerRelief(lower, { logoDisplay })
 }
 

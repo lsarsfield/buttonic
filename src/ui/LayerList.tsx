@@ -130,6 +130,11 @@ function LayerRow({
           CUT
         </span>
       )}
+      {'booleanRole' in layer && layer.booleanRole === 'mask' && (
+        <span className="badge badge-cut" title="Mask — the layers below are kept only inside this shape">
+          MASK
+        </span>
+      )}
       {renaming ? (
         <input
           className="rename-input"

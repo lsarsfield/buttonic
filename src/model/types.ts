@@ -14,10 +14,15 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 14
+export const DOC_VERSION = 15
 
-/** Whether a content layer engraves its geometry or subtracts it from below. */
-export type BooleanRole = 'draw' | 'subtract'
+/**
+ * How a content layer combines with the layers BELOW it (paint order):
+ * draw = engrave its geometry; subtract = knock its shape out of them;
+ * mask = draw nothing and keep them only INSIDE its shape (a window).
+ */
+export type BooleanRole = 'draw' | 'subtract' | 'mask'
+export const BOOLEAN_ROLES: readonly BooleanRole[] = ['draw', 'subtract', 'mask']
 
 /** SVG-valid stroke end styles — the only caps that reach an actual stroke attribute. */
 export type SvgStrokeCap = 'butt' | 'round' | 'square'
@@ -200,7 +205,7 @@ export interface RepeatLayer extends LayerBase {
   cap: StrokeCap
   /** Corner style for stroke-type motifs (line-join): sharp = miter. */
   join: StrokeJoin
-  /** draw = engrave the motifs; subtract = knock them out of filled layers below. */
+  /** draw = engrave the motifs; subtract = knock them out of layers below; mask = keep layers below only inside them. */
   booleanRole: BooleanRole
 }
 
@@ -228,7 +233,7 @@ export interface RingTextLayer extends LayerBase {
   dividerSizeMM: number
   /** Stroke width for stroke-type divider motifs. */
   dividerStrokeMM: number
-  /** draw = engrave the text; subtract = knock it out of filled layers below. */
+  /** draw = engrave the text; subtract = knock it out of layers below; mask = keep layers below only inside it. */
   booleanRole: BooleanRole
   /** > 0: the text outline grown by this margin clears pattern layers below. */
   haloMM: number
@@ -240,10 +245,10 @@ export interface RingTextLayer extends LayerBase {
   invertOverBare: boolean
 }
 
-/** Monogram glyph, built-in motif, or SVG asset placed at the axis. */
+/** Monogram glyph, built-in motif, parametric star, or SVG asset placed at the axis. */
 export interface CenterLayer extends LayerBase {
   type: 'center'
-  sourceType: 'glyph' | 'asset' | 'builtin'
+  sourceType: 'glyph' | 'asset' | 'builtin' | 'star'
   /** glyph source */
   text: string
   fontId: FontId
@@ -251,6 +256,17 @@ export interface CenterLayer extends LayerBase {
   assetId: AssetId | null
   /** builtin source: an id into geometry/motifs/builtins */
   motifId: string
+  /*
+   * star source (geometry/star.ts): N points on the sizeMM circle, first at
+   * 12 o'clock, alternating with N valleys on an inner circle. Inert unless
+   * sourceType === 'star'.
+   */
+  /** Number of points (2+). */
+  starPoints: number
+  /** Valley radius as a fraction of the point radius (0–1; cos(180°/N) = a regular polygon). */
+  starInner: number
+  /** Side curvature: sagitta ÷ half the side's chord. 0 = straight, + bows out, − caves in (±1 = semicircle). */
+  starBulge: number
   sizeMM: number
   rotationDeg: number
   offsetXMM: number
@@ -259,7 +275,7 @@ export interface CenterLayer extends LayerBase {
   strokeMM: number
   /** > 0 clips line geometry of layers below inside this disc radius (the die "moat"). */
   clearanceMM: number
-  /** draw = engrave the monogram; subtract = knock it out of filled layers below. */
+  /** draw = engrave the shape; subtract = knock it out of layers below; mask = keep layers below only inside it. */
   booleanRole: BooleanRole
   /** > 0: the outline grown by this margin clears pattern layers below (shape-following). */
   haloMM: number
@@ -290,7 +306,7 @@ export interface BendLayer extends LayerBase {
   alternateMirror: boolean
   strokeHandling: 'auto' | 'centerline' | 'outline'
   strokeMM: number
-  /** draw = engrave the warped art; subtract = knock it out of filled layers below. */
+  /** draw = engrave the warped art; subtract = knock it out of layers below; mask = keep layers below only inside it. */
   booleanRole: BooleanRole
 }
 
@@ -440,6 +456,9 @@ export function makeCenterLayer(patch: Partial<CenterLayer> = {}): CenterLayer {
     fontId: 'unifraktur',
     assetId: null,
     motifId: 'star',
+    starPoints: 5,
+    starInner: 0.5,
+    starBulge: 0,
     sizeMM: 6,
     rotationDeg: 0,
     offsetXMM: 0,

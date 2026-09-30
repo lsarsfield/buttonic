@@ -4,6 +4,7 @@ import { glyphPathD } from './glyphs'
 import { mul, rotateThenTranslate, scaling, translation } from './mat2d'
 import { getBuiltinMotif } from './motifs/builtins'
 import { parsePathData, segsToD, transformSegs } from './pathData'
+import { starPathD } from './star'
 import type { ParsedSvgAsset } from './svgAsset'
 import type { CompiledLayer, Shape } from './shapes'
 import { fillPaint, strokePaint } from './shapes'
@@ -11,7 +12,8 @@ import { fillPaint, strokePaint } from './shapes'
 /**
  * Monogram or SVG at the axis: content is centred on the origin by its
  * bounding box (plus a small optical offset if the user wants one), scaled to
- * sizeMM, then rotated.
+ * sizeMM, then rotated. A star is centred on its own axis (sizeMM = point-to-
+ * point diameter), never re-centred by its bbox — odd point counts stay put.
  */
 export function compileCenter(
   layer: CenterLayer,
@@ -36,6 +38,21 @@ export function compileCenter(
           kind: 'path',
           d: segsToD(transformSegs(parsePathData(motif.d), m)),
           paint: stroke ? strokePaint(layer.strokeMM, 'round') : fillPaint(),
+        },
+      ],
+      warnings: [],
+    }
+  }
+  if (layer.sourceType === 'star') {
+    const d = starPathD({ points: layer.starPoints, outerR: layer.sizeMM / 2, innerRatio: layer.starInner, bulge: layer.starBulge })
+    if (!d) return { shapes: [], warnings: [] }
+    const m = rotateThenTranslate(layer.rotationDeg, layer.offsetXMM, layer.offsetYMM)
+    return {
+      shapes: [
+        {
+          kind: 'path',
+          d: segsToD(transformSegs(parsePathData(d), m)),
+          paint: layer.render === 'stroke' ? strokePaint(layer.strokeMM, 'round') : fillPaint(),
         },
       ],
       warnings: [],

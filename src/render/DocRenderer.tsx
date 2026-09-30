@@ -6,7 +6,7 @@ import { clipCompiled } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import { annulusPathD } from '../geometry/format'
 import { bareInvertRegion, invertsBare, pruneInvertCache } from '../geometry/invert'
-import { isSubtractLayer, outlineOf, outlineShapes, type Keepouts } from '../geometry/keepout'
+import { isMaskLayer, isSubtractLayer, maskDiscROf, outlineOf, outlineShapes, type Keepouts } from '../geometry/keepout'
 import { getRegionAsync, keepoutsAboveAsync, pruneRegions } from './keepoutAsync'
 import { multiPolygonToPathD, rotateMultiPolygon, type MultiPolygon } from '../geometry/poly'
 import { fillPaint } from '../geometry/shapes'
@@ -57,6 +57,7 @@ export function DocRenderer() {
           ctx={ctx}
           keepouts={keepoutsAboveAsync(doc.layers, index, ctx, doc.logoDisplay)}
           ownOutline={outlineOf(layer) > 0 ? outlineFor(layer) : null}
+          maskRegion={isMaskLayer(layer) && layer.visible ? regionOf(layer) : null}
           overBare={layer.visible && invertsBare(layer) ? bareInvertRegion(doc.layers, index, ctx, regionOf, outlineFor) : null}
           tone={tone(layer)}
         />
@@ -113,6 +114,10 @@ const sameKeepouts = (a: Keepouts, b: Keepouts): boolean =>
  * invertOverBare, the parts that cross bare metal (`overBare`), which engrave
  * and are clipped by keepouts above like any other engraving. They stay
  * selectable and show a faint preview while selected.
+ *
+ * Mask layers draw nothing at all and take no canvas clicks (a window usually
+ * spans the whole face and sits on top — it would swallow every click; select
+ * it in the layer list). While selected, the window's outline is ghosted.
  */
 const LayerGroup = memo(
   function LayerGroup({
@@ -120,12 +125,15 @@ const LayerGroup = memo(
     ctx,
     keepouts,
     ownOutline,
+    maskRegion,
     overBare,
     tone,
   }: {
     layer: Layer
     ctx: CompileCtx
     keepouts: Keepouts
+    /** mask layers: this layer's own region (the complement of its window, pre-phase) */
+    maskRegion: MultiPolygon | null
     /** halo 'outline': this layer's engraved ring (pre-phase, clipped like its art) */
     ownOutline: MultiPolygon | null
     overBare: MultiPolygon | null
@@ -138,6 +146,20 @@ const LayerGroup = memo(
 
     // regions from contributors above, rotated into this layer's local frame
     const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
+
+    if (isMaskLayer(layer)) {
+      const d = selected ? maskWindowPathD(maskRegion, maskDiscROf(layer, ctx.diameterMM)) : ''
+      return (
+        <g data-layer-id={layer.id} transform={layer.phaseDeg !== 0 ? `rotate(${layer.phaseDeg})` : undefined}>
+          {d && (
+            <g pointerEvents="none">
+              <path d={d} fillRule="evenodd" fill="currentColor" opacity={0.07} stroke="none" />
+              <path d={d} fill="none" stroke="currentColor" strokeWidth={0.05} strokeDasharray="0.3 0.2" opacity={0.7} />
+            </g>
+          )}
+        </g>
+      )
+    }
 
     if (isSubtractLayer(layer)) {
       const engraved =
@@ -204,10 +226,21 @@ const LayerGroup = memo(
     prev.ctx.assetsRevision === next.ctx.assetsRevision &&
     prev.ctx.fontsRevision === next.ctx.fontsRevision &&
     prev.ownOutline === next.ownOutline &&
+    prev.maskRegion === next.maskRegion &&
     prev.overBare === next.overBare &&
     prev.tone === next.tone &&
     sameKeepouts(prev.keepouts, next.keepouts),
 )
+
+/**
+ * A mask's window outline from its cast region (the complement within the far
+ * disc): every ring except that far disc's own boundary.
+ */
+function maskWindowPathD(region: MultiPolygon | null, discR: number): string {
+  if (!region || region.length === 0 || discR <= 0) return ''
+  const rings = region.flatMap((poly) => poly).filter((ring) => !ring.some(([x, y]) => Math.hypot(x, y) > discR * 0.99))
+  return rings.length > 0 ? multiPolygonToPathD(rings.map((r) => [r])) : ''
+}
 
 /** [inner, outer] band a layer occupies, for hit-testing and handles. */
 export function layerBand(layer: Layer): { rInner: number; rOuter: number } {

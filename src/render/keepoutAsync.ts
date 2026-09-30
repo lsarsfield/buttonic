@@ -7,6 +7,7 @@ import {
   clipsAcrossRelief,
   haloOf,
   layerKeepoutRegion,
+  maskDiscROf,
   outlineOf,
   peekKeepoutRegion,
   pruneKeepoutCache,
@@ -121,7 +122,16 @@ function dispatch(id: string): void {
   const { srcTol, arcTol } = keepoutTolerances(halo, want.ctx.toleranceMM)
   const jobId = ++jobSeq
   inflight.set(id, { key: want.key, jobId, layer: want.layer })
-  const job: KeepoutJob = { jobId, layerId: id, shapes: compiled.shapes, haloMM: halo, srcTol, arcTol, outlineMM: outlineOf(want.layer) }
+  const job: KeepoutJob = {
+    jobId,
+    layerId: id,
+    shapes: compiled.shapes,
+    haloMM: halo,
+    srcTol,
+    arcTol,
+    outlineMM: outlineOf(want.layer),
+    maskDiscRMM: maskDiscROf(want.layer, want.ctx.diameterMM),
+  }
   w.postMessage(job)
 }
 

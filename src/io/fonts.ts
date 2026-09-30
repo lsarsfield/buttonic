@@ -39,6 +39,10 @@ export const BUNDLED_FONTS: readonly BundledFont[] = [
 const cache = new Map<FontId, opentype.Font>()
 const pending = new Set<FontId>()
 const failed = new Map<FontId, string>()
+// Doc-embedded fonts: the bytes each cached parse came from. Two documents can
+// carry DIFFERENT fonts under the SAME asset id (a revised font re-embedded in a
+// new file); keyed on id alone, the second would silently render with the first.
+const loadedFrom = new Map<FontId, string>()
 
 export function getLoadedFont(fontId: FontId): opentype.Font | null {
   return cache.get(fontId) ?? null
@@ -75,6 +79,7 @@ export function _resetFontCachesForTests(): void {
   cache.clear()
   pending.clear()
   failed.clear()
+  loadedFrom.clear()
 }
 
 /**
@@ -82,7 +87,15 @@ export function _resetFontCachesForTests(): void {
  * decode from the doc. Bumps fontsRevision when the parse lands.
  */
 export function ensureFontLoaded(fontId: FontId, doc: ButtonDoc): void {
-  if (!fontId || cache.has(fontId) || pending.has(fontId) || failed.has(fontId)) return
+  if (!fontId) return
+  const embedded = doc.assets[fontId]
+  if (embedded && embedded.kind === 'font' && loadedFrom.has(fontId) && loadedFrom.get(fontId) !== embedded.dataBase64) {
+    // same id, different bytes: drop the stale parse (and any stale failure) and re-read
+    cache.delete(fontId)
+    failed.delete(fontId)
+    loadedFrom.delete(fontId)
+  }
+  if (cache.has(fontId) || pending.has(fontId) || failed.has(fontId)) return
 
   const bundled = BUNDLED_FONTS.find((f) => f.id === fontId)
   if (bundled) {
@@ -107,6 +120,7 @@ export function ensureFontLoaded(fontId: FontId, doc: ButtonDoc): void {
 
   const asset = doc.assets[fontId]
   if (asset && asset.kind === 'font') {
+    loadedFrom.set(fontId, asset.dataBase64)
     try {
       registerFontBuffer(fontId, base64ToBuffer(asset.dataBase64))
     } catch (e) {
@@ -137,8 +151,10 @@ export async function uploadFont(file: File): Promise<{ ok: true; fontId: FontId
     }
   }
   const state = useEngraver.getState()
+  const dataBase64 = bufferToBase64(buffer)
+  loadedFrom.set(fontId, dataBase64)
   state.updateDocAssets({
-    [fontId]: { kind: 'font', name: file.name, dataBase64: bufferToBase64(buffer) },
+    [fontId]: { kind: 'font', name: file.name, dataBase64 },
   })
   state.bumpFontsRevision()
   return { ok: true, fontId }
