@@ -11,7 +11,8 @@ import type { LogoDisplay, Material, Product, ProductStyle } from '../../model/t
  *     lightly smoothed so diagonal walls don't terrace on the pixel lattice)
  *  2. design height = depth · smoothstep over a finite wall — embossed (die-
  *     struck: what's cut into the die stands proud), debossed, or lasered
- *     (flat: no relief, a marking — located by the art-occupancy channel)
+ *     (a laser marking: a ~0.02 mm crisp-walled cut with a scan-line fill
+ *     texture in the normals — located by the art-occupancy channel)
  *  3. cavity = how enclosed a point is by higher ground (blurred coverage vs
  *     local height), plus plain lowness — raw inputs; each FINISH turns them
  *     into its own patina (finishMaps: nickel greys only tight recesses,
@@ -121,8 +122,31 @@ export interface Patina {
   darken: number
 }
 
-/** Recess roughness can reach this multiple of the finish's base roughness. */
-export const ROUGH_HEADROOM = 1.8
+/**
+ * The roughness map stores a multiplier of the finish's base roughness, ÷ this
+ * headroom (the material carries base × headroom). Patina roughens recesses up
+ * to OXIDE_ROUGH ×; a laser frost can take a mirror finish to a satin matte, so
+ * the map needs far more range than oxide alone.
+ */
+export const ROUGH_HEADROOM = 6
+/** Full oxide roughens the surface to this multiple of the finish's base. */
+const OXIDE_ROUGH = 1.8
+
+/**
+ * A fiber-laser marking (lasered art): the beam ablates a few hundredths of a
+ * mm in a fill of fine parallel scan lines. The metal keeps its colour (on
+ * plated / polished finishes the mark is tone-on-tone — it reads by its
+ * frosted sheen, lighter or darker as the light moves); on an antiqued finish
+ * it burns through the oxide to bright metal. See finishMaps.
+ */
+export const LASER_DEPTH_MM = 0.02
+/** The cut's wall: ablation is near-vertical, so the edge is crisp. */
+const LASER_WALL_MM = 0.012
+/** Fill hatch: scan-line pitch, groove depth, and angle (45°, the usual default). */
+export const LASER_PITCH_MM = 0.04
+const LASER_GROOVE_MM = 0.0015
+/** Final roughness of a laser frost (absolute; the bare face keeps its finish). */
+const LASER_FROST = 0.42
 
 // ---------------------------------------------------------------------------
 // cap profile
@@ -515,7 +539,8 @@ function occupancy(cov: Float32Array, n: number, mmPerPx: number, wallMM: number
 /**
  * Coverage masks (0..1, n², rows top→bottom) → the full height field. A bare
  * Float32Array is one class of art struck per `p.display`. Raised art stands
- * +depth, sunk art −depth, lasered art is flush (marked in finishMaps).
+ * +depth, sunk art −depth, lasered art is a shallow laser cut (LASER_DEPTH_MM)
+ * whose scan-line fill shows in the normals only (finishMaps does the sheen).
  */
 export function buildHeightField(
   input: Float32Array | ReliefMasks,
@@ -535,20 +560,29 @@ export function buildHeightField(
       : input
   const occR = masks.raised ? occupancy(masks.raised, n, mmPerPx, p.wallMM) : null
   const occS = masks.sunk ? occupancy(masks.sunk, n, mmPerPx, p.wallMM) : null
-  const laser = masks.lasered ?? null
+  // the laser cut: crisp-walled occupancy (a light blur keeps the edge off the pixel lattice)
+  let laser: Float32Array | null = null
+  if (masks.lasered) {
+    const sd = signedDistance(masks.lasered, n, mmPerPx)
+    boxBlur(sd, n, 1)
+    laser = new Float32Array(n * n)
+    for (let i = 0; i < n * n; i++) laser[i] = wallProfile(sd[i]!, LASER_WALL_MM)
+  }
 
   // F: 1 on the HIGH ground, 0 on the low. The field sits low under raised
-  // art, high over sunk art, midway on a mixed die; lasered art is flush.
-  const fieldLevel = occR ? (occS ? 0.5 : 0) : 1
+  // art, high over sunk art, midway on a mixed die. A lasered-only face has no
+  // relief to burnish, so it is neither: it keeps the finish's field coat at
+  // half strength (an antiqued face stays antiqued; the laser cuts through it).
+  const fieldLevel = occR ? (occS ? 0.5 : 0) : occS ? 1 : laser ? 0.5 : 1
   const F = new Float32Array(n * n)
   const h = new Float32Array(n * n)
   const art = new Float32Array(n * n)
   for (let i = 0; i < n * n; i++) {
     const r = occR ? occR[i]! : 0
     const sk = occS ? occS[i]! : 0
-    h[i] = p.depthMM * (r - sk)
-    F[i] = fieldLevel + r * (1 - fieldLevel) - sk * fieldLevel
     art[i] = laser ? laser[i]! : 0
+    h[i] = p.depthMM * (r - sk) - LASER_DEPTH_MM * art[i]!
+    F[i] = fieldLevel + r * (1 - fieldLevel) - sk * fieldLevel
   }
 
   // neighbourhood height (~0.12 mm sigma) → cavity = enclosed by higher ground
@@ -574,6 +608,16 @@ export function buildHeightField(
       if (r > 1e-6) {
         gx += (dydr * wx) / r
         gy += (dydr * wy) / r
+      }
+      if (art[i]! > 0) {
+        // the laser's fill: parallel scan-line grooves at 45°, z = −A·(1 + cos 2πu/p)/2
+        // — normals only (too fine for the displacement mesh); their slope is what
+        // makes a laser mark shimmer as it turns
+        const u = (wx + wy) * Math.SQRT1_2
+        const k = (2 * Math.PI) / LASER_PITCH_MM
+        const slope = (LASER_GROOVE_MM / 2) * k * Math.sin(k * u) * art[i]!
+        gx += slope * Math.SQRT1_2
+        gy += slope * Math.SQRT1_2
       }
       // three.js object space: face in XZ, Y up, design y → +Z
       const nx = -gx
@@ -618,8 +662,16 @@ export interface SurfaceLook {
   patina: Patina
   /** Satin micro-texture (0 polished … 1 sandblasted/tumbled). */
   grain?: number
-  /** Laser-marked art: a dark, matte marking in the art region. */
+  /** Laser-marked art (located by the field's art channel) gets the laser's surface. */
   lasered: boolean
+  /**
+   * How the finish takes a laser: 'frost' (default) — tone-on-tone, the metal
+   * keeps its colour and the mark reads by its frosted satin sheen; 'reveal' —
+   * an antiqued finish, burned through its oxide to clean bright metal.
+   */
+  laser?: 'frost' | 'reveal'
+  /** The finish's base roughness (the laser frost is an absolute roughness). */
+  roughness?: number
   distressed: boolean
 }
 
@@ -666,7 +718,8 @@ export function distressMask(xMM: number, yMM: number): number {
  * finish/look change) — never re-runs the EDT.
  *
  *  - patina: oxide settles in cavities and (per finish) over the low field
- *  - lasered: the art is a dark, matte heat-marking, flush with the face
+ *  - lasered: a laser frost — the metal's own colour, barely dimmed, satin
+ *    matte (on an antiqued finish: the oxide burned off to bright metal)
  *  - distressed: blotchy heavy oxide worn back to bright metal on the high
  *    points — the washed-and-worn workwear look
  */
@@ -686,7 +739,8 @@ export function finishMaps(field: HeightField, look: SurfaceLook | Patina): { su
     const art = occl[o + 2]! / 255
     let patina = Math.min(1, p.cavity * cav + p.field * low)
     let dark = p.darken * patina
-    let rough = (1 + (ROUGH_HEADROOM - 1) * patina) / ROUGH_HEADROOM
+    // roughness as a multiple of the finish's base (stored ÷ ROUGH_HEADROOM below)
+    let rough = 1 + (OXIDE_ROUGH - 1) * patina
     if (L.distressed) {
       const x = -V + ((i % n) + 0.5) * mmPerPx
       const y = -V + (Math.floor(i / n) + 0.5) * mmPerPx
@@ -695,24 +749,35 @@ export function finishMaps(field: HeightField, look: SurfaceLook | Patina): { su
       const wear = distressMask(x, y) * (0.25 + 0.75 * Math.max(low, cav))
       patina = Math.max(patina, wear)
       dark = Math.max(dark, 0.9 * wear)
-      rough = Math.max(rough, (1 + (ROUGH_HEADROOM - 1) * wear) / ROUGH_HEADROOM)
+      rough = Math.max(rough, 1 + (OXIDE_ROUGH - 1) * wear)
     }
     if (L.grain) {
       // satin stipple, ~20–40 µm: rough and faintly mottled, never mirror-flat
       const x = -V + ((i % n) + 0.5) * mmPerPx
       const y = -V + (Math.floor(i / n) + 0.5) * mmPerPx
       const g = 0.6 * valueNoise(x / 0.03, y / 0.03, 31) + 0.4 * hash2(i % n, Math.floor(i / n), 32) - 0.5
-      rough = Math.min(1, Math.max(0, rough + L.grain * 0.18 * g))
+      rough = Math.max(0, rough + L.grain * 0.18 * OXIDE_ROUGH * g)
       dark = Math.min(1, Math.max(0, dark + L.grain * 0.08 * (g + 0.5)))
     }
+    // oxide is a dielectric film: metalness follows it (not other dimming)
+    let oxide = dark
     if (L.lasered && art > 0) {
-      dark = dark + (0.78 - dark) * art
-      rough = rough + (1 - rough) * art
-      patina = Math.max(patina, 0.4 * art)
+      // ablated metal is clean (any oxide or antiquing is burned off) but frosted:
+      // a satin scatter with a fine laser-grain mottle, a touch dimmer from the
+      // micro-roughness shadowing itself. Never a painted-on colour.
+      const reveal = L.laser === 'reveal'
+      const x = i % n
+      const y = Math.floor(i / n)
+      const mottle = 0.7 * hash2(x, y, 41) + 0.3 * valueNoise(x / 3, y / 3, 42) - 0.5
+      const frost = ((reveal ? 0.9 : 1) * LASER_FROST + 0.12 * mottle) / Math.max(0.02, L.roughness ?? 0.3)
+      rough = rough + (Math.max(rough, frost) - rough) * art
+      dark = dark + ((reveal ? 0.04 : 0.22) + 0.06 * mottle - dark) * art
+      patina = patina + ((reveal ? 0.05 : 0.15) - patina) * art
+      oxide = oxide * (1 - art) // the beam burns any oxide off: the mark is bare metal
     }
     surface[o] = Math.round((1 - 0.7 * patina) * 255)
-    surface[o + 1] = Math.round(rough * 255)
-    surface[o + 2] = Math.round((1 - 0.85 * Math.min(1, dark / 0.9)) * 255) // metalness
+    surface[o + 1] = Math.round(Math.min(1, rough / ROUGH_HEADROOM) * 255)
+    surface[o + 2] = Math.round((1 - 0.85 * Math.min(1, oxide / 0.9)) * 255) // metalness
     surface[o + 3] = 255
     const g = Math.round((1 - dark) * 255)
     albedo[o] = g

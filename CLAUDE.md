@@ -188,8 +188,16 @@ param, not an error.)
     dome), quarter-round rolled shoulder, rolled hole lip.
   - Per-style cap profiles (`baseProfile`, from `reliefParamsOf(doc)`): dome, concave
     dish, rolled shoulder, and the centre feature — hole/pin lip, nipple knob, sunk
-    cup; die-cast = thicker cap + crisper edge + deeper relief. Lasered = no relief,
-    art located by `occl.B` and marked dark/matte in `finishMaps`; distressed =
+    cup; die-cast = thicker cap + crisper edge + deeper relief. Lasered = a fiber-laser
+    mark, NOT a painted decal (Liam: "are you sure it makes the surface radically
+    different color / matte?" — it doesn't): a 0.02 mm crisp-walled cut
+    (`LASER_DEPTH_MM`) + a 45° scan-line fill (0.04 mm pitch) in the NORMALS only,
+    located by `occl.B`. `finishMaps`: plated/polished finishes get a tone-on-tone
+    satin frost (same metal colour, ~22% dimmer, still metal — reads lighter or darker
+    as the light moves); antiqued finishes (`laser: 'reveal'` in finishes.ts) burn
+    through the oxide to bright metal; a lasered-only face keeps half its field coat.
+    The roughness map is a multiplier ÷ `ROUGH_HEADROOM` (6) so a mirror can frost
+    (the material uniform is base × 6, unclamped — three clamps in-shader); distressed =
     deterministic mottled oxide (`distressMask`) worn bright on the high points.
     Patina maps carry METALNESS (surface.B): oxide is a dark dielectric film — dimmed
     metal still mirrors a bright studio. Normals are HALF-FLOAT (8-bit terraced into
@@ -280,7 +288,7 @@ param, not an error.)
 
 ## Testing & verification culture
 
-296 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+298 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,

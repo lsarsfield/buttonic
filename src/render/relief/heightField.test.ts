@@ -8,7 +8,9 @@ import {
   distressMask,
   finishMaps,
   fromHalf,
+  LASER_DEPTH_MM,
   reliefParamsOf,
+  ROUGH_HEADROOM,
   toHalf,
   signedDistance,
   WALL_MM,
@@ -177,15 +179,16 @@ describe('cap profile', () => {
 describe('height field', { timeout: 30_000 }, () => {
   const cov = discCoverage(2)
 
-  it('embossed art stands proud; debossed is its negative; lasered is flush', () => {
+  it('embossed art stands proud; debossed is its negative; lasered is a shallow laser cut', () => {
     const up = buildHeightField(cov, N, SPAN, params())
     const down = buildHeightField(cov, N, SPAN, params({ display: 'debossed' }))
-    const flat = buildHeightField(cov, N, SPAN, params({ display: 'lasered' }))
-    expect(flat.disp.every((v) => v === 0)).toBe(true)
+    const laser = buildHeightField(cov, N, SPAN, params({ display: 'lasered' }))
     // disp is DISP_N² — sample its centre and a far corner
     const n = up.dispN
     const centre = (n / 2) * n + n / 2
     const corner = 10 * n + 10
+    expect(laser.disp[centre]).toBeCloseTo(-LASER_DEPTH_MM, 4)
+    expect(laser.disp[corner]).toBe(0)
     expect(up.disp[centre]).toBeCloseTo(DEPTH, 3)
     expect(up.disp[corner]).toBeCloseTo(0, 6)
     expect(down.disp[centre]).toBeCloseTo(-DEPTH, 3)
@@ -234,12 +237,40 @@ describe('finish looks', { timeout: 30_000 }, () => {
   const art = px(0, 0)
   const bare = px(5, 3)
 
-  it('lasered marks the art dark and matte, and leaves the bare face alone', () => {
-    const plain = finishMaps(f, { patina: METAL_FINISHES.nickel.patina, lasered: false, distressed: false })
-    const laser = finishMaps(f, { patina: METAL_FINISHES.nickel.patina, lasered: true, distressed: false })
-    expect(laser.albedo[art * 4]!).toBeLessThan(plain.albedo[art * 4]! - 120)
-    expect(laser.surface[art * 4 + 1]!).toBe(255) // fully rough
+  // final roughness at a pixel = base × ROUGH_HEADROOM × map
+  const roughAt = (m: Uint8Array, i: number, base: number) => Math.min(1, base * ROUGH_HEADROOM * (m[i * 4 + 1]! / 255))
+
+  it('a laser frost is tone-on-tone: the metal keeps its colour, the sheen goes satin', () => {
+    const fin = METAL_FINISHES['polished-nickel']
+    const look = { patina: fin.patina, roughness: fin.roughness, distressed: false }
+    const plain = finishMaps(f, { ...look, lasered: false })
+    const laser = finishMaps(f, { ...look, lasered: true })
+    // barely dimmed — never a painted-on dark mark
+    expect(laser.albedo[art * 4]!).toBeGreaterThan(plain.albedo[art * 4]! * 0.7)
+    // still metal
+    expect(laser.surface[art * 4 + 2]!).toBeGreaterThan(200)
+    // a mirror face frosts to satin; the bare face keeps its polish
+    expect(roughAt(laser.surface, art, fin.roughness)).toBeGreaterThan(0.35)
+    expect(roughAt(laser.surface, bare, fin.roughness)).toBeCloseTo(fin.roughness, 1)
     expect(laser.albedo[bare * 4]).toBe(plain.albedo[bare * 4])
+  })
+
+  it('on an antiqued finish the laser burns through the oxide to bright metal', () => {
+    const fin = METAL_FINISHES['antique-brass']
+    expect(fin.laser).toBe('reveal')
+    const laser = finishMaps(f, { patina: fin.patina, roughness: fin.roughness, laser: 'reveal', lasered: true, distressed: false })
+    // a lasered-only face has no relief to burnish: it keeps its antiquing…
+    expect(laser.albedo[bare * 4]!).toBeLessThan(200)
+    // …and the mark is the clean metal beneath, brighter than the face
+    expect(laser.albedo[art * 4]!).toBeGreaterThan(laser.albedo[bare * 4]! + 50)
+  })
+
+  it('the laser fill tilts the normals along its scan lines; the bare face stays flat', () => {
+    const nz = (i: number) => fromHalf(f.normal[i * 4 + 1]!) * 2 - 1
+    let minInside = 1
+    for (let k = 0; k < 40; k++) minInside = Math.min(minInside, nz(px(-1 + k * 0.05, 0.3)))
+    expect(minInside).toBeLessThan(0.999)
+    expect(nz(bare)).toBeGreaterThan(0.9999)
   })
 
   it('distressed wear is deterministic and actually blotchy', () => {
@@ -399,7 +430,7 @@ describe('mixed relief', { timeout: 60_000 }, () => {
     expect(lowness).toBeCloseTo(0.5, 1)
   })
 
-  it('lasered layers are flush but located by the art mask', () => {
+  it('lasered layers are located by the art mask', () => {
     const f = buildHeightField({ raised: discCoverage(1), lasered: discCoverage(0.6, 4, 0) }, N, SPAN, params())
     expect(f.occl[px(4, 0) * 4 + 2]!).toBeGreaterThan(200)
     expect(f.occl[px(0, 0) * 4 + 2]!).toBe(0)

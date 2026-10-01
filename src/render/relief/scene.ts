@@ -569,7 +569,9 @@ export class ButtonScene {
     }
     if (this.faceMat && this.field) {
       this.applyPatina()
-      this.faceMat.roughness = Math.min(1, f.roughness * ROUGH_HEADROOM)
+      // base × headroom: the roughness map holds a multiplier ÷ headroom (three
+      // clamps the product to 1 in the shader, so the uniform may exceed it)
+      this.faceMat.roughness = f.roughness * ROUGH_HEADROOM
       this.faceMat.aoMapIntensity = f.oxide
     }
   }
@@ -584,6 +586,8 @@ export class ButtonScene {
       patina: finishOf(spec.finish).patina,
       // lasered art (whole design or individual layers) is located by the field's art mask
       lasered: true,
+      laser: finishOf(spec.finish).laser ?? 'frost',
+      roughness: finishOf(spec.finish).roughness,
       distressed: spec.distressed,
       grain: finishOf(spec.finish).grain ?? 0,
     }

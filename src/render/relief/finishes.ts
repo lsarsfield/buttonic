@@ -18,6 +18,12 @@ export interface MetalFinish {
   patina: Patina
   /** Satin micro-texture: 0 polished mirror … 1 sandblasted/tumbled (dull nickel, pewter). */
   grain?: number
+  /**
+   * How a laser marks it: 'frost' (default — plated / polished metal: a
+   * tone-on-tone satin frost) or 'reveal' (an antiqued oxide the beam burns
+   * through to the bright metal beneath).
+   */
+  laser?: 'frost' | 'reveal'
 }
 
 const LIGHT_PATINA: Patina = { cavity: 1, field: 0.12, darken: 0.62 }
@@ -44,6 +50,7 @@ export const METAL_FINISHES: Record<Finish, MetalFinish> = {
     oxide: 1,
     patina: { cavity: 1, field: 0.55, darken: 0.82 },
     grain: 0.8,
+    laser: 'reveal',
   },
   // copper darkened almost to black-brown, bright copper only where it's rubbed
   'copper-oxide': {
@@ -52,6 +59,7 @@ export const METAL_FINISHES: Record<Finish, MetalFinish> = {
     oxide: 1,
     patina: { cavity: 1, field: 0.92, darken: 0.93 },
     grain: 0.8,
+    laser: 'reveal',
   },
   // chemically darkened brass, relieved by polishing: the high points burnished
   // bright, the whole low ground and every recess filled with brown-black oxide
@@ -61,6 +69,7 @@ export const METAL_FINISHES: Record<Finish, MetalFinish> = {
     oxide: 1,
     patina: { cavity: 1, field: 0.8, darken: 0.9 },
     grain: 0.8,
+    laser: 'reveal',
   },
 }
 
