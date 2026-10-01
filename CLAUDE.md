@@ -253,6 +253,13 @@ param, not an error.)
     Photo/Top poses, 250 ms debounced latest-wins relief rebuild (StatusBar "3D…"),
     `lastPose` shared with `renderPng.ts`. `useDocResources` (exported from
     DocRenderer) kicks font/asset loads since DocRenderer isn't mounted in 3D.
+    ROW (`view.rowCount`, 1–9, stepper bottom-left; also the 3D PNG): copies of the
+    button along X, 0.3 D apart — `shareClone`s that SHARE geometry, materials and
+    relief textures (clone() drops `customDepthMaterial`, so it's copied by hand),
+    re-cloned at the end of every `setSpec` (`syncRow`). Poses and zoom limits frame
+    the row (`fitDistance(single?)`); pan is on only for rows. The far ground fades
+    into the backdrop with distance fog set per render from where the camera meets
+    the ground (8 m plane) — zooming far out never shows an edge.
   - Browser gotcha: the preview pane throttles rAF to ~1 fps when backgrounded —
     measure main-thread stalls with a setInterval probe, not rAF.
 - Flat-canvas shape preview (preview only, never exported): `overlays/CapShape.tsx`

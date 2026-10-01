@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { useEngraver } from '../../state/store'
 import { useDocResources } from '../DocRenderer'
 import { computeHeightField, heightKey } from './heightAsync'
-import { ButtonScene, lastPose, specOfDoc, type ButtonSpec, type Pose } from './scene'
+import { ButtonScene, lastPose, ROW_MAX, specOfDoc, type ButtonSpec, type Pose } from './scene'
 
 /**
  * The 3D view: the struck button in a photo studio, orbitable. Lazy-loaded
@@ -21,7 +21,9 @@ const MAX_POLAR = 80 * (Math.PI / 180)
 
 export default function ReliefStage() {
   const hostRef = useRef<HTMLDivElement>(null)
-  const sceneRef = useRef<{ scene: ButtonScene; controls: OrbitControls; render: () => void } | null>(null)
+  const sceneRef = useRef<{ scene: ButtonScene; controls: OrbitControls; render: () => void; zoomLimits: () => void } | null>(
+    null,
+  )
   const [failed, setFailed] = useState<string | null>(null)
 
   const doc = useEngraver((s) => s.doc)
@@ -29,6 +31,8 @@ export default function ReliefStage() {
   const assetsRevision = useEngraver((s) => s.assetsRevision)
   const lightDeg = useEngraver((s) => s.view.lightDeg)
   const backdrop = useEngraver((s) => s.view.backdrop)
+  const rowCount = useEngraver((s) => s.view.rowCount)
+  const setView = useEngraver((s) => s.setView)
   useDocResources(doc, fontsRevision, assetsRevision)
 
   // renderer + scene + controls, once
@@ -84,19 +88,24 @@ export default function ReliefStage() {
       renderer.setSize(w, h)
       scene.camera.aspect = w / h
       scene.camera.updateProjectionMatrix()
-      const fit = scene.fitDistance()
-      controls.minDistance = fit * 0.3
-      controls.maxDistance = fit * 2.5
+      zoomLimits()
       render()
+    }
+    // close enough to read one button's relief, far enough to see a whole row in its setting
+    const zoomLimits = () => {
+      controls.minDistance = scene.fitDistance(true) * 0.3
+      controls.maxDistance = Math.max(scene.fitDistance(true) * 6, scene.fitDistance() * 1.8)
     }
     const ro = new ResizeObserver(resize)
     ro.observe(host)
 
-    sceneRef.current = { scene, controls, render }
+    sceneRef.current = { scene, controls, render, zoomLimits }
     // dev-only handle for scripted browser verification (like window.__engraver)
     if (import.meta.env.DEV) (window as unknown as { __relief?: unknown }).__relief = { scene, controls, render }
     const s = useEngraver.getState()
     scene.setSpec(specOf(s))
+    scene.setRow(s.view.rowCount)
+    controls.enablePan = s.view.rowCount > 1
     resize()
     applyPose(lastPose.position ? null : lastPose.pose)
     if (lastPose.position && lastPose.target) {
@@ -126,6 +135,7 @@ export default function ReliefStage() {
     const ref = sceneRef.current
     if (!ref) return
     ref.scene.setSpec(specOf(useEngraver.getState()))
+    ref.zoomLimits() // the size sets the framing distances
     ref.render()
   }, [
     doc.diameterMM,
@@ -140,6 +150,20 @@ export default function ReliefStage() {
     lightDeg,
     backdrop,
   ])
+
+  // a row: line up the copies and frame them all (panning lets you walk along it)
+  const firstRow = useRef(true)
+  useEffect(() => {
+    const ref = sceneRef.current
+    if (!ref) return
+    ref.scene.setRow(rowCount)
+    ref.controls.enablePan = rowCount > 1
+    ref.zoomLimits()
+    if (firstRow.current) firstRow.current = false
+    else applyPose(lastPose.pose)
+    ref.render()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowCount])
 
   // reframe on a new backdrop / size unless the user has orbited to their own view
   useEffect(() => {
@@ -188,6 +212,27 @@ export default function ReliefStage() {
 
   return (
     <div className="relief-stage" ref={hostRef}>
+      <div className="relief-poses relief-row" title="Buttons in a row">
+        <button
+          type="button"
+          onClick={() => setView({ rowCount: Math.max(1, rowCount - 1) })}
+          disabled={rowCount <= 1}
+          aria-label="Fewer buttons"
+        >
+          −
+        </button>
+        <span className="relief-row-count">
+          {rowCount} {rowCount === 1 ? 'button' : 'buttons'}
+        </span>
+        <button
+          type="button"
+          onClick={() => setView({ rowCount: Math.min(ROW_MAX, rowCount + 1) })}
+          disabled={rowCount >= ROW_MAX}
+          aria-label="More buttons"
+        >
+          +
+        </button>
+      </div>
       <div className="relief-poses">
         <button type="button" onClick={() => applyPose('photo')} title="Three-quarter product-shot view">
           Photo

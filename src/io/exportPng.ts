@@ -14,6 +14,8 @@ export interface PngExportOptions {
   lightDeg: number
   /** 3D: ground under the button. */
   backdrop: Backdrop
+  /** 3D: copies of the button lined up in a row (the 3D view's setting). */
+  rowCount?: number
   /** Flat: dark artwork on transparent (true) or light-on-dark plate (false). 3D: no backdrop. */
   transparent: boolean
   fontsRevision: number
@@ -34,6 +36,7 @@ export async function exportPng(doc: ButtonDoc, options: PngExportOptions): Prom
       px: options.px,
       lightDeg: options.lightDeg,
       backdrop: options.transparent ? 'none' : options.backdrop,
+      rowCount: options.rowCount,
       fontsRevision: options.fontsRevision,
       assetsRevision: options.assetsRevision,
     })

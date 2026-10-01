@@ -55,6 +55,12 @@ export interface ButtonSpec {
 const FOV = 22
 /** Visible height at the fit distance, in button radii (margin around the cap). */
 const FRAME = 2.6
+/** A row of buttons: the gap between neighbours, in diameters. */
+const ROW_GAP = 0.3
+/** Most buttons a row shows. */
+export const ROW_MAX = 9
+/** Ground plane size, mm: past the fog, so a zoomed-out low view never finds its edge. */
+const GROUND_MM = 8000
 
 const DEG = Math.PI / 180
 
@@ -357,7 +363,7 @@ function dataTexture(
 
 export class ButtonScene {
   readonly scene = new THREE.Scene()
-  readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 400)
+  readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 4000)
   readonly target = new THREE.Vector3(0, -0.3, 0)
 
   private readonly renderer: THREE.WebGLRenderer
@@ -371,6 +377,14 @@ export class ButtonScene {
   private readonly back = new THREE.Group()
   private readonly ground: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>
   private readonly contact: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
+  /**
+   * The other buttons of a row: shallow clones of the button (and its contact
+   * shadow) that SHARE its geometry, materials and relief textures — free to
+   * draw, and every edit, finish or new height field shows on all of them.
+   * Re-cloned whenever the button's parts are rebuilt (syncRow).
+   */
+  private readonly row = new THREE.Group()
+  private rowCount = 1
 
   private faceMat: THREE.MeshPhysicalMaterial | null = null
   private bodyMat: THREE.MeshPhysicalMaterial | null = null
@@ -416,7 +430,7 @@ export class ButtonScene {
     this.scene.add(this.key, this.key.target)
 
     this.ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(160, 160),
+      new THREE.PlaneGeometry(GROUND_MM, GROUND_MM),
       // denim: lit mostly by the key, barely by the studio (keeps it deep like the photo)
       new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, bumpScale: 1.2, envMapIntensity: 0.35 }),
     )
@@ -429,7 +443,48 @@ export class ButtonScene {
     this.contact.rotation.x = -Math.PI / 2
     this.contact.renderOrder = 1
     this.button.add(this.back)
-    this.scene.add(this.ground, this.contact, this.button)
+    this.scene.add(this.ground, this.contact, this.button, this.row)
+  }
+
+  /** Show `count` copies of the button side by side along X (1 = just the one). */
+  setRow(count: number): void {
+    const n = Math.max(1, Math.min(ROW_MAX, Math.round(count)))
+    if (n === this.rowCount) return
+    this.rowCount = n
+    if (!this.spec) return
+    this.applyLight() // the shadow frustum covers the whole row
+    this.syncRow()
+  }
+
+  /** Centre-to-centre distance between buttons in a row, mm. */
+  private rowPitch(): number {
+    return (this.spec?.diameterMM ?? 17) * (1 + ROW_GAP)
+  }
+
+  /** Half the row's length, axis to outermost axis, mm. */
+  private rowHalf(): number {
+    return ((this.rowCount - 1) / 2) * this.rowPitch()
+  }
+
+  private syncRow(): void {
+    this.row.clear() // clones share everything with the button: nothing to dispose
+    const pitch = this.rowPitch()
+    const x0 = -this.rowHalf()
+    // the real button takes the middle slot (left of centre on an even count)
+    const mid = Math.floor((this.rowCount - 1) / 2)
+    for (let k = 0; k < this.rowCount; k++) {
+      const x = x0 + k * pitch
+      if (k === mid) {
+        this.button.position.x = x
+        this.contact.position.x = x
+        continue
+      }
+      const b = shareClone(this.button)
+      b.position.x = x
+      const c = this.contact.clone()
+      c.position.x = x
+      this.row.add(b, c)
+    }
   }
 
   setSpec(spec: ButtonSpec): void {
@@ -450,6 +505,7 @@ export class ButtonScene {
     }
     this.applyLight()
     this.applyBackdrop()
+    this.syncRow()
   }
 
   private rebuildButton(): void {
@@ -653,10 +709,11 @@ export class ButtonScene {
     const d = 60
     this.key.position.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, -Math.cos(az) * Math.cos(el) * d)
     this.key.target.position.set(0, 0, 0)
-    const R = s.diameterMM / 2
+    // square in light space, so it covers a row along X from any light azimuth
+    const reach = (s.diameterMM / 2) * 2.2 + this.rowHalf()
     const cam = this.key.shadow.camera
-    cam.left = cam.bottom = -R * 2.2
-    cam.right = cam.top = R * 2.2
+    cam.left = cam.bottom = -reach
+    cam.right = cam.top = reach
     cam.near = 1
     cam.far = 140
     cam.updateProjectionMatrix()
@@ -706,7 +763,7 @@ export class ButtonScene {
       return
     }
     const { color, bump } = denimTextures(b)
-    const reps = 160 / TILE_MM
+    const reps = GROUND_MM / TILE_MM
     color.repeat.set(reps, reps)
     bump.repeat.set(reps, reps)
     m.color.setRGB(1, 1, 1)
@@ -718,11 +775,10 @@ export class ButtonScene {
     }
   }
 
-  /** Camera framing: the reference-photo three-quarter view, or straight down. */
+  /** Camera framing: the reference-photo three-quarter view, or straight down (a row: all of it). */
   setPose(pose: Pose, aspect: number): void {
-    const R = (this.spec?.diameterMM ?? 17) / 2
-    const fit = (R * FRAME) / Math.min(1, aspect)
-    const dist = fit / (2 * Math.tan((FOV * DEG) / 2))
+    this.camera.aspect = aspect
+    const dist = this.fitDistance()
     // studio: shot low like a supplier's product photo, so the shank shows
     // (a swivel shank is squat — shot lower still, as the supplier does, or the rim hides it)
     const swivel = this.spec ? STYLES[this.spec.style].back === 'swivel' : false
@@ -731,7 +787,6 @@ export class ButtonScene {
     const az = pose === 'photo' ? 20 * DEG : 0
     const studioLift = this.spec?.backdrop === 'studio' ? this.shankH : 0
     this.target.set(0, -(this.params?.capH ?? 1.15) * 0.25 - studioLift * 0.45, 0)
-    this.camera.aspect = aspect
     this.camera.position.set(
       this.target.x + dist * Math.sin(polar) * Math.sin(az),
       this.target.y + dist * Math.cos(polar),
@@ -742,15 +797,38 @@ export class ButtonScene {
     this.camera.updateProjectionMatrix()
   }
 
-  /** Fit distance at the current aspect — for orbit zoom limits. */
-  fitDistance(): number {
+  /**
+   * Camera distance that frames one button (`single`) or the whole row, at the
+   * current aspect — the pose framing and the orbit zoom limits.
+   */
+  fitDistance(single = false): number {
     const R = (this.spec?.diameterMM ?? 17) / 2
-    return (R * FRAME) / Math.min(1, this.camera.aspect) / (2 * Math.tan((FOV * DEG) / 2))
+    const t = 2 * Math.tan((FOV * DEG) / 2)
+    const one = (R * FRAME) / Math.min(1, this.camera.aspect) / t
+    if (single || this.rowCount === 1) return one
+    // the row's length across the frame, with a quarter of margin: the near end
+    // of a three-quarter view looms larger in perspective
+    const across = ((2 * this.rowHalf() + 2 * R) * 1.25) / this.camera.aspect / t
+    return Math.max(one, across)
   }
 
   render(): void {
     const b = this.spec?.backdrop
-    this.renderer.setClearColor(b === 'studio' ? 0xe6e4e0 : 0x000000, b === 'none' ? 0 : 1)
+    const clear = b === 'studio' ? 0xe6e4e0 : 0x000000
+    this.renderer.setClearColor(clear, b === 'none' ? 0 : 1)
+    // the far ground falls off into the backdrop like a lit studio table (and
+    // never shows the plane's edge or aliases into moiré when zoomed right out):
+    // fog starts well past where the camera looks at the ground, so the
+    // buttons and the ground around them are never touched
+    if (b === 'none') this.scene.fog = null
+    else {
+      const dir = this.camera.getWorldDirection(new THREE.Vector3())
+      const focus = dir.y < -0.05 ? this.camera.position.y / -dir.y : this.camera.position.length()
+      const fog = this.scene.fog instanceof THREE.Fog ? this.scene.fog : (this.scene.fog = new THREE.Fog(clear))
+      fog.color.setHex(clear)
+      fog.near = focus * 1.25
+      fog.far = focus * 2.2
+    }
     this.renderer.render(this.scene, this.camera)
   }
 
@@ -774,6 +852,21 @@ export class ButtonScene {
     this.brightEnv?.dispose()
     this.pmrem.dispose()
   }
+}
+
+/**
+ * Deep-clone an object tree but SHARE geometry and materials (three's clone
+ * already shares them), carrying over what clone() drops: a proxy's
+ * customDepthMaterial (the displaced shadow caster).
+ */
+function shareClone<T extends THREE.Object3D>(src: T): T {
+  const copy = src.clone(true) as T
+  const walk = (a: THREE.Object3D, b: THREE.Object3D) => {
+    b.customDepthMaterial = a.customDepthMaterial
+    a.children.forEach((child, i) => walk(child, b.children[i]!))
+  }
+  walk(src, copy)
+  return copy
 }
 
 /** The doc-level product fields a scene needs (light and backdrop come from the view). */

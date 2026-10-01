@@ -16,6 +16,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const doc = useEngraver((s) => s.doc)
   const lightDeg = useEngraver((s) => s.view.lightDeg)
   const backdrop = useEngraver((s) => s.view.backdrop)
+  const rowCount = useEngraver((s) => s.view.rowCount)
   const [svgOptions, setSvgOptions] = useState<SvgExportOptions>(DEFAULT_SVG_OPTIONS)
   const [pngPx, setPngPx] = useState('2048')
   const [pngMode, setPngMode] = useState<'3d' | 'flat'>('3d')
@@ -45,6 +46,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         mode: pngMode,
         lightDeg,
         backdrop,
+        rowCount,
         transparent: pngTransparent,
         fontsRevision: useEngraver.getState().fontsRevision,
         assetsRevision: useEngraver.getState().assetsRevision,

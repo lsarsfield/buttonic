@@ -15,6 +15,8 @@ export interface ViewState {
   /** Azimuth of the 3D key light (0° = 12 o'clock, clockwise). */
   lightDeg: number
   backdrop: Backdrop
+  /** How many copies of the button the 3D view lines up in a row (1 = just the one). */
+  rowCount: number
   showGuides: boolean
   /** Light artboard behind the button in flat mode (proofing on white). */
   artboardLight: boolean
@@ -85,6 +87,7 @@ export const useEngraver = create<EngraverState>()(
         mode: 'flat' as ViewMode,
         lightDeg: 315,
         backdrop: 'raw' as Backdrop,
+        rowCount: 1,
         showGuides: true,
         artboardLight: false,
         snapping: true,

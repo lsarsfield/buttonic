@@ -10,7 +10,7 @@ import { ButtonScene, lastPose, specOfDoc, type Backdrop } from './scene'
  */
 export async function renderButtonPng(
   doc: ButtonDoc,
-  opts: { px: number; lightDeg: number; backdrop: Backdrop; fontsRevision: number; assetsRevision: number },
+  opts: { px: number; lightDeg: number; backdrop: Backdrop; rowCount?: number; fontsRevision: number; assetsRevision: number },
 ): Promise<Blob> {
   const field = await computeHeightField(doc, opts.fontsRevision, opts.assetsRevision)
   const canvas = document.createElement('canvas')
@@ -22,6 +22,7 @@ export async function renderButtonPng(
   try {
     scene.setSpec({ ...specOfDoc(doc), lightDeg: opts.lightDeg, backdrop: opts.backdrop })
     scene.setHeightField(field)
+    scene.setRow(opts.rowCount ?? 1)
     scene.setPose(lastPose.pose, 1)
     if (lastPose.position && lastPose.target) {
       scene.camera.position.copy(lastPose.position)
