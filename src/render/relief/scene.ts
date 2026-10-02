@@ -195,13 +195,18 @@ function buildBodyGeometries(p: ReliefParams): { outer: THREE.BufferGeometry; in
  * (darkest at the rim, where the lip and cap wall hide most of the room;
  * milder toward the centre), and the lip throws the key light's shadow on it.
  */
-function buildTackHead(holeR: number, lipBottomY: number): THREE.BufferGeometry {
+export function buildTackHead(holeR: number, lipBottomY: number, floorY: number): THREE.BufferGeometry {
   const gap = Math.max(0.12, 0.05 * holeR) // the visible shadow ring
   const r = holeR - gap
-  const rim = lipBottomY - Math.max(0.25, 0.1 * holeR) // down in the well: the lip shades it
   const corner = Math.min(0.18, 0.06 * holeR)
   const dome = 0.05 * holeR
-  const pts: THREE.Vector2[] = [new THREE.Vector2(r, rim - 0.35)]
+  const sideH = 0.25
+  // down in the well so the lip shades it — but never through the cap: a deep
+  // concave dish brings the lip almost to the underside, and a head sunk past
+  // it went under the dark floor (only its crown showed: a small white dot in a
+  // black ring). Inside the opening's radius it can't cut the lip at any height.
+  const rim = Math.max(lipBottomY - Math.max(0.25, 0.1 * holeR), floorY + sideH + 0.03)
+  const pts: THREE.Vector2[] = [new THREE.Vector2(r, rim - sideH)]
   // rounded shoulder: a quarter circle from the side wall onto the top
   for (let i = 0; i <= 8; i++) {
     const a = (Math.PI / 2) * (i / 8)
@@ -216,13 +221,16 @@ function buildTackHead(holeR: number, lipBottomY: number): THREE.BufferGeometry 
   }
   const geo = new THREE.LatheGeometry(pts, 128)
   // ambient occlusion of a disc in a well: the share of the sky it sees falls
-  // from ~85% at the centre to under half at the rim (and the side is darker still)
+  // from ~85% at the centre to under half at the rim (and the side is darker
+  // still), and the whole head dims the deeper it sits below the face — at the
+  // bottom of a concave dish it's level with the lip, so the lip can't shade it
+  const well = 1 - 0.45 * Math.min(1, -rim / holeR)
   const pos = geo.attributes.position!
   const col = new Float32Array(pos.count * 3)
   for (let i = 0; i < pos.count; i++) {
     const u = Math.min(1, Math.hypot(pos.getX(i), pos.getZ(i)) / r)
     const side = pos.getY(i) < rim - corner * 0.5 ? 0.6 : 1
-    const ao = (0.85 - 0.42 * u ** 2.2) * side
+    const ao = (0.85 - 0.42 * u ** 2.2) * side * well
     col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = ao
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
@@ -617,11 +625,12 @@ export class ButtonScene {
       hmat.vertexColors = true // the well's occlusion (buildTackHead)
       hmat.envMapIntensity = 0.6 // down in the well: much of the studio is hidden
       this.extraMats.push(hmat)
-      const head = new THREE.Mesh(buildTackHead(p.centreR, lipBottom), hmat)
+      const floorY = -p.capH * 0.97
+      const head = new THREE.Mesh(buildTackHead(p.centreR, lipBottom, floorY), hmat)
       head.castShadow = head.receiveShadow = true
       const floor = new THREE.Mesh(new THREE.CircleGeometry(p.centreR, 64), dark())
       floor.rotation.x = -Math.PI / 2
-      floor.position.y = -p.capH * 0.97
+      floor.position.y = floorY
       floor.castShadow = true
       this.button.add(head, floor)
     } else if (p.centre === 'hole') {

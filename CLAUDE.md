@@ -301,7 +301,7 @@ param, not an error.)
 
 ## Testing & verification culture
 
-299 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+300 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,
