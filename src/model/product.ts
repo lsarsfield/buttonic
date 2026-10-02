@@ -1,4 +1,4 @@
-import { FINISH_IDS, type Finish, type LayerRelief, type LogoDisplay, type Material, type Product, type ProductStyle } from './types'
+import { FINISH_IDS, type Finish, type LayerRelief, type LogoDisplay, type Material, type Product, type ProductStyle, type Tack } from './types'
 
 /**
  * The trade's product options for jeans hardware — the vocabulary jeans-button
@@ -193,6 +193,7 @@ export function coerceProductOptions(raw: {
   logoDisplay: unknown
   distressed: unknown
   postFinish: unknown
+  tack?: unknown
 }): {
   product: Product
   style: ProductStyle
@@ -200,6 +201,7 @@ export function coerceProductOptions(raw: {
   logoDisplay: LogoDisplay
   distressed: boolean
   postFinish: Finish
+  tack: Tack
 } {
   const product: Product = raw.product === 'rivet' ? 'rivet' : 'button'
   const style =
@@ -212,7 +214,8 @@ export function coerceProductOptions(raw: {
   const postFinish: Finish = (FINISH_IDS as readonly string[]).includes(raw.postFinish as string)
     ? (raw.postFinish as Finish)
     : 'nickel'
-  return { product, style, material, logoDisplay, distressed: raw.distressed === true, postFinish }
+  const tack: Tack = raw.tack === 'hollow' ? 'hollow' : 'solid'
+  return { product, style, material, logoDisplay, distressed: raw.distressed === true, postFinish, tack }
 }
 
 /** Per-layer relief choices: follow the button, or this layer's own. */

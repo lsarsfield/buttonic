@@ -25,6 +25,7 @@ function docWithEverything(): ButtonDoc {
     logoDisplay: 'embossed',
     distressed: false,
     postFinish: 'nickel',
+    tack: 'solid',
     layers: [
       makeCenterLayer(),
       makeRingTextLayer(),
@@ -339,5 +340,19 @@ describe('schema v13: the post takes any finish', () => {
     const doc: ButtonDoc = { ...makeBlankDoc(), style: 'open-top', holeDiameterMM: 7, postFinish: 'antique-brass' }
     const r = parseDoc(stringifyDoc(doc))
     expect(r.ok && r.doc.postFinish).toBe('antique-brass')
+  })
+})
+
+describe('schema v16: the tack in an open top', () => {
+  it('older documents get a solid tack; hollow round-trips; nonsense degrades to solid', () => {
+    const v15 = { ...makeBlankDoc(), version: 15, style: 'open-top', holeDiameterMM: 6 } as Record<string, unknown>
+    delete v15.tack
+    const r = parseDoc(JSON.stringify(v15))
+    expect(r.ok && r.doc.tack).toBe('solid')
+    const doc: ButtonDoc = { ...makeBlankDoc(), style: 'open-top', holeDiameterMM: 6, tack: 'hollow' }
+    const rt = parseDoc(stringifyDoc(doc))
+    expect(rt.ok && rt.doc).toEqual(doc)
+    const odd = parseDoc(JSON.stringify({ ...JSON.parse(stringifyDoc(doc)), tack: 'rubber' }))
+    expect(odd.ok && odd.doc.tack).toBe('solid')
   })
 })

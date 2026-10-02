@@ -118,6 +118,9 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
         : layer,
     ),
   }),
+  // v16: open tops say what tack fills the opening — a solid head (the 3D view
+  // used to draw an over-deep hollow tube; solid is what most of them are)
+  16: (doc) => ({ tack: 'solid', ...doc }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

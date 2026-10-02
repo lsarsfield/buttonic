@@ -29,7 +29,7 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **15**), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **16**), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
   `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
   v8 centre `motifId` (built-in motif as a third centre source, inert unless
@@ -218,7 +218,12 @@ param, not an error.)
     reach halved and combed every wall — `relief walls` test guards it); the shadow
     pass uses a low-res proxy face mesh. `postFinish` (v13, was v12 `postMetal`):
     the open-top post takes ANY cap finish (silver→dull nickel, copper→the new
-    'copper' Polished copper), rendered darkened for sitting down a pit.
+    'copper' Polished copper). TACK (v16, `tack` solid|hollow, migrates to solid; on
+    the spec sheet): what fills the opening. Solid (default — most open tops, and
+    Liam's sun-rays mockup) = `buildTackHead`, a gently domed head just under the
+    lip with a narrow dark shadow ring, lit as metal. Hollow = the original wide
+    copper-tube eyelet tuned to the Stevenson photo (deep, dark bore) — Liam asked
+    "what is the centre meant to look like?" when it was the only option.
     MIXED RELIEF (v14): every layer has `relief` 'inherit' | embossed | debossed |
     lasered (`layerRelief`, `reliefGroups` in product.ts). The 3D pipeline
     rasterizes one mask per class via `exportSvg({onlyLayers})` (each layer still
@@ -295,7 +300,7 @@ param, not an error.)
 
 ## Testing & verification culture
 
-298 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+299 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,

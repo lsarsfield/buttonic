@@ -37,7 +37,10 @@ export function specSheet(doc: ButtonDoc): string {
     ['Size', `${mm(doc.diameterMM)} diameter${size && doc.product === 'button' ? ` (${size.label.split(' ')[0]!.toLowerCase()})` : ''}`],
   ]
   if (centre !== 'none') lines.push([CENTRE_LABELS[centre], `${mm(doc.holeDiameterMM)} diameter`])
-  if (centre === 'hole') lines.push(['Post', FINISH_LABELS[doc.postFinish]])
+  if (centre === 'hole') {
+    lines.push(['Post', FINISH_LABELS[doc.postFinish]])
+    lines.push(['Tack', doc.tack === 'hollow' ? 'Hollow (tubular), end curled over' : 'Solid head, filling the opening'])
+  }
   lines.push(
     ['Material', MATERIALS[doc.material].label === 'Die-cast' ? 'Die-cast alloy' : 'Brass'],
     ['Logo display', logoLine(doc)],

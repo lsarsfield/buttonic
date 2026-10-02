@@ -106,6 +106,7 @@ function productOptions(value: Record<string, unknown>) {
     logoDisplay: value.logoDisplay,
     distressed: value.distressed,
     postFinish: value.postFinish,
+    tack: value.tack,
   })
 }
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { STYLES } from '../../model/product'
-import type { Finish, LogoDisplay, Material, Product, ProductStyle } from '../../model/types'
+import type { Finish, LogoDisplay, Material, Product, ProductStyle, Tack } from '../../model/types'
 import { makeDenim, TILE_MM, type DenimKind } from './denim'
 import { finishOf, METAL_FINISHES, type MetalFinish } from './finishes'
 import {
@@ -47,6 +47,7 @@ export interface ButtonSpec {
   logoDisplay: LogoDisplay
   distressed: boolean
   postFinish: Finish
+  tack: Tack
   finish: Finish
   lightDeg: number
   backdrop: Backdrop
@@ -184,7 +185,36 @@ function buildBodyGeometries(p: ReliefParams): { outer: THREE.BufferGeometry; in
 }
 
 /**
- * The tack post seen through an open top: a wide eyelet — a deep tube whose
+ * A SOLID tack seen through an open top (most of them): the nail head nearly
+ * fills the opening, its rim just under the lip's lowest point and its top
+ * gently domed, so it reads as a metal disc a little below the face with a
+ * narrow dark ring where it meets the lip. Profile runs bottom → top (outward
+ * normals). It sits inside the opening's radius, so it can never cut the lip.
+ */
+function buildTackHead(holeR: number, lipBottomY: number): THREE.BufferGeometry {
+  const gap = Math.max(0.12, 0.05 * holeR) // the visible shadow ring
+  const r = holeR - gap
+  const rim = lipBottomY - 0.08
+  const corner = Math.min(0.18, 0.06 * holeR)
+  const dome = 0.05 * holeR
+  const pts: THREE.Vector2[] = [new THREE.Vector2(r, rim - 0.35)]
+  // rounded shoulder: a quarter circle from the side wall onto the top
+  for (let i = 0; i <= 8; i++) {
+    const a = (Math.PI / 2) * (i / 8)
+    pts.push(new THREE.Vector2(r - corner + corner * Math.cos(a), rim - corner + corner * Math.sin(a)))
+  }
+  // the head's gentle dome, leaving the shoulder level
+  const top = r - corner
+  for (let i = 1; i <= 24; i++) {
+    const rr = top * (1 - i / 24)
+    const u = rr / top
+    pts.push(new THREE.Vector2(Math.max(rr, 1e-4), rim + dome * (1 - u * u) ** 1.5))
+  }
+  return new THREE.LatheGeometry(pts, 128)
+}
+
+/**
+ * A HOLLOW tack seen through an open top: a wide eyelet — a deep tube whose
  * rolled mouth nearly fills the hole (the Stevenson reference reads as the
  * inside of a copper tube right up to the lip) — over a dished skirt, with a
  * dark bore. Seated BELOW the lip's lowest point, so a deep concave funnel is
@@ -491,7 +521,7 @@ export class ButtonScene {
     const prev = this.spec
     this.spec = spec
     this.params = reliefParamsOf(spec)
-    const geoKey = [spec.diameterMM, spec.holeDiameterMM, spec.product, spec.style, spec.material, spec.postFinish].join('|')
+    const geoKey = [spec.diameterMM, spec.holeDiameterMM, spec.product, spec.style, spec.material, spec.postFinish, spec.tack].join('|')
     if (geoKey !== this.geoKey) {
       this.geoKey = geoKey
       this.rebuildButton()
@@ -559,7 +589,25 @@ export class ButtonScene {
       this.extraMats.push(m)
       return m
     }
-    if (p.centre === 'hole') {
+    if (p.centre === 'hole' && spec.tack !== 'hollow') {
+      // a solid tack head just under the lip: lit as metal (it sits near the
+      // face, not down a pit) over a dark floor that makes the gap a shadow ring
+      const lipBottom = capGeometry(p).lip?.cy ?? baseProfile(p.centreR, p).y
+      const pf = finishOf(spec.postFinish)
+      const ox = pf.patina.field * pf.patina.darken
+      const pk = 0.92 * (1 - 0.45 * ox)
+      const hmat = metalMaterial({ ...pf, color: [pf.color[0] * pk, pf.color[1] * pk, pf.color[2] * pk], roughness: Math.min(1, pf.roughness + 0.05) })
+      hmat.side = THREE.DoubleSide
+      hmat.envMapIntensity = 0.8 // inside the lip: a little of the studio is hidden
+      this.extraMats.push(hmat)
+      const head = new THREE.Mesh(buildTackHead(p.centreR, lipBottom), hmat)
+      head.castShadow = head.receiveShadow = true
+      const floor = new THREE.Mesh(new THREE.CircleGeometry(p.centreR, 64), dark())
+      floor.rotation.x = -Math.PI / 2
+      floor.position.y = -p.capH * 0.97
+      floor.castShadow = true
+      this.button.add(head, floor)
+    } else if (p.centre === 'hole') {
       const lipBottom = capGeometry(p).lip?.cy ?? baseProfile(p.centreR, p).y
       const { copper, bore } = buildPostGeometries(p.centreR, p.capH, lipBottom)
       // the post takes any cap finish, darkened for sitting down a pit (and
@@ -879,6 +927,7 @@ export function specOfDoc(d: {
   logoDisplay: LogoDisplay
   distressed: boolean
   postFinish: Finish
+  tack: Tack
   finish: Finish
 }): Omit<ButtonSpec, 'lightDeg' | 'backdrop'> {
   return {
@@ -890,6 +939,7 @@ export function specOfDoc(d: {
     logoDisplay: d.logoDisplay,
     distressed: d.distressed,
     postFinish: d.postFinish,
+    tack: d.tack,
     finish: d.finish,
   }
 }

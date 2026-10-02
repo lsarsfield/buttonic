@@ -96,6 +96,17 @@ export function DocPanel() {
             onChange={(postFinish) => updateDocMeta({ postFinish })}
           />
         )}
+        {style.centre === 'hole' && (
+          <SegmentedControl
+            label="Tack"
+            value={doc.tack}
+            options={[
+              { value: 'solid', label: 'Solid', title: 'A solid tack head fills the opening (most open tops)' },
+              { value: 'hollow', label: 'Hollow', title: 'A hollow tubular tack: its curled end, a small bore in the middle' },
+            ]}
+            onChange={(tack) => updateDocMeta({ tack })}
+          />
+        )}
         <div className="readout">{style.blurb}</div>
       </div>
       <div className="field-group">

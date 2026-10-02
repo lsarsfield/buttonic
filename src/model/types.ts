@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 15
+export const DOC_VERSION = 16
 
 /**
  * How a content layer combines with the layers BELOW it (paint order):
@@ -96,6 +96,12 @@ export type ProductStyle = ButtonStyle | RivetStyle
 export type Material = 'brass' | 'die-cast'
 /** How the die art appears: raised, sunk into the face, or laser-marked flat. */
 export type LogoDisplay = 'embossed' | 'debossed' | 'lasered'
+/**
+ * Open tops: the tack that fills the opening — a solid nail head (most
+ * common: a metal disc just under the lip) or a hollow tubular tack (its end
+ * curled into a small ring around a bore, e.g. classic workwear).
+ */
+export type Tack = 'solid' | 'hollow'
 /** A layer's own relief: follow the button's logo display, or its own (mixed-relief dies). */
 export type LayerRelief = 'inherit' | LogoDisplay
 
@@ -117,6 +123,8 @@ export interface ButtonDoc {
   distressed: boolean
   /** Open tops: the finish of the tack post seen through the hole (any cap finish). */
   postFinish: Finish
+  /** Open tops: what the tack in the opening is (solid head or hollow tube). */
+  tack: Tack
   /** Diameter of the style's centre feature — open-top hole, nipple, cup or pin hole (0 = none). */
   holeDiameterMM: number
   layers: Layer[]
@@ -521,6 +529,7 @@ export function makeBlankDoc(): ButtonDoc {
     logoDisplay: 'embossed',
     distressed: false,
     postFinish: 'nickel',
+    tack: 'solid',
     holeDiameterMM: 0,
     layers: [makeRingLayer({ name: 'Rim', radiusMM: 8.2, strokeMM: 0.3 })],
     assets: {},

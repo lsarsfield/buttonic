@@ -52,6 +52,7 @@ export interface EngraverState {
         | 'logoDisplay'
         | 'distressed'
         | 'postFinish'
+        | 'tack'
       >
     >,
   ) => void
