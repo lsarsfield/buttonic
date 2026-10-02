@@ -219,12 +219,18 @@ param, not an error.)
     pass uses a low-res proxy face mesh. `postFinish` (v13, was v12 `postMetal`):
     the open-top post takes ANY cap finish (silver→dull nickel, copper→the new
     'copper' Polished copper). TACK (v16, `tack` solid|hollow, migrates to solid; on
-    the spec sheet): what fills the opening. Solid (default — most open tops, and
-    Liam's sun-rays mockup) = `buildTackHead`, a gently domed head seated a little
-    down in the lip's well (the lip shadows it — Liam: "should probably be shadowed")
-    with a narrow dark ring; vertex-colour occlusion darkens it toward the rim. Hollow = the original wide
-    copper-tube eyelet tuned to the Stevenson photo (deep, dark bore) — Liam asked
-    "what is the centre meant to look like?" when it was the only option.
+    the spec sheet; UI "Solid head | Tack tip"), matched to REAL PHOTOS (Heddels donut
+    guide + Liam's Stevenson close-up; `designs/open-top-matched.png`): Solid =
+    `buildTackHead`, a POLISHED domed head (mirrors the room: darker than the face,
+    one crisp highlight — satin read as a matte disc) seated in the lip's well,
+    vertex-colour AO, clamped inside the cap (a concave dish brings the lip nearly to
+    the underside — sunk past it, the head hid under the floor disc: a white dot in a
+    black ring). Tack tip ('hollow') = `buildWellGeometries`: a satin sleeve lined in
+    the post finish, lit — never a black void — running ~0.7 hole-radii BELOW the cap
+    (the post goes down through the fabric), the steel tack end curled into a ring on
+    its floor. The well's floor is under the ground plane: a stencil GROUND MASK disc
+    at the cap underside (renderers are created with `stencil: true`) makes the
+    ground and contact shadow skip the well's pixels.
     MIXED RELIEF (v14): every layer has `relief` 'inherit' | embossed | debossed |
     lasered (`layerRelief`, `reliefGroups` in product.ts). The 3D pipeline
     rasterizes one mask per class via `exportSvg({onlyLayers})` (each layer still
@@ -301,7 +307,7 @@ param, not an error.)
 
 ## Testing & verification culture
 
-300 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+301 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,

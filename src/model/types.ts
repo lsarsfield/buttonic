@@ -97,9 +97,9 @@ export type Material = 'brass' | 'die-cast'
 /** How the die art appears: raised, sunk into the face, or laser-marked flat. */
 export type LogoDisplay = 'embossed' | 'debossed' | 'lasered'
 /**
- * Open tops: the tack that fills the opening — a solid nail head (most
- * common: a metal disc just under the lip) or a hollow tubular tack (its end
- * curled into a small ring around a bore, e.g. classic workwear).
+ * Open tops: what you see through the opening — a solid polished tack head
+ * filling it (most modern donuts), or ('hollow') an open well lined in the post
+ * finish with the tack's curled tip at the bottom (Stevenson, vintage donuts).
  */
 export type Tack = 'solid' | 'hollow'
 /** A layer's own relief: follow the button's logo display, or its own (mixed-relief dies). */

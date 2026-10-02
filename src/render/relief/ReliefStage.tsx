@@ -41,7 +41,8 @@ export default function ReliefStage() {
     if (!host) return
     let renderer: THREE.WebGLRenderer
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
+      // stencil: an open-top well masks the ground it passes through (scene.ts)
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true, stencil: true })
     } catch (e) {
       setFailed(`3D view unavailable: ${e instanceof Error ? e.message : String(e)}`)
       return

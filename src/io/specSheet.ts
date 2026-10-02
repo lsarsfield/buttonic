@@ -39,7 +39,7 @@ export function specSheet(doc: ButtonDoc): string {
   if (centre !== 'none') lines.push([CENTRE_LABELS[centre], `${mm(doc.holeDiameterMM)} diameter`])
   if (centre === 'hole') {
     lines.push(['Post', FINISH_LABELS[doc.postFinish]])
-    lines.push(['Tack', doc.tack === 'hollow' ? 'Hollow (tubular), end curled over' : 'Solid head, filling the opening'])
+    lines.push(['Tack', doc.tack === 'hollow' ? 'Open well, tack tip curled over at the bottom' : 'Solid polished head, filling the opening'])
   }
   lines.push(
     ['Material', MATERIALS[doc.material].label === 'Die-cast' ? 'Die-cast alloy' : 'Brass'],

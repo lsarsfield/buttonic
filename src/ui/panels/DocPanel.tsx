@@ -101,8 +101,8 @@ export function DocPanel() {
             label="Tack"
             value={doc.tack}
             options={[
-              { value: 'solid', label: 'Solid', title: 'A solid tack head fills the opening (most open tops)' },
-              { value: 'hollow', label: 'Hollow', title: 'A hollow tubular tack: its curled end, a small bore in the middle' },
+              { value: 'solid', label: 'Solid head', title: 'A polished tack head fills the opening (most modern open tops)' },
+              { value: 'hollow', label: 'Tack tip', title: 'An open well lined in the post finish, the tack’s curled tip at the bottom (Stevenson, vintage donuts)' },
             ]}
             onChange={(tack) => updateDocMeta({ tack })}
           />

@@ -15,7 +15,7 @@ export async function renderButtonPng(
   const field = await computeHeightField(doc, opts.fontsRevision, opts.assetsRevision)
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = opts.px
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true })
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true, stencil: true })
   renderer.setPixelRatio(1)
   renderer.setSize(opts.px, opts.px, false)
   const scene = new ButtonScene(renderer)

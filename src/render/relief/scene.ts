@@ -237,38 +237,96 @@ export function buildTackHead(holeR: number, lipBottomY: number, floorY: number)
   return geo
 }
 
+/** Bake an ambient-occlusion value per vertex into a colour attribute (multiplies the material colour). */
+function bakeAO(geo: THREE.BufferGeometry, ao: (x: number, y: number, z: number) => number): THREE.BufferGeometry {
+  const pos = geo.attributes.position!
+  const col = new Float32Array(pos.count * 3)
+  for (let i = 0; i < pos.count; i++) col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = ao(pos.getX(i), pos.getY(i), pos.getZ(i))
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  return geo
+}
+
 /**
- * A HOLLOW tack seen through an open top: a wide eyelet — a deep tube whose
- * rolled mouth nearly fills the hole (the Stevenson reference reads as the
- * inside of a copper tube right up to the lip) — over a dished skirt, with a
- * dark bore. Seated BELOW the lip's lowest point, so a deep concave funnel is
- * never capped by a floating washer.
+ * The open well with the tack's TIP at the bottom (tack 'hollow' — matched to
+ * Liam's Stevenson photo, and the vintage USMC / two-prong donuts): through
+ * the lip you look down a sleeve lined in the post finish (copper on the
+ * Stevenson), lit bright near the top and falling darker toward the bottom —
+ * never a black void — and on the floor the tack's end, curled over into a
+ * small steel ring around its own bore. Every part sits inside the opening's
+ * radius and above the cap underside (never through the ground).
  */
-function buildPostGeometries(
+export function buildWellGeometries(
   holeR: number,
-  capH: number,
   lipBottomY: number,
-): { copper: THREE.BufferGeometry; bore: THREE.BufferGeometry } {
+  floorY: number,
+): {
+  sleeve: THREE.BufferGeometry
+  floor: THREE.BufferGeometry
+  tip: THREE.BufferGeometry
+  tipBore: THREE.BufferGeometry
+  /** The well's radius (for the ground mask). */
+  radius: number
+} {
   const h = holeR
-  const lipR = 0.78 * h
-  const tube = 0.08 * h
-  const top = lipBottomY - 0.12
-  const skirt = Math.max(top - 0.35, -capH + 0.03)
-  const pts: THREE.Vector2[] = [
-    new THREE.Vector2(h * 0.995, skirt),
-    new THREE.Vector2(lipR + tube * 1.6, skirt + (top - tube - skirt) * 0.6),
-  ]
-  // rolled mouth: a half torus from the outside over the top into the bore
-  for (let i = 0; i <= 16; i++) {
-    const a = Math.PI * (i / 16) // 0 = outer side, π = inner side
-    pts.push(new THREE.Vector2(lipR + tube * Math.cos(a), top - tube + tube * Math.sin(a)))
+  const rs = 0.97 * h // the sleeve, just inside the lip's vertical
+  const t = 0.05 * h // its wall: the top edge rolls inward by this much
+  const top = lipBottomY - 0.02
+  const pts: THREE.Vector2[] = [new THREE.Vector2(rs, floorY)]
+  pts.push(new THREE.Vector2(rs, top - t))
+  for (let i = 1; i <= 10; i++) {
+    const a = Math.PI * (i / 10) // over the top edge, from the outside to the inside
+    pts.push(new THREE.Vector2(rs - t + t * Math.cos(a), top - t + t * Math.sin(a)))
   }
-  const floor = -capH * 0.97 // closed above the cap underside — never through the ground
-  const bore = new THREE.LatheGeometry(
-    [new THREE.Vector2(lipR - tube, top - tube), new THREE.Vector2(lipR - tube * 1.05, floor), new THREE.Vector2(0, floor)],
-    96,
-  )
-  return { copper: new THREE.LatheGeometry(pts, 128), bore }
+  const depth = Math.max(1e-3, top - floorY)
+  // a deep narrow well sees less of the room the further down you look
+  // copper inter-reflects: the wall glows warm well down before it falls off
+  const sleeve = bakeAO(new THREE.LatheGeometry(pts, 128), (_x, y) => 1 - 0.6 * Math.min(1, (top - y) / depth) ** 1.3)
+  const floor = bakeAO(new THREE.CircleGeometry(rs, 96), (x, y) => 0.34 - 0.12 * Math.min(1, Math.hypot(x, y) / rs) ** 2)
+  floor.rotateX(-Math.PI / 2)
+  floor.translate(0, floorY + 0.005, 0)
+  // the tack's end, curled over into a ring (a tube rolled back on itself)
+  const ringR = 0.24 * h
+  const tube = 0.07 * h
+  const tip = bakeAO(new THREE.TorusGeometry(ringR, tube, 20, 96), (_x, _y, z) => 0.62 + 0.25 * Math.max(0, z / tube)) // lit on its crown
+  tip.rotateX(-Math.PI / 2)
+  tip.translate(0, floorY + tube + 0.01, 0)
+  const tipBore = new THREE.CircleGeometry(ringR - tube * 0.6, 48)
+  tipBore.rotateX(-Math.PI / 2)
+  tipBore.translate(0, floorY + 0.012, 0)
+  return { sleeve, floor, tip, tipBore, radius: rs }
+}
+
+/**
+ * The real well is deep — the post carries on down through the fabric (the
+ * Stevenson photo shows a copper wall about two-thirds of the hole's width
+ * tall) — so its floor lies BELOW the ground plane. A ground-mask disc at the
+ * cap's underside marks the well's pixels in the stencil buffer, and the
+ * ground and contact shadow skip them, so you see down the well instead of the
+ * denim it passes through. (Drawn first; any ray that reaches the disc came
+ * through the opening or hits the cap first, so nothing else is uncovered.)
+ */
+export const WELL_DEPTH_PER_HOLE_R = 0.7
+const GROUND_MASK_REF = 1
+
+function groundMaskMaterial(): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({
+    colorWrite: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    stencilWrite: true,
+    stencilRef: GROUND_MASK_REF,
+    stencilFunc: THREE.AlwaysStencilFunc,
+    stencilZPass: THREE.ReplaceStencilOp,
+  })
+}
+
+/** Ground / contact shadow: don't draw where a well's mask is. */
+function skipGroundMask(m: THREE.Material): void {
+  m.stencilWrite = true
+  m.stencilRef = GROUND_MASK_REF
+  m.stencilFunc = THREE.NotEqualStencilFunc
+  m.stencilWriteMask = 0x00
+  m.stencilZPass = THREE.KeepStencilOp
 }
 
 /**
@@ -490,12 +548,14 @@ export class ButtonScene {
     )
     this.ground.rotation.x = -Math.PI / 2
     this.ground.receiveShadow = true
+    skipGroundMask(this.ground.material)
     this.contact = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ map: contactShadowTexture(), transparent: true, depthWrite: false }),
     )
     this.contact.rotation.x = -Math.PI / 2
     this.contact.renderOrder = 1
+    skipGroundMask(this.contact.material)
     this.button.add(this.back)
     this.scene.add(this.ground, this.contact, this.button, this.row)
   }
@@ -620,10 +680,13 @@ export class ButtonScene {
       const pf = finishOf(spec.postFinish)
       const ox = pf.patina.field * pf.patina.darken
       const pk = 0.92 * (1 - 0.45 * ox)
-      const hmat = metalMaterial({ ...pf, color: [pf.color[0] * pk, pf.color[1] * pk, pf.color[2] * pk], roughness: Math.min(1, pf.roughness + 0.05) })
+      // a plated, POLISHED dome whatever the cap's texture (the Naked & Famous
+      // photo): it mirrors the dark room around it, so it reads darker than the
+      // face with one crisp highlight — satin made it a flat matte disc
+      const hmat = metalMaterial({ ...pf, color: [pf.color[0] * pk, pf.color[1] * pk, pf.color[2] * pk], roughness: Math.min(pf.roughness, 0.12) })
       hmat.side = THREE.DoubleSide
       hmat.vertexColors = true // the well's occlusion (buildTackHead)
-      hmat.envMapIntensity = 0.6 // down in the well: much of the studio is hidden
+      hmat.envMapIntensity = 0.85
       this.extraMats.push(hmat)
       const floorY = -p.capH * 0.97
       const head = new THREE.Mesh(buildTackHead(p.centreR, lipBottom, floorY), hmat)
@@ -634,22 +697,35 @@ export class ButtonScene {
       floor.castShadow = true
       this.button.add(head, floor)
     } else if (p.centre === 'hole') {
+      // an open well lined in the post finish, the tack's curled tip on its floor
       const lipBottom = capGeometry(p).lip?.cy ?? baseProfile(p.centreR, p).y
-      const { copper, bore } = buildPostGeometries(p.centreR, p.capH, lipBottom)
-      // the post takes any cap finish, darkened for sitting down a pit (and
-      // oxidised like a side wall on antiqued finishes)
-      const pf = finishOf(this.spec!.postFinish)
+      const floorY = -(p.capH + WELL_DEPTH_PER_HOLE_R * p.centreR)
+      const { sleeve, floor, tip, tipBore, radius } = buildWellGeometries(p.centreR, lipBottom, floorY)
+      const pf = finishOf(spec.postFinish)
       const ox = pf.patina.field * pf.patina.darken
-      const pk = 0.75 * (1 - 0.6 * ox)
-      const cmat = metalMaterial({ ...pf, color: [pf.color[0] * pk, pf.color[1] * pk, pf.color[2] * pk], roughness: Math.min(1, pf.roughness + 0.1) })
-      cmat.side = THREE.DoubleSide
-      cmat.envMapIntensity = 0.3 // down a pit: it sees mostly the inside of the cap
-      this.extraMats.push(cmat)
-      const cm = new THREE.Mesh(copper, cmat)
-      cm.castShadow = cm.receiveShadow = true
-      const bm = new THREE.Mesh(bore, dark())
-      bm.castShadow = true
-      this.button.add(cm, bm)
+      const pk = 1 - 0.5 * ox // oxidised like a side wall on antiqued finishes
+      const wmat = metalMaterial({ ...pf, color: [pf.color[0] * pk, pf.color[1] * pk, pf.color[2] * pk], roughness: Math.max(0.5, pf.roughness) })
+      // satin, as the inside of a drawn post is (the Stevenson copper glows warm):
+      // polished, it only mirrored the dark room and read as a brown hole
+      wmat.side = THREE.DoubleSide
+      wmat.vertexColors = true // the well's occlusion (buildWellGeometries)
+      wmat.envMapIntensity = 1
+      // the tack itself is steel, whatever the cap and post are plated
+      const tmat = metalMaterial({ ...METAL_FINISHES.nickel, roughness: 0.3 })
+      tmat.vertexColors = true
+      this.extraMats.push(wmat, tmat)
+      const sm = new THREE.Mesh(sleeve, wmat)
+      const fm = new THREE.Mesh(floor, wmat)
+      const tm = new THREE.Mesh(tip, tmat)
+      const bm = new THREE.Mesh(tipBore, dark())
+      for (const m of [sm, fm, tm]) m.castShadow = m.receiveShadow = true
+      const maskMat = groundMaskMaterial()
+      this.extraMats.push(maskMat)
+      const mask = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.999, 96), maskMat)
+      mask.rotation.x = -Math.PI / 2
+      mask.position.y = -p.capH + 0.001 // just above the ground (and the studio sweep sits lower still)
+      mask.renderOrder = -10 // stencil first
+      this.button.add(sm, fm, tm, bm, mask)
     } else if (p.centre === 'pin') {
       // the pin hole's floor: dark, just above the cap underside
       const floor = new THREE.Mesh(new THREE.CircleGeometry(p.centreR, 48), dark())
