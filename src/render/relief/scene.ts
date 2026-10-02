@@ -186,15 +186,19 @@ function buildBodyGeometries(p: ReliefParams): { outer: THREE.BufferGeometry; in
 
 /**
  * A SOLID tack seen through an open top (most of them): the nail head nearly
- * fills the opening, its rim just under the lip's lowest point and its top
- * gently domed, so it reads as a metal disc a little below the face with a
- * narrow dark ring where it meets the lip. Profile runs bottom → top (outward
- * normals). It sits inside the opening's radius, so it can never cut the lip.
+ * fills the opening, seated a little down inside the lip, its top gently
+ * domed — a metal disc in a shallow well, with a narrow dark ring where it
+ * meets the lip. Profile runs bottom → top (outward normals). It sits inside
+ * the opening's radius, so it can never cut the lip.
+ *
+ * In a well it sees less of the studio: vertex colours carry that occlusion
+ * (darkest at the rim, where the lip and cap wall hide most of the room;
+ * milder toward the centre), and the lip throws the key light's shadow on it.
  */
 function buildTackHead(holeR: number, lipBottomY: number): THREE.BufferGeometry {
   const gap = Math.max(0.12, 0.05 * holeR) // the visible shadow ring
   const r = holeR - gap
-  const rim = lipBottomY - 0.08
+  const rim = lipBottomY - Math.max(0.25, 0.1 * holeR) // down in the well: the lip shades it
   const corner = Math.min(0.18, 0.06 * holeR)
   const dome = 0.05 * holeR
   const pts: THREE.Vector2[] = [new THREE.Vector2(r, rim - 0.35)]
@@ -210,7 +214,19 @@ function buildTackHead(holeR: number, lipBottomY: number): THREE.BufferGeometry 
     const u = rr / top
     pts.push(new THREE.Vector2(Math.max(rr, 1e-4), rim + dome * (1 - u * u) ** 1.5))
   }
-  return new THREE.LatheGeometry(pts, 128)
+  const geo = new THREE.LatheGeometry(pts, 128)
+  // ambient occlusion of a disc in a well: the share of the sky it sees falls
+  // from ~85% at the centre to under half at the rim (and the side is darker still)
+  const pos = geo.attributes.position!
+  const col = new Float32Array(pos.count * 3)
+  for (let i = 0; i < pos.count; i++) {
+    const u = Math.min(1, Math.hypot(pos.getX(i), pos.getZ(i)) / r)
+    const side = pos.getY(i) < rim - corner * 0.5 ? 0.6 : 1
+    const ao = (0.85 - 0.42 * u ** 2.2) * side
+    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = ao
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  return geo
 }
 
 /**
@@ -598,7 +614,8 @@ export class ButtonScene {
       const pk = 0.92 * (1 - 0.45 * ox)
       const hmat = metalMaterial({ ...pf, color: [pf.color[0] * pk, pf.color[1] * pk, pf.color[2] * pk], roughness: Math.min(1, pf.roughness + 0.05) })
       hmat.side = THREE.DoubleSide
-      hmat.envMapIntensity = 0.8 // inside the lip: a little of the studio is hidden
+      hmat.vertexColors = true // the well's occlusion (buildTackHead)
+      hmat.envMapIntensity = 0.6 // down in the well: much of the studio is hidden
       this.extraMats.push(hmat)
       const head = new THREE.Mesh(buildTackHead(p.centreR, lipBottom), hmat)
       head.castShadow = head.receiveShadow = true

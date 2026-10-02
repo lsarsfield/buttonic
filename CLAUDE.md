@@ -220,8 +220,9 @@ param, not an error.)
     the open-top post takes ANY cap finish (silver→dull nickel, copper→the new
     'copper' Polished copper). TACK (v16, `tack` solid|hollow, migrates to solid; on
     the spec sheet): what fills the opening. Solid (default — most open tops, and
-    Liam's sun-rays mockup) = `buildTackHead`, a gently domed head just under the
-    lip with a narrow dark shadow ring, lit as metal. Hollow = the original wide
+    Liam's sun-rays mockup) = `buildTackHead`, a gently domed head seated a little
+    down in the lip's well (the lip shadows it — Liam: "should probably be shadowed")
+    with a narrow dark ring; vertex-colour occlusion darkens it toward the rim. Hollow = the original wide
     copper-tube eyelet tuned to the Stevenson photo (deep, dark bore) — Liam asked
     "what is the centre meant to look like?" when it was the only option.
     MIXED RELIEF (v14): every layer has `relief` 'inherit' | embossed | debossed |
