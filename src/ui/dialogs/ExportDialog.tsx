@@ -4,6 +4,7 @@ import { exportPng } from '../../io/exportPng'
 import { downloadBlob, downloadText, safeFilename } from '../../io/download'
 import { loadProjectFile, saveProject } from '../../io/project'
 import { specSheet } from '../../io/specSheet'
+import { defaultPaper, exportPrintSheet, layoutSheet, PAPERS, type Paper } from '../../io/printSheet'
 import { useEngraver } from '../../state/store'
 import { Select } from '../controls/Select'
 import { SegmentedControl } from '../controls/SegmentedControl'
@@ -23,6 +24,10 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [pngTransparent, setPngTransparent] = useState(false)
   const [pngError, setPngError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [paper, setPaper] = useState<Paper>(() => defaultPaper(navigator.language))
+  const [printError, setPrintError] = useState<string | null>(null)
+  const [printing, setPrinting] = useState(false)
+  const perSheet = layoutSheet(paper, doc.diameterMM).centres.length
   const fileRef = useRef<HTMLInputElement>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -56,6 +61,24 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       setPngError(`${e instanceof Error ? e.message : e}${pngMode === '3d' ? ' — try the flat style if 3D is unavailable here.' : ''}`)
     } finally {
       setBusy(false)
+    }
+  }
+
+  const downloadPrintSheet = async () => {
+    setPrintError(null)
+    setPrinting(true)
+    try {
+      const blob = await exportPrintSheet(doc, {
+        paper,
+        lightDeg,
+        fontsRevision: useEngraver.getState().fontsRevision,
+        assetsRevision: useEngraver.getState().assetsRevision,
+      })
+      downloadBlob(blob, `${safeFilename(doc.name)}-print-${paper}.pdf`)
+    } catch (e) {
+      setPrintError(`${e instanceof Error ? e.message : e} — the print sheet needs 3D (WebGL) in this browser.`)
+    } finally {
+      setPrinting(false)
     }
   }
 
@@ -150,6 +173,24 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           {pngError && <div className="warning-note">{pngError}</div>}
           <button type="button" className="button-primary" disabled={busy} onClick={downloadPng}>
             {busy ? 'Rendering…' : 'Download PNG'}
+          </button>
+        </div>
+
+        <div className="modal-section">
+          <div className="modal-section-title">Print at actual size · PDF</div>
+          <SegmentedControl
+            label="Paper"
+            value={paper}
+            options={(Object.keys(PAPERS) as Paper[]).map((p) => ({ value: p, label: PAPERS[p].label }))}
+            onChange={setPaper}
+          />
+          <div className="readout">
+            {perSheet} buttons at {doc.diameterMM} mm, rendered in 3D from straight above. Print at 100% (Actual
+            size) and check the ruler. Glossy photo or sticker paper reads most like metal.
+          </div>
+          {printError && <div className="warning-note">{printError}</div>}
+          <button type="button" className="button-primary" disabled={printing} onClick={downloadPrintSheet}>
+            {printing ? 'Rendering…' : 'Download print sheet'}
           </button>
         </div>
 

@@ -962,7 +962,8 @@ export class ButtonScene {
     return Math.max(one, across)
   }
 
-  render(): void {
+  /** Draw a frame — from the scene's camera, or another (the print sheet's orthographic top view). */
+  render(camera: THREE.Camera = this.camera): void {
     const b = this.spec?.backdrop
     const clear = b === 'studio' ? 0xe6e4e0 : 0x000000
     this.renderer.setClearColor(clear, b === 'none' ? 0 : 1)
@@ -972,14 +973,14 @@ export class ButtonScene {
     // buttons and the ground around them are never touched
     if (b === 'none') this.scene.fog = null
     else {
-      const dir = this.camera.getWorldDirection(new THREE.Vector3())
-      const focus = dir.y < -0.05 ? this.camera.position.y / -dir.y : this.camera.position.length()
+      const dir = camera.getWorldDirection(new THREE.Vector3())
+      const focus = dir.y < -0.05 ? camera.position.y / -dir.y : camera.position.length()
       const fog = this.scene.fog instanceof THREE.Fog ? this.scene.fog : (this.scene.fog = new THREE.Fog(clear))
       fog.color.setHex(clear)
       fog.near = focus * 1.25
       fog.far = focus * 2.2
     }
-    this.renderer.render(this.scene, this.camera)
+    this.renderer.render(this.scene, camera)
   }
 
   dispose(): void {

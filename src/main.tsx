@@ -6,6 +6,7 @@ import { redo, undo, useEngraver } from './state/store'
 import { useViewport } from './state/viewport'
 import { exportSvg, extractEmbeddedProject } from './io/exportSvg'
 import { exportPng } from './io/exportPng'
+import { exportPrintSheet } from './io/printSheet'
 import { loadProjectFile } from './io/project'
 import * as workspace from './io/workspace'
 import { presetBlank, presetGroovy, presetOldBook, presetReferenceA, presetReferenceB } from './model/presets'
@@ -21,6 +22,7 @@ if (import.meta.env.DEV) {
       redo,
       exportSvg,
       exportPng,
+      exportPrintSheet,
       extractEmbeddedProject,
       parseDoc,
       loadProjectFile,

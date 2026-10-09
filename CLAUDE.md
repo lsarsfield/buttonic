@@ -17,7 +17,7 @@ from the centre axis outward — counts, radii, angles — never manual duplicat
 
 `npm run dev` (preview via .claude/launch.json "dev", port 5173) · `npm test` ·
 `npm run typecheck` · `npm run build`. Dev builds expose `window.__engraver`
-(stores, presets, exportSvg/exportPng, workspace, loadProjectFile) and, while the 3D
+(stores, presets, exportSvg/exportPng/exportPrintSheet, workspace, loadProjectFile) and, while the 3D
 view is mounted, `window.__relief` ({scene, controls, render}) for scripted browser
 verification.
 
@@ -157,6 +157,13 @@ param, not an error.)
   time — anti-corruption invariants are commented in-file and load-bearing),
   exportSvg (mm-true die files, instance expansion default ON, project JSON embedded
   in <metadata> so exports re-open as documents), exportPng, thumbnail.
+  `printSheet.ts` = "Print at actual size" (Export dialog): a hand-rolled one-page PDF
+  (no dependency; Flate via CompressionStream, RGB + SMask alpha, standard Helvetica)
+  filling A4/Letter with copies of an ORTHOGRAPHIC top-down 3D render
+  (`renderButtonTopRgba`: frustum = diameter × `IMAGE_SPAN` 1.04 — the transparent
+  margin stops PDF viewers smearing edge pixels into spurs at the 4 axes), plus a
+  50 mm + 1 in calibration ruler. For trying designs on real garments; measured
+  17.00 mm on a rasterized sheet.
 - `src/render/` — SvgStage (mm-true, `#doc` = export subtree, overlays separate),
   DocRenderer (per-layer memo; comparator: layer refs + disc values + contributor
   REGION identity — no deep geometry compares). Mask layers render nothing, take no
@@ -307,7 +314,7 @@ param, not an error.)
 
 ## Testing & verification culture
 
-301 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
+318 vitest tests: kernel invariants (warp/dilation/winding/clip math with analytic
 area checks), golden preset snapshots, migration round-trips, workspace anti-corruption
 regressions, bundled-font + builtin-motif smoke tests (parse + outlines + in-box +
 license), e2e boolean acceptance (reversed-monogram counter preservation, phase tracking,
