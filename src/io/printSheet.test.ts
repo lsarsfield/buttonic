@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { inflateSync } from 'node:zlib'
+import { presetReferenceA } from '../model/presets'
 import {
   buildSheetPdf,
   defaultPaper,
@@ -9,7 +10,10 @@ import {
   layoutSheet,
   MARGIN_MM,
   PAPERS,
+  reliefNotes,
   sheetContent,
+  sheetLayoutFor,
+  sheetSubtitle,
   sheetImageOf,
   type Paper,
 } from './printSheet'
@@ -102,5 +106,45 @@ describe('print sheet PDF', () => {
   it('flate is zlib', async () => {
     const bytes = new TextEncoder().encode('button '.repeat(50))
     expect(new TextDecoder().decode(inflateSync(await flate(bytes)))).toBe('button '.repeat(50))
+  })
+})
+
+describe('print sheet relief notes', () => {
+  it('a single-relief design gets one line naming how it is struck', () => {
+    const doc = { ...presetReferenceA(), logoDisplay: 'debossed' as const }
+    const notes = reliefNotes(doc, 'a4')
+    expect(notes).toEqual([{ bold: 'Marking: Debossed', text: ' \u2014 the whole design is sunk into the face.' }])
+    expect(sheetSubtitle(doc)).toContain('Debossed')
+    expect(sheetLayoutFor(doc, 'a4').layout).toEqual(layoutSheet('a4', doc.diameterMM))
+  })
+
+  it('a mixed die lists every depth with its layers, embossed → debossed → lasered', () => {
+    const base = presetReferenceA()
+    const reliefs = ['lasered', 'inherit', 'debossed'] as const
+    const doc = { ...base, layers: base.layers.map((l, i) => ({ ...l, visible: true, relief: reliefs[i % 3]! })) }
+    const notes = reliefNotes(doc, 'a4')
+    expect(notes.filter((n) => n.bold).map((n) => n.bold)).toEqual(['Embossed', 'Debossed', 'Lasered'])
+    expect(notes.find((n) => n.bold === 'Lasered')!.text).toContain('laser-engraved')
+    for (const l of doc.layers) expect(notes.map((n) => n.text).join(' ')).toContain(l.name)
+    expect(sheetSubtitle(doc)).toContain('Embossed + debossed + lasered')
+    const ops = sheetContent(sheetLayoutFor(doc, 'a4').layout, 'T', 'S', notes)
+    expect(ops).toContain('/F2 7 Tf (Embossed) Tj /F1 7 Tf')
+  })
+
+  it('long layer lists wrap, and the header grows so no copy runs under them', () => {
+    const base = presetReferenceA()
+    const many = Array.from({ length: 40 }, (_, i) => ({
+      ...base.layers[0]!,
+      id: `l${i}`,
+      name: `A rather long layer name ${i}`,
+      visible: true,
+      relief: i % 2 ? ('debossed' as const) : ('embossed' as const),
+    }))
+    const doc = { ...base, layers: many }
+    const { layout, notes } = sheetLayoutFor(doc, 'a4')
+    expect(notes.length).toBeGreaterThan(2)
+    for (const n of notes) expect((n.bold + n.text).length).toBeLessThan(140)
+    const lastNoteY = MARGIN_MM + 31 + 3.4 * (notes.length - 1)
+    for (const c of layout.centres) expect(c.y - doc.diameterMM / 2).toBeGreaterThan(lastNoteY + 1)
   })
 })

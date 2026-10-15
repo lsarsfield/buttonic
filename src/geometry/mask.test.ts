@@ -337,10 +337,10 @@ describe('mask: documents and dies', () => {
     const { svg, warnings } = exportSvg(doc())
     expect(svg).toContain('id="layer-hatch"')
     expect(svg).not.toContain('id="layer-star"')
-    expect(svg).not.toContain('relief-') // the lasered mask must not make the die "mixed"
+    expect(svg).not.toContain('marking-') // the lasered mask must not make the die "mixed"
     expect(warnings.filter((w) => w.startsWith('Star window'))).toEqual([])
     expect([...reliefGroups(doc()).keys()]).toEqual(['embossed'])
-    expect(specSheet(doc())).not.toMatch(/Mixed relief/)
+    expect(specSheet(doc())).not.toMatch(/Mixed/)
     // the hatch really is windowed: nothing reaches the star's valleys on the diagonals
     const body = svg.slice(svg.indexOf('id="layer-hatch"'))
     const ds = [...body.matchAll(/ d="([^"]+)"/g)].map((m) => m[1]!)

@@ -42,7 +42,9 @@ param, not an error.)
   ignore colour/Pantone/enamel/rubber/epoxy): `product` button|rivet, `style` (flat /
   domed / open top / open top concave / moveable shank · capped / nipple / inverted
   nipple / die-cast), `material` brass|die-cast, `logoDisplay` embossed|debossed|lasered
-  (REPLACED `relief`: raised→embossed), `distressed`; `holeDiameterMM` = the style's
+  (REPLACED `relief`: raised→embossed; the UI calls this **Marking** everywhere — inspector,
+  spec/print sheets, die groups — always Embossed/Debossed/Lasered via `LOGO_DISPLAYS` +
+  `MARKING_NOTES`; never "logo", "raised" or "sunk" in user-facing text), `distressed`; `holeDiameterMM` = the style's
   centre-feature size (hole/nipple/cup/pin). Product options degrade softly in
   validate (`coerceProductOptions`), never reject. All product numbers live once in
   `src/model/product.ts` (STYLES/PRODUCTS/capProportions/FINISH_GROUPS), read by the
@@ -243,8 +245,8 @@ param, not an error.)
     rasterizes one mask per class via `exportSvg({onlyLayers})` (each layer still
     clipped by ALL keepouts), and `buildHeightField(masks)` puts raised +d, sunk −d,
     field midway for "high ground" (cavity) purposes; raised art inside a sunk area
-    lands at face level. A mixed die file wraps layers in `relief-raised` /
-    `relief-sunk` / `relief-lasered` groups (single-relief output unchanged); the
+    lands at face level. A mixed die file wraps layers in `marking-embossed` /
+    `marking-debossed` / `marking-lasered` groups (single-relief output unchanged); the
     spec sheet lists layers per depth. `regionKey` ignores `relief`.
     v15: centre `sourceType: 'star'` (`starPoints`/`starInner`/`starBulge`, inert
     otherwise; `geometry/star.ts`) + `booleanRole: 'mask'` (new enum value, no migration;

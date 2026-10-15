@@ -138,11 +138,34 @@ export function capProportions(
   return { capH, roll, depthMM }
 }
 
+/**
+ * How the art is put on the face — called "Marking" everywhere a person reads
+ * it (inspector, spec sheet, print sheet, die file), always Embossed /
+ * Debossed / Lasered with these one-line meanings. (`logoDisplay` is the
+ * stored field name; "logo" never reaches the UI.)
+ */
+export const MARKING_NOTES: Record<LogoDisplay, string> = {
+  embossed: 'raised from the face',
+  debossed: 'sunk into the face',
+  lasered: 'laser-engraved into the face',
+}
+
+/** Markings in reading order: embossed, debossed, lasered. */
 export const LOGO_DISPLAYS: readonly { value: LogoDisplay; label: string; title: string }[] = [
-  { value: 'embossed', label: 'Embossed', title: 'The art stands raised from the face' },
-  { value: 'debossed', label: 'Debossed', title: 'The art is sunk into the face' },
-  { value: 'lasered', label: 'Lasered', title: 'The art is laser-marked flat onto the face' },
+  { value: 'embossed', label: 'Embossed', title: `Embossed: the art is ${MARKING_NOTES.embossed}` },
+  { value: 'debossed', label: 'Debossed', title: `Debossed: the art is ${MARKING_NOTES.debossed}` },
+  { value: 'lasered', label: 'Lasered', title: `Lasered: the art is ${MARKING_NOTES.lasered}` },
 ]
+
+export const markingLabel = (m: LogoDisplay): string => LOGO_DISPLAYS.find((l) => l.value === m)!.label
+
+/** "Embossed", or for a mixed die "Embossed + lasered" (in reading order). */
+export function markingSummary(doc: Parameters<typeof reliefGroups>[0]): string {
+  const groups = reliefGroups(doc)
+  if (groups.size === 0) return markingLabel(doc.logoDisplay)
+  const used = LOGO_DISPLAYS.filter((l) => groups.has(l.value)).map((l) => l.label)
+  return [used[0]!, ...used.slice(1).map((l) => l.toLowerCase())].join(' + ')
+}
 
 export const FINISH_LABELS: Record<Finish, string> = {
   'antique-brass': 'Antique brass',
@@ -218,12 +241,10 @@ export function coerceProductOptions(raw: {
   return { product, style, material, logoDisplay, distressed: raw.distressed === true, postFinish, tack }
 }
 
-/** Per-layer relief choices: follow the button, or this layer's own. */
+/** Per-layer marking: follow the button, or this layer's own. */
 export const LAYER_RELIEFS: readonly { value: LayerRelief; label: string; title: string }[] = [
-  { value: 'inherit', label: 'As button', title: "Follow the button's logo display" },
-  { value: 'embossed', label: 'Raised', title: 'This layer stands raised (embossed)' },
-  { value: 'debossed', label: 'Sunk', title: 'This layer is sunk into the face (debossed)' },
-  { value: 'lasered', label: 'Lasered', title: 'This layer is laser-marked flat' },
+  { value: 'inherit', label: 'As button', title: "Follow the button's marking" },
+  ...LOGO_DISPLAYS.map((l) => ({ value: l.value, label: l.label, title: `This layer is ${l.label.toLowerCase()}: ${MARKING_NOTES[l.value]}` })),
 ]
 
 /** How a layer is actually struck (an unknown value follows the button). */

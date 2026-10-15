@@ -3,6 +3,7 @@ import {
   centreKindOf,
   FINISH_LABELS,
   LOGO_DISPLAYS,
+  markingLabel,
   MATERIALS,
   PRODUCTS,
   reliefGroups,
@@ -15,14 +16,15 @@ import type { ButtonDoc } from '../model/types'
  * the trade's own terms, next to the vector artwork. Supplier-neutral: no
  * quantities, prices or lead times.
  */
-/** Single relief: its name. Mixed relief: each depth with the layers struck that way. */
-function logoLine(doc: ButtonDoc): string {
+/** Single marking: its name. Mixed: each marking with the layers marked that way. */
+function markingLine(doc: ButtonDoc): string {
   const groups = reliefGroups(doc)
-  const label = (r: string) => LOGO_DISPLAYS.find((l) => l.value === r)!.label
-  if (groups.size <= 1) return label([...groups.keys()][0] ?? doc.logoDisplay)
+  if (groups.size <= 1) return markingLabel([...groups.keys()][0] ?? doc.logoDisplay)
   return (
-    'Mixed relief — ' +
-    [...groups.entries()].map(([r, ls]) => `${label(r).toLowerCase()}: ${ls.map((l) => l.name).join(', ')}`).join('; ')
+    'Mixed — ' +
+    LOGO_DISPLAYS.filter((l) => groups.has(l.value))
+      .map((l) => `${l.label.toLowerCase()}: ${groups.get(l.value)!.map((m) => m.name).join(', ')}`)
+      .join('; ')
   )
 }
 
@@ -43,7 +45,7 @@ export function specSheet(doc: ButtonDoc): string {
   }
   lines.push(
     ['Material', MATERIALS[doc.material].label === 'Die-cast' ? 'Die-cast alloy' : 'Brass'],
-    ['Logo display', logoLine(doc)],
+    ['Marking', markingLine(doc)],
     ['Finish', `${FINISH_LABELS[doc.finish]}${doc.distressed ? ', distressed' : ''}`],
     ['Artwork', 'Vector outlines, mm-true (SVG; text converted to outlines). Convert to AI / PDF / EPS if required.'],
   )

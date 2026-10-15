@@ -58,14 +58,14 @@ describe('spec sheet', () => {
     expect(specSheet(doc)).toMatchInlineSnapshot(`
       "Workwear rivet — jeans rivet spec
 
-      Product       Jeans rivet
-      Shape         Nipple
-      Size          9 mm diameter
-      Nipple        2.7 mm diameter
-      Material      Die-cast alloy
-      Logo display  Debossed
-      Finish        Antique copper, distressed
-      Artwork       Vector outlines, mm-true (SVG; text converted to outlines). Convert to AI / PDF / EPS if required."
+      Product   Jeans rivet
+      Shape     Nipple
+      Size      9 mm diameter
+      Nipple    2.7 mm diameter
+      Material  Die-cast alloy
+      Marking   Debossed
+      Finish    Antique copper, distressed
+      Artwork   Vector outlines, mm-true (SVG; text converted to outlines). Convert to AI / PDF / EPS if required."
     `)
   })
 })
@@ -87,19 +87,20 @@ describe('per-layer relief', () => {
     expect([...reliefGroups(d).keys()].sort()).toEqual(['debossed', 'embossed'])
   })
 
-  it('the die SVG groups each depth separately; a single-relief die stays flat', () => {
+  it('the die SVG groups each marking separately, embossed first; a single-marking die stays flat', () => {
     const mixed = exportSvg(doc()).svg
-    expect(mixed).toMatch(/<g id="relief-raised"[^>]*>\s*<g id="layer-ring"/)
-    expect(mixed).toMatch(/<g id="relief-sunk"[^>]*>\s*<g id="layer-rim"/)
+    expect(mixed).toMatch(/<g id="marking-embossed" data-name="Embossed \(raised from the face\)">\s*<g id="layer-ring"/)
+    expect(mixed).toMatch(/<g id="marking-debossed"[^>]*>\s*<g id="layer-rim"/)
+    expect(mixed.indexOf('marking-embossed')).toBeLessThan(mixed.indexOf('marking-debossed'))
     const single = exportSvg({ ...doc(), layers: doc().layers.map((l) => ({ ...l, relief: 'inherit' as const })) }).svg
-    expect(single).not.toMatch(/relief-/)
+    expect(single).not.toMatch(/marking-/)
     const only = exportSvg(doc(), { expandInstances: true, mirrorForDie: false, includeBlankOutline: false, onlyLayers: new Set(['rim']) }).svg
     expect(only).toMatch(/layer-rim/)
     expect(only).not.toMatch(/layer-ring/)
   })
 
-  it('the spec sheet lists which layers are raised and which are sunk', () => {
-    expect(specSheet(doc())).toMatch(/Logo display\s+Mixed relief — (debossed: Rim; embossed: Ring|embossed: Ring; debossed: Rim)/)
+  it('the spec sheet lists which layers are embossed and which are debossed', () => {
+    expect(specSheet(doc())).toMatch(/Marking\s+Mixed — embossed: Ring; debossed: Rim/)
   })
 
   it('v13 documents: every layer follows the button', () => {

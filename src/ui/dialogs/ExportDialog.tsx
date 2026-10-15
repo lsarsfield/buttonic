@@ -4,7 +4,7 @@ import { exportPng } from '../../io/exportPng'
 import { downloadBlob, downloadText, safeFilename } from '../../io/download'
 import { loadProjectFile, saveProject } from '../../io/project'
 import { specSheet } from '../../io/specSheet'
-import { defaultPaper, exportPrintSheet, layoutSheet, PAPERS, type Paper } from '../../io/printSheet'
+import { defaultPaper, exportPrintSheet, PAPERS, sheetLayoutFor, type Paper } from '../../io/printSheet'
 import { useEngraver } from '../../state/store'
 import { Select } from '../controls/Select'
 import { SegmentedControl } from '../controls/SegmentedControl'
@@ -27,7 +27,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [paper, setPaper] = useState<Paper>(() => defaultPaper(navigator.language))
   const [printError, setPrintError] = useState<string | null>(null)
   const [printing, setPrinting] = useState(false)
-  const perSheet = layoutSheet(paper, doc.diameterMM).centres.length
+  const perSheet = sheetLayoutFor(doc, paper).layout.centres.length
   const fileRef = useRef<HTMLInputElement>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -185,8 +185,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             onChange={setPaper}
           />
           <div className="readout">
-            {perSheet} buttons at {doc.diameterMM} mm, rendered in 3D from straight above. Print at 100% (Actual
-            size) and check the ruler. Glossy photo or sticker paper reads most like metal.
+            {perSheet} buttons at {doc.diameterMM} mm, rendered in 3D from straight above, headed with its marking (embossed,
+            debossed, lasered) layer by layer. Print at 100% (Actual size) and check the ruler. Glossy photo or sticker paper reads most like metal.
           </div>
           {printError && <div className="warning-note">{printError}</div>}
           <button type="button" className="button-primary" disabled={printing} onClick={downloadPrintSheet}>

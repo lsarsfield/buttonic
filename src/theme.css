@@ -198,6 +198,11 @@ button.active {
   min-width: 0;
   text-align: center;
 }
+/* Grid layout: segments too long for one row wrap into equal columns. */
+.segmented.segmented-grid,
+.field.field-stack > .segmented.segmented-grid {
+  display: grid;
+}
 .segmented button.active {
   background: var(--bg3);
   color: var(--accent);

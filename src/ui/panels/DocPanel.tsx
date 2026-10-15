@@ -120,7 +120,7 @@ export function DocPanel() {
           onChange={(material) => updateDocMeta({ material })}
         />
         <SegmentedControl
-          label="Logo"
+          label="Marking"
           stack
           value={doc.logoDisplay}
           options={LOGO_DISPLAYS}

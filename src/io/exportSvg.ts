@@ -1,5 +1,5 @@
-import type { ButtonDoc, LogoDisplay } from '../model/types'
-import { CENTRE_LABELS, centreKindOf, isOpening, reliefGroups } from '../model/product'
+import type { ButtonDoc } from '../model/types'
+import { CENTRE_LABELS, centreKindOf, isOpening, LOGO_DISPLAYS, MARKING_NOTES, reliefGroups } from '../model/product'
 import { clipCompiled } from '../geometry/clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import {
@@ -268,24 +268,18 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
         ? `\n<circle r="${fmt(holeR)}" fill="none" stroke="#000000" stroke-width="0.02" data-name="${centreName}"/>`
         : '')
     : ''
-  // a mixed-relief die: the maker needs each depth as its own group (all still
-  // plain black); a single-relief die keeps the flat layer list
+  // a mixed-marking die: the maker needs each marking as its own group (all
+  // still plain black); a single-marking die keeps the flat layer list
   const emitted = options.onlyLayers ? layerMarkup.filter((m) => options.onlyLayers!.has(m.id)) : layerMarkup
   const groups = reliefGroups(doc)
   let engravingBody: string
   if (groups.size > 1 && !options.onlyLayers) {
-    const RELIEF_GROUP: Record<LogoDisplay, [string, string]> = {
-      embossed: ['relief-raised', 'Raised (embossed)'],
-      debossed: ['relief-sunk', 'Sunk (debossed)'],
-      lasered: ['relief-lasered', 'Lasered (flush marking)'],
-    }
-    engravingBody = [...groups.entries()]
-      .map(([relief, members]) => {
-        const ids = new Set(members.map((m) => m.id))
+    engravingBody = LOGO_DISPLAYS.filter((l) => groups.has(l.value))
+      .map(({ value, label }) => {
+        const ids = new Set(groups.get(value)!.map((m) => m.id))
         const inner = emitted.filter((m) => ids.has(m.id)).map((m) => m.markup)
         if (inner.length === 0) return ''
-        const [gid, label] = RELIEF_GROUP[relief]
-        return `<g id="${gid}" data-name="${label}">\n${inner.join('\n')}\n</g>`
+        return `<g id="marking-${value}" data-name="${label} (${MARKING_NOTES[value]})">\n${inner.join('\n')}\n</g>`
       })
       .filter(Boolean)
       .join('\n')

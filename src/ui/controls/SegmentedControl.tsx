@@ -5,6 +5,8 @@ export interface SegmentedControlProps<T extends string> {
   onChange: (value: T) => void
   /** Put the label on its own line and let the segments fill the panel width. */
   stack?: boolean
+  /** Wrap the segments into a grid this many columns wide (for options too long for one row). */
+  columns?: number
 }
 
 export function SegmentedControl<T extends string>({
@@ -13,9 +15,13 @@ export function SegmentedControl<T extends string>({
   options,
   onChange,
   stack = false,
+  columns,
 }: SegmentedControlProps<T>) {
   const control = (
-    <span className="segmented">
+    <span
+      className={columns ? 'segmented segmented-grid' : 'segmented'}
+      style={columns ? { gridTemplateColumns: `repeat(${columns}, 1fr)` } : undefined}
+    >
       {options.map((o) => (
         <button
           key={o.value}

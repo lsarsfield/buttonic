@@ -1,4 +1,4 @@
-import { FINISH_LABELS, LOGO_DISPLAYS, STYLES } from '../model/product'
+import { FINISH_LABELS, LOGO_DISPLAYS, MARKING_NOTES, markingLabel, markingSummary, reliefGroups, STYLES } from '../model/product'
 import type { ButtonDoc } from '../model/types'
 
 /**
@@ -22,8 +22,17 @@ export const PAPERS: Record<Paper, { label: string; wMM: number; hMM: number }> 
 
 /** Printers can't reach the paper's edge; 12 mm clears every common one. */
 export const MARGIN_MM = 12
-/** Height of the header band: title, instructions and the ruler. */
-export const HEADER_MM = 30
+/** Height of the header band: title, instructions, the ruler and one line of marking notes. */
+export const HEADER_MM = 34
+/** Marking notes: first baseline below the page margin, and line pitch. */
+const NOTES_TOP_MM = 31
+const NOTE_PITCH_MM = 3.4
+const NOTE_PT = 7
+
+/** The header's height with `noteLines` lines of marking notes (at least one). */
+export function headerMM(noteLines: number): number {
+  return HEADER_MM + NOTE_PITCH_MM * Math.max(0, noteLines - 1)
+}
 /** The calibration ruler's length. */
 export const RULER_MM = 50
 
@@ -55,18 +64,18 @@ export interface SheetLayout {
 }
 
 /** As many copies as fit below the header, centred in the printable area. */
-export function layoutSheet(paper: Paper, diameterMM: number): SheetLayout {
+export function layoutSheet(paper: Paper, diameterMM: number, header = HEADER_MM): SheetLayout {
   const { wMM, hMM } = PAPERS[paper]
   const g = gapMM(diameterMM)
   const pitch = diameterMM + g
   const areaW = wMM - 2 * MARGIN_MM
-  const areaH = hMM - 2 * MARGIN_MM - HEADER_MM
+  const areaH = hMM - 2 * MARGIN_MM - header
   const cols = Math.max(1, Math.floor((areaW + g) / pitch))
   const rows = Math.max(1, Math.floor((areaH + g) / pitch))
   const usedW = cols * pitch - g
   const usedH = rows * pitch - g
   const x0 = MARGIN_MM + (areaW - usedW) / 2 + diameterMM / 2
-  const y0 = MARGIN_MM + HEADER_MM + (areaH - usedH) / 2 + diameterMM / 2
+  const y0 = MARGIN_MM + header + (areaH - usedH) / 2 + diameterMM / 2
   const centres: { x: number; y: number }[] = []
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) centres.push({ x: x0 + c * pitch, y: y0 + r * pitch })
   return { paper, diameterMM, centres, cols, rows }
@@ -100,8 +109,59 @@ function pdfString(text: string): string {
   return `(${out})`
 }
 
-/** Page content: header text, the ruler, then every copy of the button. */
-export function sheetContent(layout: SheetLayout, title: string, subtitle: string): string {
+/** One line of marking notes: a bold lead-in, then plain text (empty on wrapped continuation lines). */
+export interface SheetNote {
+  bold: string
+  text: string
+}
+
+/**
+ * Greedy word wrap at an estimated Helvetica width (0.56 em a character —
+ * wider than the average, so lines fall short of the margin, never past it).
+ */
+function wrap(text: string, firstMM: number, restMM: number): string[] {
+  const mmPerChar = NOTE_PT * (25.4 / 72) * 0.56
+  const lines: string[] = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    const max = (lines.length ? restMM : firstMM) / mmPerChar
+    const next = line ? `${line} ${word}` : word
+    if (line && next.length > max) {
+      lines.push(line)
+      line = word
+    } else line = next
+  }
+  lines.push(line)
+  return lines
+}
+
+/**
+ * The design's marking, for the sheet's header: one line for a single
+ * marking; for a mixed die, each marking (embossed, debossed, lasered) with
+ * its layers, wrapped to the printable width.
+ */
+export function reliefNotes(doc: ButtonDoc, paper: Paper): SheetNote[] {
+  const groups = reliefGroups(doc)
+  if (groups.size <= 1) {
+    const r = [...groups.keys()][0] ?? doc.logoDisplay
+    return [{ bold: `Marking: ${markingLabel(r)}`, text: ` — the whole design is ${MARKING_NOTES[r]}.` }]
+  }
+  const widthMM = PAPERS[paper].wMM - 2 * MARGIN_MM
+  const notes: SheetNote[] = []
+  for (const { value: r, label: bold } of LOGO_DISPLAYS) {
+    const layers = groups.get(r)
+    if (!layers) continue
+    // the bold lead-in is a little wider per character than the plain text
+    const leadMM = (bold.length + 1) * NOTE_PT * (25.4 / 72) * 0.62
+    const [first, ...rest] = wrap(`(${MARKING_NOTES[r]}): ${layers.map((l) => l.name).join(', ')}`, widthMM - leadMM, widthMM - 4)
+    notes.push({ bold, text: ` ${first}` })
+    for (const t of rest) notes.push({ bold: '', text: t })
+  }
+  return notes
+}
+
+/** Page content: header text, the ruler, marking notes, then every copy of the button. */
+export function sheetContent(layout: SheetLayout, title: string, subtitle: string, notes: SheetNote[] = []): string {
   const { hMM } = PAPERS[layout.paper]
   // mm, y-down → pt, y-up
   const X = (x: number) => n(x * PT)
@@ -136,6 +196,14 @@ export function sheetContent(layout: SheetLayout, title: string, subtitle: strin
   for (let i = 0; i <= 8; i++) line(ix + (i * 25.4) / 8, ry, ix + (i * 25.4) / 8, ry - (i % 4 === 0 ? 3 : i % 2 === 0 ? 2 : 1.2))
   text(ix + 25.4 + 2.5, ry - 0.4, 7, '1 in')
 
+  // the marking: bold lead-in, plain text after (Tj advances, so no measuring)
+  notes.forEach((note, i) => {
+    const y = Y(top + NOTES_TOP_MM + i * NOTE_PITCH_MM)
+    const x = X(MARGIN_MM + (note.bold ? 0 : 4))
+    const bold = note.bold ? `/F2 ${NOTE_PT} Tf ${pdfString(note.bold)} Tj ` : ''
+    ops.push(`BT ${x} ${y} Td ${bold}/F1 ${NOTE_PT} Tf ${pdfString(note.text)} Tj ET`)
+  })
+
   // the buttons: the image's square is the diameter × IMAGE_SPAN, centred on each copy
   const s = layout.diameterMM * IMAGE_SPAN
   for (const c of layout.centres) {
@@ -145,10 +213,16 @@ export function sheetContent(layout: SheetLayout, title: string, subtitle: strin
 }
 
 /** Assemble the PDF: one page, one image (with soft-mask alpha), Helvetica + Helvetica-Bold. */
-export function buildSheetPdf(layout: SheetLayout, image: SheetImage, title: string, subtitle: string): Uint8Array {
+export function buildSheetPdf(
+  layout: SheetLayout,
+  image: SheetImage,
+  title: string,
+  subtitle: string,
+  notes: SheetNote[] = [],
+): Uint8Array {
   const { wMM, hMM } = PAPERS[layout.paper]
   const enc = new TextEncoder()
-  const content = enc.encode(sheetContent(layout, title, subtitle))
+  const content = enc.encode(sheetContent(layout, title, subtitle, notes))
   // each object: header text, optional binary stream
   const objs: { head: string; stream?: Uint8Array }[] = [
     { head: '<< /Type /Catalog /Pages 2 0 R >>' },
@@ -235,9 +309,15 @@ export function printPx(diameterMM: number): number {
   return Math.round(Math.min(2048, Math.max(600, ((diameterMM * IMAGE_SPAN) / 25.4) * 1200)))
 }
 
-/** "17 mm · Flat cap · Satin nickel · Embossed" */
+/** The sheet's copies for doc: the header grows with its marking notes. */
+export function sheetLayoutFor(doc: ButtonDoc, paper: Paper): { layout: SheetLayout; notes: SheetNote[] } {
+  const notes = reliefNotes(doc, paper)
+  return { layout: layoutSheet(paper, doc.diameterMM, headerMM(notes.length)), notes }
+}
+
+/** "17 mm · Flat cap · Satin nickel · Embossed" (mixed: "Embossed + lasered") */
 export function sheetSubtitle(doc: ButtonDoc): string {
-  const relief = LOGO_DISPLAYS.find((l) => l.value === doc.logoDisplay)?.label ?? ''
+  const relief = markingSummary(doc)
   return [`${Number(doc.diameterMM.toFixed(2))} mm`, STYLES[doc.style].label, FINISH_LABELS[doc.finish], relief]
     .filter(Boolean)
     .join(' \u00b7 ')
@@ -255,7 +335,7 @@ export async function exportPrintSheet(
   const px = printPx(doc.diameterMM)
   const rgba = await renderButtonTopRgba(doc, { px, spanMM: doc.diameterMM * IMAGE_SPAN, lightDeg: opts.lightDeg, fontsRevision: opts.fontsRevision, assetsRevision: opts.assetsRevision })
   const image = await sheetImageOf(rgba, px, px)
-  const layout = layoutSheet(opts.paper, doc.diameterMM)
-  const pdf = buildSheetPdf(layout, image, doc.name || 'Untitled button', sheetSubtitle(doc))
+  const { layout, notes } = sheetLayoutFor(doc, opts.paper)
+  const pdf = buildSheetPdf(layout, image, doc.name || 'Untitled button', sheetSubtitle(doc), notes)
   return new Blob([pdf as Uint8Array<ArrayBuffer>], { type: 'application/pdf' })
 }

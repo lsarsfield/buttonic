@@ -2,7 +2,7 @@ import type { Layer } from '../model/types'
 import { LAYER_TYPE_LABELS } from '../model/types'
 import { useEngraver } from '../state/store'
 import { useSelectedLayer } from '../state/selectors'
-import { LAYER_RELIEFS, LOGO_DISPLAYS } from '../model/product'
+import { LAYER_RELIEFS, markingLabel } from '../model/product'
 import { NumberField } from './controls/NumberField'
 import { SegmentedControl } from './controls/SegmentedControl'
 import { Slider } from './controls/Slider'
@@ -54,20 +54,21 @@ function LayerInspector({ layer }: { layer: Layer }) {
           onChange={(phaseDeg) => updateLayer(layer.id, { phaseDeg })}
         />
       </div>
-      {/* a mask is a window, never struck — relief doesn't apply */}
+      {/* a mask is a window, never struck — marking doesn't apply */}
       {!isMask && (
         <div className="field-group">
           <SegmentedControl
-            label="Relief"
+            label="Marking"
             stack
+            columns={2}
             value={layer.relief}
             options={LAYER_RELIEFS}
             onChange={(relief) => updateLayer(layer.id, { relief })}
           />
           <div className="readout">
             {layer.relief === 'inherit'
-              ? `Follows the button's logo display (${LOGO_DISPLAYS.find((l) => l.value === logoDisplay)!.label.toLowerCase()}). Set raised / sunk per layer for a mixed-relief die.`
-              : 'Struck differently from the button default — the die file groups each depth separately.'}
+              ? `Follows the button's marking (${markingLabel(logoDisplay).toLowerCase()}). Set it per layer to mix embossed, debossed and lasered on one die.`
+              : 'Differs from the button\'s marking — the die file groups each marking separately.'}
           </div>
         </div>
       )}
