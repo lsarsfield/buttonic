@@ -16,7 +16,8 @@ import type { LogoDisplay, Material, Product, ProductStyle } from '../../model/t
  *  3. cavity = how enclosed a point is by higher ground (blurred coverage vs
  *     local height), plus plain lowness — raw inputs; each FINISH turns them
  *     into its own patina (finishMaps: nickel greys only tight recesses,
- *     antique brass fills the whole low ground with brown oxide) so switching
+ *     antique brass fills the low ground in the lee of the relief with brown
+ *     oxide, wipes open field partly and rubs the rolled crests bright) so switching
  *     finish never re-runs the EDT
  *  4. object-space normals of the WHOLE surface: cap profile (flat, domed or
  *     dished face, rolled outer edge, the style's centre feature — hole lip,
@@ -108,7 +109,12 @@ export interface HeightField {
    * spans a few 8-bit levels, which a mirror finish shows as blocky terraces.
    */
   normal: Uint16Array
-  /** R = cavity (enclosed by higher ground), G = lowness (1 − high-ground occupancy), B = art occupancy, RGBA8 n². */
+  /**
+   * R = cavity (enclosed by higher ground), G = lowness (1 − high-ground
+   * occupancy), B = art occupancy, A = oxide hold (how much of the field coat
+   * the polishing wheel leaves: full in the lee of relief, partial on open
+   * field, none on the cap's rolled crests), RGBA8 n².
+   */
   occl: Uint8Array
 }
 
@@ -147,6 +153,61 @@ export const LASER_PITCH_MM = 0.04
 const LASER_GROOVE_MM = 0.0015
 /** Final roughness of a laser frost (absolute; the bare face keeps its finish). */
 const LASER_FROST = 0.42
+
+/**
+ * Antiquing is a dark coat wiped back by a polishing wheel. The wheel can't
+ * get into the lee of raised work, so low ground there keeps the full coat;
+ * open field further than its reach is mostly wiped (a raised letter used to
+ * blacken the WHOLE field, however far away). Reach = the blur radius of the
+ * high-ground neighbourhood; the open field keeps OPEN_FIELD_HOLD of the coat —
+ * the same as a lasered-only face (all open field: nothing raised to shelter
+ * behind), so adding raised work darkens only the ground around it.
+ */
+const WHEEL_REACH_MM = 0.45
+const OPEN_FIELD_HOLD = 0.7
+/** Shelter = high ground in the wheel's neighbourhood × this, clamped (a straight wall's foot reads ~0.5). */
+const SHELTER_GAIN = 2.5
+/**
+ * Convex crests of the cap (the rolled edge, a hole's lip, a nipple knob) are
+ * what the wheel and wear hit first: rubbed bright. Burnish ramps in with the
+ * profile's convex curvature (1/mm) between these.
+ */
+const BURNISH_K0 = 0.35
+const BURNISH_K1 = 1.1
+
+/**
+ * Burnish (0..1) by radius, as a lookup at `step` mm: smoothstep of the cap
+ * profile's convex curvature, lightly smoothed so it ramps rather than rings.
+ */
+export function burnishLut(p: ReliefParams, step: number, maxR: number): Float32Array {
+  const m = Math.ceil(maxR / step) + 2
+  const raw = new Float32Array(m)
+  const h = 0.02
+  for (let k = 0; k < m; k++) {
+    const r = Math.min(k * step, p.faceR)
+    const y0 = profileY(Math.max(0, r - h), p)
+    const y1 = profileY(r, p)
+    const y2 = profileY(Math.min(p.faceR, r + h), p)
+    const d1 = (y2 - y0) / (2 * h)
+    // convex (falling away on both sides) = positive
+    const kappa = -(y2 - 2 * y1 + y0) / (h * h) / Math.pow(1 + d1 * d1, 1.5)
+    const t = Math.min(1, Math.max(0, (kappa - BURNISH_K0) / (BURNISH_K1 - BURNISH_K0)))
+    raw[k] = t * t * (3 - 2 * t)
+  }
+  // ±0.06 mm box smoothing
+  const w = Math.max(1, Math.round(0.06 / step))
+  const out = new Float32Array(m)
+  for (let k = 0; k < m; k++) {
+    let acc = 0
+    let cnt = 0
+    for (let j = Math.max(0, k - w); j <= Math.min(m - 1, k + w); j++) {
+      acc += raw[j]!
+      cnt++
+    }
+    out[k] = acc / cnt
+  }
+  return out
+}
 
 // ---------------------------------------------------------------------------
 // cap profile
@@ -571,9 +632,10 @@ export function buildHeightField(
 
   // F: 1 on the HIGH ground, 0 on the low. The field sits low under raised
   // art, high over sunk art, midway on a mixed die. A lasered-only face has no
-  // relief to burnish, so it is neither: it keeps the finish's field coat at
-  // half strength (an antiqued face stays antiqued; the laser cuts through it).
-  const fieldLevel = occR ? (occS ? 0.5 : 0) : occS ? 1 : laser ? 0.5 : 1
+  // relief to shelter behind: it is all open field, keeping the same share of
+  // the finish's field coat as open field beside raised work (an antiqued face
+  // stays antiqued; the laser cuts through it).
+  const fieldLevel = occR ? (occS ? 0.5 : 0) : occS ? 1 : laser ? 1 - OPEN_FIELD_HOLD : 1
   const F = new Float32Array(n * n)
   const h = new Float32Array(n * n)
   const art = new Float32Array(n * n)
@@ -591,6 +653,18 @@ export function buildHeightField(
   boxBlur(nb, n, rb)
   boxBlur(nb, n, rb)
   boxBlur(nb, n, rb)
+  // the wheel's view: high ground within its reach (relief only — a lasered-only
+  // face has no high ground to shelter behind and keeps its even half coat)
+  let shelterNb: Float32Array | null = null
+  if (occR || occS) {
+    shelterNb = Float32Array.from(F)
+    const rw = Math.max(1, Math.round(WHEEL_REACH_MM / mmPerPx))
+    boxBlur(shelterNb, n, rw)
+    boxBlur(shelterNb, n, rw)
+    boxBlur(shelterNb, n, rw)
+  }
+  const bStep = Math.max(0.002, mmPerPx / 2)
+  const burnish = burnishLut(p, bStep, V * Math.SQRT2)
 
   const normal = new Uint16Array(n * n * 4)
   const occl = new Uint8Array(n * n * 4)
@@ -633,7 +707,15 @@ export function buildHeightField(
       occl[o] = Math.round(Math.min(1, Math.max(0, (nb[i]! - F[i]!) * 1.6)) * 255) // cavity
       occl[o + 1] = Math.round((1 - F[i]!) * 255) // lowness
       occl[o + 2] = Math.round(art[i]! * 255) // art occupancy
-      occl[o + 3] = 255
+      // oxide hold: sheltered low ground keeps the coat, open field mostly
+      // wiped, convex crests rubbed bright
+      let hold = 1
+      if (shelterNb && F[i]! < 1) {
+        const shelter = Math.min(1, Math.max(0, (SHELTER_GAIN * (shelterNb[i]! - F[i]!)) / (1 - F[i]!)))
+        hold = OPEN_FIELD_HOLD + (1 - OPEN_FIELD_HOLD) * shelter
+      }
+      hold *= 1 - burnish[Math.min(burnish.length - 1, Math.round(r / bStep))]!
+      occl[o + 3] = Math.round(hold * 255)
     }
   }
 
@@ -737,7 +819,8 @@ export function finishMaps(field: HeightField, look: SurfaceLook | Patina): { su
     const cav = occl[o]! / 255
     const low = occl[o + 1]! / 255
     const art = occl[o + 2]! / 255
-    let patina = Math.min(1, p.cavity * cav + p.field * low)
+    const hold = occl[o + 3]! / 255
+    let patina = Math.min(1, p.cavity * cav + p.field * low * hold)
     let dark = p.darken * patina
     // roughness as a multiple of the finish's base (stored ÷ ROUGH_HEADROOM below)
     let rough = 1 + (OXIDE_ROUGH - 1) * patina
@@ -746,7 +829,7 @@ export function finishMaps(field: HeightField, look: SurfaceLook | Patina): { su
       const y = -V + (Math.floor(i / n) + 0.5) * mmPerPx
       // worn back to bright metal where it stands proud, oxide clings low down
       // oxide clings in the low ground; raised work and edges are rubbed bright
-      const wear = distressMask(x, y) * (0.25 + 0.75 * Math.max(low, cav))
+      const wear = distressMask(x, y) * (0.25 + 0.75 * Math.max(low * hold, cav))
       patina = Math.max(patina, wear)
       dark = Math.max(dark, 0.9 * wear)
       rough = Math.max(rough, 1 + (OXIDE_ROUGH - 1) * wear)

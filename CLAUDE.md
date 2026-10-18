@@ -191,8 +191,13 @@ param, not an error.)
     local height) + lowness → OBJECT-SPACE normals of cap profile + relief, a raw
     `occl` map (R cavity, G lowness) and a 1024² displacement. PATINA IS PER FINISH:
     `finishMaps(field, finish.patina)` composes AO/roughness + oxide-albedo on the main
-    thread (~50 ms) — nickel greys only tight recesses, antique brass fills the whole
-    low ground with brown-black oxide (burnished highs). Finish switches never re-run
+    thread (~50 ms) — nickel greys only tight recesses, antique brass coats the low
+    ground with brown-black oxide (burnished highs). The field coat is WIPED like a
+    polishing wheel (`occl.A` = oxide hold): full in the lee of relief (high ground
+    within `WHEEL_REACH_MM` 0.45), `OPEN_FIELD_HOLD` 0.7 on open field — the same
+    as a lasered-only face, so adding embossing darkens only around the relief (Liam:
+    one embossed layer used to blacken the whole field) — and none on the cap's
+    convex crests (`burnishLut`: rolled edge, hole lip, knobs rubbed bright). Finish switches never re-run
     the EDT. `baseProfile` = flat face (optional
     dome), quarter-round rolled shoulder, rolled hole lip.
   - Per-style cap profiles (`baseProfile`, from `reliefParamsOf(doc)`): dome, concave

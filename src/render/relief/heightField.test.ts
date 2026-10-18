@@ -218,17 +218,33 @@ describe('height field', { timeout: 30_000 }, () => {
     expect(ao(px(2.22, 0.05))).toBeLessThan(ao(px(6, 6)) - 20)
   })
 
-  it('antique brass fills the whole low ground with oxide; the high points stay burnished', () => {
+  it('antique brass: full oxide in the lee of the relief, open field partly wiped, rolled edge rubbed bright', () => {
     const f = buildHeightField(discCoverage(2), N, SPAN, params())
     const nickel = finishMaps(f, METAL_FINISHES.nickel.patina).albedo
     const antique = finishMaps(f, METAL_FINISHES['antique-brass'].patina).albedo
-    const field = px(5, 3) // open low ground, far from the raised disc
+    const g = (i: number) => antique[i * 4]!
+    const lee = px(2.25, 0) // low ground at the foot of the raised disc's wall
+    const open = px(5, 0) // open field, far beyond the wheel's reach
+    const rim = px(7.3, 0) // on the rolled edge
     const top = px(0, 0) // on the raised disc
-    expect(antique[field * 4]!).toBeLessThan(nickel[field * 4]! - 80)
-    expect(antique[field * 4]!).toBeLessThan(140)
-    expect(antique[top * 4]!).toBe(255)
+    expect(g(lee)).toBeLessThan(150) // the full antique coat
+    expect(g(open)).toBeGreaterThan(g(lee) + 25) // wiped back…
+    expect(g(open)).toBeLessThan(nickel[open * 4]! - 30) // …but still antiqued
+    expect(g(rim)).toBeGreaterThan(g(open) + 40) // the crest is rubbed bright
+    expect(g(top)).toBe(255)
     // the patina is a finish choice over the SAME field — no rebuild
     expect(finishMaps(f, METAL_FINISHES.nickel.patina).albedo).toEqual(nickel)
+  })
+
+  it('a raised letter no longer darkens field beyond the wheel’s reach', () => {
+    // the same open field point, with and without distant raised art
+    const bare = buildHeightField(new Float32Array(N * N), N, SPAN, params({ display: 'lasered' }))
+    const withArt = buildHeightField({ raised: discCoverage(0.5, -4, 0), lasered: new Float32Array(N * N) }, N, SPAN, params())
+    const fin = METAL_FINISHES['antique-brass'].patina
+    const at = px(3, 3) // ~7 mm from the raised dot
+    const a = finishMaps(bare, fin).albedo[at * 4]!
+    const b = finishMaps(withArt, fin).albedo[at * 4]!
+    expect(Math.abs(a - b)).toBeLessThan(15)
   })
 })
 
