@@ -1,6 +1,6 @@
-import type { Layer } from '../model/types'
-import { rotation, apply } from './mat2d'
-import { defMatrix, expandInstanced } from './expand'
+import type { Layer, StrokeCap } from '../model/types'
+import { rotation, apply, mul } from './mat2d'
+import { defMatrix, expandInstanced, instanceMatrix } from './expand'
 import { flattenSegs, distToSegment, type Pt } from './flatten'
 import { parsePathData, segsControlBox, transformSegs } from './pathData'
 import { arcPathD, fmt } from './format'
@@ -15,8 +15,8 @@ import {
   safeUnion,
   type MultiPolygon,
 } from './poly'
-import type { CompiledLayer, Shape } from './shapes'
-import { fillPaint } from './shapes'
+import type { CompiledLayer, Paint, Shape } from './shapes'
+import { fillPaint, strokePaint } from './shapes'
 import { holdsDisc, linePieces, ringSectorPieces, strokePieces } from './strokePieces'
 
 /**
@@ -1175,10 +1175,198 @@ function radialBandOf(segs: ReturnType<typeof parsePathData>): Band | null {
  * Apply clearance discs (phase 1, unchanged) then polygon regions (phase 2,
  * skipped entirely when none) to a compiled layer.
  */
+// --- hatch ticks re-capped at a mask window ---------------------------------
+// A mask is a window: where its edge cuts a hatch tick, the tick ends in its
+// OWN end style (butt / round / square / point), shortened so the whole cap
+// fits inside the window and touches its edge — never sliced along the edge
+// (Liam: masked ends must keep the stylized stroke ends). Halos and cut-outs
+// still cut exactly; this runs before them, on whole ticks.
+
+/** A hatch's tick ends, for re-capping where a mask cuts them. */
+export interface TickCaps {
+  widthMM: number
+  cap: StrokeCap
+  /** cap 'point': how far the apex projects past the tick end, mm. */
+  pointMM: number
+  /** cap 'point': the inner end is pointed too (else flat). */
+  pointBoth: boolean
+  /** cap 'point': the tick's own centreline (the def is a filled spindle). */
+  inner: Pt
+  outer: Pt
+}
+
+export function tickCapsOf(layer: Layer): TickCaps | null {
+  if (layer.type !== 'hatch') return null
+  const rInner = Math.min(layer.rInnerMM, layer.rOuterMM)
+  const rOuter = Math.max(layer.rInnerMM, layer.rOuterMM)
+  return {
+    widthMM: layer.strokeMM,
+    cap: layer.cap,
+    pointMM: Math.max(0, layer.capPointMM),
+    pointBoth: layer.pointEnds === 'both',
+    inner: { x: 0, y: -rInner },
+    outer: polarToXY(layer.twistDeg, rOuter),
+  }
+}
+
+/** Re-capped ends sit this far inside the window (clear of fmt's 0.1 µm rounding). */
+const RECAP_INSET_MM = 2e-4
+
+function recapTick(
+  A: Pt,
+  B: Pt,
+  spec: TickCaps,
+  edges: REdge[],
+  masks: MultiPolygon[],
+  tolMM: number,
+  paint: Paint,
+): 'keep' | Shape[] {
+  const L = Math.hypot(B.x - A.x, B.y - A.y)
+  if (L < 1e-9) return 'keep'
+  const ux = (B.x - A.x) / L, uy = (B.y - A.y) / L
+  const hw = spec.widthMM / 2
+  const at = (s: number, side: number): Pt => ({ x: A.x + ux * s - uy * hw * side, y: A.y + uy * s + ux * hw * side })
+  const axialOf = (x: number, y: number) => (x - A.x) * ux + (y - A.y) * uy
+  const capOuter: StrokeCap = spec.cap
+  const capInner: StrokeCap = spec.cap === 'point' && !spec.pointBoth ? 'butt' : spec.cap
+  const apexOf = (s: number, dir: number) =>
+    dir > 0 ? spec.pointMM : Math.min(spec.pointMM, Math.hypot(at(s, 0).x, at(s, 0).y)) // an inner tip never crosses the axis
+
+  // the edges near this tick (its caps' reach included)
+  const reach = Math.max(hw, spec.cap === 'point' ? spec.pointMM : 0) + hw
+  const minX = Math.min(A.x, B.x) - reach, maxX = Math.max(A.x, B.x) + reach
+  const minY = Math.min(A.y, B.y) - reach, maxY = Math.max(A.y, B.y) + reach
+  const near = edges.filter((e) => !(e.minX > maxX || e.maxX < minX || e.minY > maxY || e.maxY < minY))
+
+  // the end's painted shape at centreline position s, facing dir (+1 outer, −1 inner)
+  const endPiece = (s: number, dir: number, cap: StrokeCap): Pt[] => {
+    if (cap === 'point') return [at(s, -1), at(s, 1), at(s + dir * apexOf(s, dir), 0)]
+    if (cap === 'square') return [at(s, -1), at(s, 1), at(s + dir * hw, 1), at(s + dir * hw, -1)]
+    if (cap === 'round') {
+      // circumscribed (radius + tol): the flattened cap the exact clip sees never pokes past it
+      const r = hw + tolMM
+      const c = at(s, 0)
+      const pts: Pt[] = []
+      for (let k = 0; k <= 12; k++) {
+        const a = -Math.PI / 2 + (Math.PI * k) / 12 // from one side, round the end, to the other
+        const along = Math.cos(a) * r * dir, across = Math.sin(a) * r
+        pts.push({ x: c.x + ux * along - uy * across, y: c.y + uy * along + ux * across })
+      }
+      return pts
+    }
+    return [at(s - dir * 1e-3, -1), at(s, -1), at(s, 1), at(s - dir * 1e-3, 1)] // butt: the end edge
+  }
+  const clear = (poly: Pt[]): boolean =>
+    !near.some((e) => clipSegToConvex(e, poly, axialOf) !== null) && !insideAny(poly[0]!.x, poly[0]!.y, masks)
+  /** The furthest position toward dir from `s`, but not past `limit`, whose end fits in the window (null: none). */
+  const fit = (s: number, limit: number, dir: number, cap: StrokeCap, original: boolean): number | null => {
+    // an original end that fits stays exact; a cut end always sits the inset inside
+    // (it can touch the edge at a single point — a star's inner corner — and still test clear)
+    if (clear(endPiece(s, dir, cap))) return original ? s : s - dir * RECAP_INSET_MM
+    const step = Math.max(0.005, hw / 2)
+    let bad = s
+    let good: number | null = null
+    for (let t = s - dir * step; dir > 0 ? t >= limit : t <= limit; t -= dir * step) {
+      if (clear(endPiece(t, dir, cap))) {
+        good = t
+        break
+      }
+      bad = t
+    }
+    if (good === null) return null
+    let ok: number = good
+    for (let k = 0; k < 30; k++) {
+      const mid: number = (ok + bad) / 2
+      if (clear(endPiece(mid, dir, cap))) ok = mid
+      else bad = mid
+    }
+    return ok - dir * RECAP_INSET_MM
+  }
+
+  // where the centreline is inside the window
+  const ts = segCrossings(A.x, A.y, B.x, B.y, masks).sort((p, q) => p - q)
+  const cuts = [0, ...ts.map((t) => t * L), L]
+  const spans: Array<[number, number]> = []
+  for (let k = 0; k + 1 < cuts.length; k++) {
+    const lo = cuts[k]!, hi = cuts[k + 1]!
+    if (hi - lo < 1e-9) continue
+    const m = at((lo + hi) / 2, 0)
+    if (insideAny(m.x, m.y, masks)) continue
+    const last = spans[spans.length - 1]
+    if (last && lo <= last[1] + 1e-9) last[1] = hi
+    else spans.push([lo, hi])
+  }
+  const out: Shape[] = []
+  let untouched = spans.length === 1 && spans[0]![0] === 0 && spans[0]![1] === L
+  for (const [lo, hi] of spans) {
+    const b = fit(hi, lo, 1, capOuter, hi === L)
+    if (b === null) {
+      untouched = false
+      continue
+    }
+    const a = fit(lo, b, -1, capInner, lo === 0)
+    if (a === null) {
+      untouched = false
+      continue
+    }
+    if (a !== lo || b !== hi) untouched = false
+    if (b - a < MIN_PIECE_MM) continue
+    const p = at(a, 0), q = at(b, 0)
+    if (spec.cap !== 'point') {
+      out.push({ kind: 'path', d: `M ${fmt(p.x)} ${fmt(p.y)} L ${fmt(q.x)} ${fmt(q.y)}`, paint })
+      continue
+    }
+    // a spindle, built like the compiled one: outer apex, inner apex or flat base
+    const pt = (v: Pt) => `${fmt(v.x)} ${fmt(v.y)}`
+    const oApex = at(b + apexOf(b, 1), 0)
+    const ring = spec.pointBoth
+      ? [at(a - apexOf(a, -1), 0), at(a, 1), at(b, 1), oApex, at(b, -1), at(a, -1)]
+      : [at(a, 1), at(b, 1), oApex, at(b, -1), at(a, -1)]
+    out.push({ kind: 'path', d: 'M ' + ring.map((v, i) => `${i ? 'L ' : ''}${pt(v)}`).join(' ') + ' Z', paint: fillPaint() })
+  }
+  return untouched ? 'keep' : out
+}
+
+/** Hatch ticks cut by a mask window, re-capped (untouched ticks stay instanced). */
+function recapAtMasks(shapes: Shape[], masks: MultiPolygon[], spec: TickCaps, tolMM: number): Shape[] {
+  const edges = collectRegionEdges(masks)
+  const out: Shape[] = []
+  for (const shape of shapes) {
+    if (shape.kind !== 'instanced') {
+      out.push(shape)
+      continue
+    }
+    // the tick's centreline in the def frame: the (disc-trimmed) line, or the spindle's own axis
+    const line = shape.paint.fill ? null : parseLineDef(shape.def.d)
+    if (!shape.paint.fill && !line) {
+      out.push(shape)
+      continue
+    }
+    const a0 = line ? { x: line.ax, y: line.ay } : spec.inner
+    const b0 = line ? { x: line.bx, y: line.by } : spec.outer
+    const dm = defMatrix(shape.def)
+    const kept: typeof shape.transforms = []
+    const flat: Shape[] = []
+    for (const tr of shape.transforms) {
+      const m = mul(instanceMatrix(tr), dm)
+      const A = apply(m, a0.x, a0.y)
+      const B = apply(m, b0.x, b0.y)
+      const r = recapTick(A, B, spec, edges, masks, tolMM, shape.paint.fill ? strokePaint(spec.widthMM) : shape.paint)
+      if (r === 'keep') kept.push(tr)
+      else flat.push(...r)
+    }
+    if (kept.length === shape.transforms.length) out.push(shape)
+    else if (kept.length > 0) out.push({ ...shape, transforms: kept })
+    out.push(...flat)
+  }
+  return out
+}
+
 export function clipCompiled(
   compiled: CompiledLayer,
-  keepouts: { discs: ClearanceDisc[]; regions: MultiPolygon[] },
+  keepouts: { discs: ClearanceDisc[]; regions: MultiPolygon[]; masks?: MultiPolygon[] },
   tolMM: number,
+  ticks: TickCaps | null = null,
 ): CompiledLayer {
   const { discs } = keepouts
   let regions = keepouts.regions
@@ -1232,6 +1420,10 @@ export function clipCompiled(
 
   if (!hasRegions) return { shapes: discClipped, warnings }
 
+  // ---- phase 1½: hatch ticks cut by a mask window end in their own caps ----
+  const masks = keepouts.masks ?? []
+  const shapes = ticks && masks.length > 0 ? recapAtMasks(discClipped, masks, ticks, tolMM) : discClipped
+
   // ---- phase 2: polygon region clipping ----
   // overlapping regions (two haloed words side by side) are merged first: the
   // exact boundary walk needs disjoint region rings, and a shared crossing
@@ -1242,7 +1434,7 @@ export function clipCompiled(
   const edges = collectRegionEdges(regions)
   const rings = collectRegionRings(regions)
   const out: Shape[] = []
-  for (const shape of discClipped) regionClipShape(shape, regions, edges, rings, band, box, tolMM, out, warnings)
+  for (const shape of shapes) regionClipShape(shape, regions, edges, rings, band, box, tolMM, out, warnings)
   return { shapes: out, warnings }
 }
 

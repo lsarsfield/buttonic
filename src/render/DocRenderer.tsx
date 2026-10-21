@@ -2,7 +2,7 @@ import { memo, useEffect } from 'react'
 import type { ButtonDoc, Layer } from '../model/types'
 import { isLocalFontId } from '../model/types'
 import { layerRelief } from '../model/product'
-import { clipCompiled } from '../geometry/clip'
+import { clipCompiled, tickCapsOf } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import { annulusPathD } from '../geometry/format'
 import { bareInvertRegion, invertsBare, pruneInvertCache } from '../geometry/invert'
@@ -146,6 +146,7 @@ const LayerGroup = memo(
 
     // regions from contributors above, rotated into this layer's local frame
     const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
+    const masks = regions.filter((_, i) => isMaskLayer(keepouts.contributors[i]!.layer))
 
     if (isMaskLayer(layer)) {
       const d = selected ? maskWindowPathD(maskRegion, maskDiscROf(layer, ctx.diameterMM)) : ''
@@ -197,7 +198,7 @@ const LayerGroup = memo(
     const art = own.length > 0 ? { shapes: [...compiled.shapes, ...own], warnings: compiled.warnings } : compiled
     const clipped =
       keepouts.discs.length > 0 || regions.length > 0
-        ? clipCompiled(art, { discs: keepouts.discs, regions }, INTERACTIVE_TOLERANCE_MM)
+        ? clipCompiled(art, { discs: keepouts.discs, regions, masks }, INTERACTIVE_TOLERANCE_MM, tickCapsOf(layer))
         : art
     const shapes = clipped.shapes
 

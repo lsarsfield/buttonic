@@ -17,7 +17,8 @@ import {
   type ButtonDoc,
   type Layer,
 } from '../model/types'
-import { clipCompiled } from './clip'
+import { clipCompiled, tickCapsOf } from './clip'
+import { expandInstanced } from './expand'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from './compile'
 import { bareInvertRegion } from './invert'
 import { castsRegion, clipsAcrossRelief, isMaskLayer, keepoutsAbove, layerKeepoutRegion } from './keepout'
@@ -66,7 +67,8 @@ function clipLayer(layers: Layer[], index: number): Shape[] {
   const compiled = compileLayer(layers[index]!, c)
   const keepouts = keepoutsAbove(layers, index, c)
   const regions = keepouts.contributors.map((k) => rotateMultiPolygon(k.region, k.phaseDeg - layers[index]!.phaseDeg))
-  return clipCompiled(compiled, { discs: keepouts.discs, regions }, c.toleranceMM).shapes
+  const masks = regions.filter((_, i) => isMaskLayer(keepouts.contributors[i]!.layer))
+  return clipCompiled(compiled, { discs: keepouts.discs, regions, masks }, c.toleranceMM, tickCapsOf(layers[index]!)).shapes
 }
 
 /** Total filled area of clipped output (stroked leftovers must not exist here). */
@@ -77,6 +79,32 @@ function filledArea(shapes: Shape[]): number {
     if (s.kind === 'path') a += multiPolygonArea(pathToMultiPolygon(s.d, s.fillRule ?? 'nonzero', EXPORT_TOLERANCE_MM))
   }
   return a
+}
+
+/** Instanced shapes expanded to plain paths. */
+const flatShapes = (shapes: Shape[]): Shape[] => shapes.flatMap((s) => (s.kind === 'instanced' ? expandInstanced(s) : [s]))
+
+/** Engraved area of hatch output: filled pieces, plus stroked butt ticks as length × width. */
+function artArea(shapes: Shape[], strokeMM: number): number {
+  let a = 0
+  for (const s of flatShapes(shapes)) {
+    if (s.kind !== 'path') continue
+    if (s.paint.fill) a += multiPolygonArea(pathToMultiPolygon(s.d, s.fillRule ?? 'nonzero', EXPORT_TOLERANCE_MM))
+    else {
+      const [p, q] = flattenSegs(parsePathData(s.d), 0.001)[0]!.pts
+      a += Math.hypot(q!.x - p!.x, q!.y - p!.y) * strokeMM
+    }
+  }
+  return a
+}
+
+/** Stroked straight ticks of clipped output as [inner, outer] points (anything else fails). */
+function strokedTicks(shapes: Shape[]): { a: { x: number; y: number }; b: { x: number; y: number } }[] {
+  return flatShapes(shapes).map((s) => {
+    expect(s.kind === 'path' && !s.paint.fill).toBe(true)
+    const [p, q] = flattenSegs(parsePathData((s as { d: string }).d), 0.001)[0]!.pts
+    return Math.hypot(p!.x, p!.y) < Math.hypot(q!.x, q!.y) ? { a: p!, b: q! } : { a: q!, b: p! }
+  })
 }
 
 function outputPoints(shapes: Shape[]): { x: number; y: number }[] {
@@ -142,22 +170,23 @@ describe('mask: exact analytic cuts', () => {
   const hatch = (patch: Partial<Parameters<typeof makeHatchLayer>[0]> = {}) =>
     makeHatchLayer({ id: 'h', count: 36, rInnerMM: 4, rOuterMM: 8, strokeMM: 0.2, cap: 'butt', ...patch })
 
-  it('a hatch band masked by a disc keeps only the ticks inside it, cut exactly on the circle', () => {
+  it('a hatch band masked by a disc keeps its ticks inside it, each ending in its own butt end touching the circle', () => {
     const R = 6
-    const layers: Layer[] = [hatch(), discMask('m', R)]
-    const out = clipLayer(layers, 0)
-    // nothing survives outside the window (flattening sits INSIDE the arc)
-    for (const p of outputPoints(out)) expect(Math.hypot(p.x, p.y)).toBeLessThanOrEqual(R + ARC_EPS)
-    const expected = 36 * tickArea(0.2, () => 4, (x) => Math.sqrt(R * R - x * x))
-    expectArea(filledArea(out), expected)
+    const out = strokedTicks(clipLayer([hatch(), discMask('m', R)], 0))
+    expect(out).toHaveLength(36)
+    // the butt end's corners sit ON the window edge (the dot's cubic arcs bulge ≲ARC_EPS)
+    for (const { a, b } of out) {
+      expect(Math.hypot(a.x, a.y)).toBeCloseTo(4, 3)
+      const corner = Math.hypot(Math.hypot(b.x, b.y), 0.1)
+      expect(Math.abs(corner - R)).toBeLessThan(ARC_EPS)
+    }
   })
 
   it('Grow widens the window by exactly the halo', () => {
-    const grown = filledArea(clipLayer([hatch(), discMask('m', 5, { haloMM: 1 })], 0))
-    const plain = filledArea(clipLayer([hatch(), discMask('m2', 6)], 0))
-    // halos may exceed the stated margin by ≲9 µm (chord allowance), never fall short
-    expect(grown).toBeGreaterThanOrEqual(plain)
-    expect(grown - plain).toBeLessThan(36 * 0.2 * 0.009)
+    const grown = artArea(clipLayer([hatch(), discMask('m', 5, { haloMM: 1 })], 0), 0.2)
+    const plain = artArea(clipLayer([hatch(), discMask('m2', 6)], 0), 0.2)
+    // the grown window matches the bigger one to the halo's chord allowance (≲9 µm a tick end)
+    expect(Math.abs(grown - plain)).toBeLessThan(36 * 0.2 * 0.009)
   })
 
   it('a filled layer under a star mask keeps exactly the star', () => {
@@ -252,9 +281,9 @@ describe('mask: phase', () => {
 
   it('only the RELATIVE phase of mask and consumer matters', () => {
     const hatch = (phaseDeg: number) => makeHatchLayer({ id: 'h', count: 40, rInnerMM: 3, rOuterMM: 8, strokeMM: 0.15, phaseDeg })
-    const a = filledArea(clipLayer([hatch(7), star(20)], 0))
-    const b = filledArea(clipLayer([hatch(0), star(13)], 0))
-    const c = filledArea(clipLayer([hatch(0), star(20)], 0))
+    const a = artArea(clipLayer([hatch(7), star(20)], 0), 0.15)
+    const b = artArea(clipLayer([hatch(0), star(13)], 0), 0.15)
+    const c = artArea(clipLayer([hatch(0), star(20)], 0), 0.15)
     expect(a).toBeCloseTo(b, 4)
     expect(Math.abs(a - c)).toBeGreaterThan(1e-3) // ticks land differently on the star's sides
   })
@@ -360,5 +389,78 @@ describe('mask: documents and dies', () => {
     const { svg, warnings } = exportSvg(d)
     expect(warnings.some((w) => /mask has no shape/.test(w))).toBe(true)
     expect(svg).not.toContain('id="layer-hatch"')
+  })
+})
+
+describe('mask: hatch ticks keep their own ends', () => {
+  const sunburst = (patch: Partial<Parameters<typeof makeHatchLayer>[0]> = {}) =>
+    makeHatchLayer({ id: 'sun', count: 80, rInnerMM: 4.1, rOuterMM: 7.85, strokeMM: 0.2, cap: 'butt', ...patch })
+  const diamond = () =>
+    makeCenterLayer({ id: 'win', sourceType: 'star', starPoints: 4, starInner: 0.6, starBulge: 0.25, sizeMM: 17, haloMM: 0, booleanRole: 'mask' })
+  const windowOf = (layers: Layer[]) => {
+    const c = ctx()
+    const regions = keepoutsAbove(layers, 0, c).contributors.map((k) => rotateMultiPolygon(k.region, k.phaseDeg - layers[0]!.phaseDeg))
+    return (x: number, y: number) => !regions.some((r) => pointInMultiPolygon(x, y, r))
+  }
+
+  for (const cap of ['butt', 'round', 'square'] as const) {
+    it(`${cap} ticks a star window cuts end in a ${cap} end, wholly inside it and touching its edge`, () => {
+      const layers: Layer[] = [sunburst({ cap }), diamond()]
+      const out = flatShapes(clipLayer(layers, 0))
+      const inside = windowOf(layers)
+      let recapped = 0
+      for (const s of out) {
+        expect(s.kind === 'path' && !s.paint.fill).toBe(true) // still a stroke with its cap, never a sliced fill
+        if (s.kind !== 'path') continue
+        expect(s.paint.stroke?.cap ?? 'butt').toBe(cap)
+      }
+      for (const { a, b } of strokedTicks(out)) {
+        const L = Math.hypot(b.x - a.x, b.y - a.y)
+        const ux = (b.x - a.x) / L, uy = (b.y - a.y) / L
+        const ext = cap === 'butt' ? 0 : 0.1
+        // the painted end — its cap included — is inside the window…
+        // (sampled densely: a star valley can touch the middle of an end, not just a corner)
+        const ends = cap === 'round'
+          ? Array.from({ length: 61 }, (_, k) => { const t = -Math.PI / 2 + (Math.PI * k) / 60; return { x: b.x + ux * Math.cos(t) * 0.1 - uy * Math.sin(t) * 0.1, y: b.y + uy * Math.cos(t) * 0.1 + ux * Math.sin(t) * 0.1 } })
+          : Array.from({ length: 41 }, (_, k) => { const side = -1 + k / 20; return { x: b.x + ux * ext - uy * 0.1 * side, y: b.y + uy * ext + ux * 0.1 * side } })
+        for (const p of ends) expect(inside(p.x, p.y)).toBe(true)
+        // …and a re-capped end touches the edge: a hair further out, and part of it is outside
+        if (Math.hypot(b.x, b.y) < 7.85 - 1e-3) {
+          recapped++
+          const e = 0.005
+          expect(ends.some((p) => !inside(p.x + ux * e, p.y + uy * e))).toBe(true)
+        }
+      }
+      expect(recapped).toBeGreaterThan(20)
+    })
+  }
+
+  it('pointed ticks end in their point, the tip touching the window edge', () => {
+    const layers: Layer[] = [sunburst({ cap: 'point', capPointMM: 0.4, pointEnds: 'outer' }), diamond()]
+    const out = flatShapes(clipLayer(layers, 0))
+    const inside = windowOf(layers)
+    let tips = 0
+    for (const s of out) {
+      if (s.kind !== 'path') continue
+      expect(s.paint.fill).toBe(true)
+      const pts = flattenSegs(parsePathData(s.d), 0.001)[0]!.pts
+      for (const p of pts) expect(inside(p.x, p.y)).toBe(true)
+      const apex = pts.reduce((m, p) => (Math.hypot(p.x, p.y) > Math.hypot(m.x, m.y) ? p : m))
+      if (Math.hypot(apex.x, apex.y) < 7.85 + 0.4 - 1e-3) {
+        tips++
+        const r = Math.hypot(apex.x, apex.y)
+        expect(inside(apex.x * (1 + 0.003 / r), apex.y * (1 + 0.003 / r))).toBe(false) // the tip is ON the edge
+        expect(pts.length).toBe(5 + 1) // still a spike: flat base, two shoulders, the apex (closed)
+      }
+    }
+    expect(tips).toBeGreaterThan(20)
+  })
+
+  it('ticks the window does not cut stay instanced, untouched', () => {
+    const c = ctx()
+    const layers: Layer[] = [sunburst(), discMask('m', 8.4)]
+    const out = clipLayer(layers, 0)
+    expect(out.some((s) => s.kind === 'instanced')).toBe(true)
+    expect(c).toBeTruthy()
   })
 })

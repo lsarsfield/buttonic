@@ -89,6 +89,15 @@ param, not an error.)
     cap can poke past its centreline's box. NEVER martinez-difference ticks against a
     halo (hangs tens of seconds, mangles edges). Real motifs (curved/multi-loop/
     non-convex filled) still use `safeDifference`.
+    MASKED HATCH ENDS (Liam: "the stroke ends that are masked do not get the stylized
+    stroke ends"): where a MASK window cuts a hatch tick, `recapAtMasks` (phase 1½ of
+    clipCompiled, before the exact region clip; callers pass `masks` + `tickCapsOf`)
+    shortens the tick along its axis until its OWN end — butt edge, round cap
+    (circumscribed by tol), square cap, or point spike — fits inside the window and
+    touches its edge (bisection; cut ends sit `RECAP_INSET_MM` inside), then rebuilds
+    it as a stroke / spindle. Untouched ticks stay instanced. ONLY masks: halos and
+    cut-outs keep the exact cut (Liam rejected a square cut for letter gaps — it
+    interrupted strokes; the original exact look is the reference).
     Halo 'outline' = an exact FILLED ring `dilate(region, haloStrokeMM) \ region`,
     built with the region (worker too), added to the layer's art BEFORE clipping so
     cut-outs/halos above trim it; the stated gap is clear metal. Halos dilate by
