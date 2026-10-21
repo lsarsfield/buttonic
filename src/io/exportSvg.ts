@@ -1,6 +1,6 @@
 import type { ButtonDoc } from '../model/types'
 import { CENTRE_LABELS, centreKindOf, isOpening, LOGO_DISPLAYS, MARKING_NOTES, reliefGroups } from '../model/product'
-import { clipCompiled, squareCutOf } from '../geometry/clip'
+import { clipCompiled } from '../geometry/clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import {
   castsRegion,
@@ -230,7 +230,7 @@ export function exportSvg(doc: ButtonDoc, options: SvgExportOptions = DEFAULT_SV
     const keepouts = keepoutsAbove(doc.layers, index, ctx, doc.logoDisplay)
     const regions = keepouts.contributors.map((c) => rotateMultiPolygon(c.region, c.phaseDeg - layer.phaseDeg))
     if (keepouts.discs.length > 0 || regions.length > 0) {
-      compiled = clipCompiled(compiled, { discs: keepouts.discs, regions }, ctx.toleranceMM, squareCutOf(layer))
+      compiled = clipCompiled(compiled, { discs: keepouts.discs, regions }, ctx.toleranceMM)
     }
     for (const w of compiled.warnings) warnings.push(`${layer.name}: ${w}`)
 
