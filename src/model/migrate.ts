@@ -121,6 +121,15 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
   // v16: open tops say what tack fills the opening — a solid head (the 3D view
   // used to draw an over-deep hollow tube; solid is what most of them are)
   16: (doc) => ({ tack: 'solid', ...doc }),
+  // v17: hatch ticks choose how a cut ends them — exact (what every die had) or square
+  17: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) =>
+      typeof layer === 'object' && layer !== null && (layer as { type?: string }).type === 'hatch'
+        ? { cutEnds: 'exact', minCutMM: 0, ...layer }
+        : layer,
+    ),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

@@ -15,7 +15,7 @@ import {
   safeUnion,
   type MultiPolygon,
 } from './poly'
-import type { CompiledLayer, Shape } from './shapes'
+import type { CompiledLayer, Paint, Shape } from './shapes'
 import { fillPaint } from './shapes'
 import { holdsDisc, linePieces, ringSectorPieces, strokePieces } from './strokePieces'
 
@@ -752,6 +752,7 @@ function filledThinTickClip(
   regions: MultiPolygon[],
   edges: REdge[],
   rings: RegionRing[],
+  square: SquareCut | null = null,
 ): Shape[] | null {
   const d = shape.d
   if (/[CAQSTVHcaqstvh]/.test(d)) return null // curved or shorthand → a motif
@@ -804,8 +805,9 @@ function filledThinTickClip(
   }
   if (cvPos && cvNeg) return null
 
-  // EXACT: cut only what the halo covers, nothing more.
-  const exact = convexDifference(pts, rings, regions)
+  // EXACT: cut only what the halo covers, nothing more (square cutting skips
+  // straight to the swath: every cut end perpendicular to the tick).
+  const exact = square ? null : convexDifference(pts, rings, regions)
   if (exact === 'identity') return [shape] // untouched — the same object
   if (exact !== null) {
     const loopD = (loop: Pt[]) => 'M ' + loop.map((p, i) => `${i ? 'L ' : ''}${fmt(p.x)} ${fmt(p.y)}`).join(' ') + ' Z'
@@ -829,7 +831,7 @@ function filledThinTickClip(
   }
   const out: Shape[] = []
   for (const [lo, hi] of spans) {
-    if (hi - lo < MIN_PIECE_MM) continue // sub-minimum nubs drop
+    if (hi - lo < Math.max(MIN_PIECE_MM, square?.minLenMM ?? 0)) continue // sub-minimum nubs drop
     const kept = clipPolyBand(pts, axialOf, lo, hi) // hi ≈ sMax keeps the point; a buried tip cuts flat
     if (kept.length < 3) continue
     out.push({
@@ -839,6 +841,54 @@ function filledThinTickClip(
     })
   }
   return out
+}
+
+/**
+ * SQUARE cut of a straight stroked tick (a hatch's `cutEnds: 'square'`): the
+ * tick is shortened along its own axis to the spans where its WHOLE painted
+ * width (cap included) is clear of every region, and each span is re-emitted
+ * as a tick with its own cap — so a cut end is always perpendicular to the
+ * tick, never an oblique wedge along a halo or window edge. Never intrudes
+ * (the swath test is conservative). Spans shorter than `minLenMM` (centreline)
+ * drop. null = untouched (keep the original, exact).
+ */
+function squareCutTick(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  paint: Paint,
+  edges: REdge[],
+  regions: MultiPolygon[],
+  minLenMM: number,
+): Shape[] | null {
+  const st = paint.stroke
+  const w = st?.widthMM ?? 0.1
+  const L = Math.hypot(bx - ax, by - ay)
+  if (L < 1e-9) return null
+  const ux = (bx - ax) / L, uy = (by - ay) / L
+  const px = -uy * (w / 2), py = ux * (w / 2)
+  const ext = (st?.cap ?? 'butt') === 'butt' ? 0 : w / 2 // round/square caps reach w/2 past each end
+  const s0 = -ext, s1 = L + ext
+  const at = (s: number, side: number): Pt => ({ x: ax + ux * s + px * side, y: ay + uy * s + py * side })
+  const swath = [at(s0, -1), at(s1, -1), at(s1, 1), at(s0, 1)]
+  const axialOf = (x: number, y: number) => (x - ax) * ux + (y - ay) * uy
+  const spans = swathClearSpans(swath, axialOf, (s) => at(s, 0), s0, s1, edges, regions)
+  if (spans.length === 1 && spans[0]![0] <= s0 + 1e-9 && spans[0]![1] >= s1 - 1e-9) return null
+  const out: Shape[] = []
+  for (const [lo, hi] of spans) {
+    const a = lo + ext, b = hi - ext // the centreline whose painted cap stays inside the span
+    if (b - a < minLenMM) continue
+    const p = at(a, 0), q = at(b, 0)
+    out.push({ kind: 'path', d: `M ${fmt(p.x)} ${fmt(p.y)} L ${fmt(q.x)} ${fmt(q.y)}`, paint })
+  }
+  return out
+}
+
+/** A stroked "M x y L x y" — one straight tick. */
+function straightTick(d: string): [number, number, number, number] | null {
+  const m = d.match(/^\s*M\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*L\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*$/)
+  return m ? [+m[1]!, +m[2]!, +m[3]!, +m[4]!] : null
 }
 
 /** Sutherland–Hodgman clip of a polygon to the slab lo ≤ axial(pt) ≤ hi. */
@@ -1009,6 +1059,7 @@ function regionClipShape(
   tolMM: number,
   out: Shape[],
   warnings: string[],
+  square: SquareCut | null = null,
 ): void {
   switch (shape.kind) {
     case 'line': {
@@ -1019,6 +1070,12 @@ function regionClipShape(
       const reach = ((st?.widthMM ?? 0.1) / 2) * Math.SQRT2 // the painted outline, caps and corners included
       if (!bandOverlaps(band, Math.min(r0, r1, near) - reach, Math.max(r0, r1) + reach)) {
         out.push(shape)
+        return
+      }
+      if (square) {
+        const sq = squareCutTick(shape.x1, shape.y1, shape.x2, shape.y2, shape.paint, edges, regions, square.minLenMM)
+        if (sq === null) out.push(shape)
+        else out.push(...sq)
         return
       }
       // EXACT: the tick's true outline (its cap included) minus the regions —
@@ -1102,7 +1159,7 @@ function regionClipShape(
       if (shape.paint.fill) {
         // Pointed hatch ticks are thin filled spindles; take the exact convex
         // difference instead of martinez (pathologically slow on them).
-        const thin = filledThinTickClip(shape, regions, edges, rings)
+        const thin = filledThinTickClip(shape, regions, edges, rings, square)
         if (thin !== null) {
           for (const t of thin) out.push(t)
           return
@@ -1126,6 +1183,13 @@ function regionClipShape(
           if (kept.length > 0) out.push({ kind: 'path', d: multiPolygonToPathD(kept), fillRule: 'evenodd', paint: shape.paint })
         }
       } else {
+        const tick = square ? straightTick(shape.d) : null
+        if (square && tick) {
+          const sq = squareCutTick(...tick, shape.paint, edges, regions, square.minLenMM)
+          if (sq === null) out.push(shape)
+          else out.push(...sq)
+          return
+        }
         // stroked path (motif strokes, centre strokes, bend centrelines): EXACT —
         // the stroke's true outline (caps + joins, SVG semantics) as convex
         // pieces, each cut by the boundary walk; untouched → the stroke itself
@@ -1150,7 +1214,7 @@ function regionClipShape(
         out.push(shape) // whole instanced band misses every region
         return
       }
-      for (const flat of expandInstanced(shape)) regionClipShape(flat, regions, edges, rings, band, box, tolMM, out, warnings)
+      for (const flat of expandInstanced(shape)) regionClipShape(flat, regions, edges, rings, band, box, tolMM, out, warnings, square)
       return
     }
   }
@@ -1175,10 +1239,26 @@ function radialBandOf(segs: ReturnType<typeof parsePathData>): Band | null {
  * Apply clearance discs (phase 1, unchanged) then polygon regions (phase 2,
  * skipped entirely when none) to a compiled layer.
  */
+/**
+ * Square cutting (hatch `cutEnds: 'square'`): straight ticks cut by a region
+ * are shortened along their own axis instead of cut along its edge, and
+ * fragments shorter than `minLenMM` drop.
+ */
+export interface SquareCut {
+  minLenMM: number
+}
+
+/** A layer's square cutting: a Square hatch drops fragments shorter than its Min length (at least its stroke width). */
+export function squareCutOf(layer: Layer): SquareCut | null {
+  if (layer.type !== 'hatch' || layer.cutEnds !== 'square') return null
+  return { minLenMM: Math.max(MIN_PIECE_MM, layer.strokeMM, Number.isFinite(layer.minCutMM) ? layer.minCutMM : 0) }
+}
+
 export function clipCompiled(
   compiled: CompiledLayer,
   keepouts: { discs: ClearanceDisc[]; regions: MultiPolygon[] },
   tolMM: number,
+  square: SquareCut | null = null,
 ): CompiledLayer {
   const { discs } = keepouts
   let regions = keepouts.regions
@@ -1242,7 +1322,7 @@ export function clipCompiled(
   const edges = collectRegionEdges(regions)
   const rings = collectRegionRings(regions)
   const out: Shape[] = []
-  for (const shape of discClipped) regionClipShape(shape, regions, edges, rings, band, box, tolMM, out, warnings)
+  for (const shape of discClipped) regionClipShape(shape, regions, edges, rings, band, box, tolMM, out, warnings, square)
   return { shapes: out, warnings }
 }
 

@@ -17,7 +17,7 @@ import {
   type ButtonDoc,
   type Layer,
 } from '../model/types'
-import { clipCompiled } from './clip'
+import { clipCompiled, squareCutOf } from './clip'
 import { compileLayer, EXPORT_TOLERANCE_MM, type CompileCtx } from './compile'
 import { bareInvertRegion } from './invert'
 import { castsRegion, clipsAcrossRelief, isMaskLayer, keepoutsAbove, layerKeepoutRegion } from './keepout'
@@ -66,7 +66,7 @@ function clipLayer(layers: Layer[], index: number): Shape[] {
   const compiled = compileLayer(layers[index]!, c)
   const keepouts = keepoutsAbove(layers, index, c)
   const regions = keepouts.contributors.map((k) => rotateMultiPolygon(k.region, k.phaseDeg - layers[index]!.phaseDeg))
-  return clipCompiled(compiled, { discs: keepouts.discs, regions }, c.toleranceMM).shapes
+  return clipCompiled(compiled, { discs: keepouts.discs, regions }, c.toleranceMM, squareCutOf(layers[index]!)).shapes
 }
 
 /** Total filled area of clipped output (stroked leftovers must not exist here). */
@@ -360,5 +360,93 @@ describe('mask: documents and dies', () => {
     const { svg, warnings } = exportSvg(d)
     expect(warnings.some((w) => /mask has no shape/.test(w))).toBe(true)
     expect(svg).not.toContain('id="layer-hatch"')
+  })
+})
+
+describe('hatch cut ends: square', () => {
+  const sunburst = (patch: Partial<Parameters<typeof makeHatchLayer>[0]> = {}) =>
+    makeHatchLayer({ id: 'sun', count: 80, rInnerMM: 4.1, rOuterMM: 7.85, strokeMM: 0.2, cap: 'butt', cutEnds: 'square', ...patch })
+  const diamond = () =>
+    makeCenterLayer({ id: 'win', sourceType: 'star', starPoints: 4, starInner: 0.6, starBulge: 0.25, sizeMM: 17, haloMM: 0, booleanRole: 'mask' })
+  const regionsFor = (layers: Layer[], index: number) => {
+    const c = ctx()
+    return keepoutsAbove(layers, index, c).contributors.map((k) => rotateMultiPolygon(k.region, k.phaseDeg - layers[index]!.phaseDeg))
+  }
+  const ticks = (shapes: Shape[]) =>
+    shapes.map((s) => {
+      expect(s.kind).toBe('path')
+      if (s.kind !== 'path') throw new Error('not a path')
+      expect(s.paint.fill).toBe(false) // still a stroked tick, never an oblique filled wedge
+      const m = s.d.match(/^M (-?[\d.]+) (-?[\d.]+) L (-?[\d.]+) (-?[\d.]+)$/)!
+      expect(m).not.toBeNull()
+      return { a: { x: +m[1]!, y: +m[2]! }, b: { x: +m[3]!, y: +m[4]! }, d: s.d }
+    })
+
+  it('a window cuts each tick square: radial, its whole painted width inside the window, ending at the edge', () => {
+    const layers: Layer[] = [sunburst(), diamond()]
+    const out = ticks(clipLayer(layers, 0))
+    const regions = regionsFor(layers, 0)
+    const inside = (x: number, y: number) => !regions.some((r) => pointInMultiPolygon(x, y, r))
+    let cut = 0
+    for (const { a, b } of out) {
+      const L = Math.hypot(b.x - a.x, b.y - a.y)
+      expect(L).toBeGreaterThanOrEqual(0.2 - 1e-6) // nothing shorter than the stroke is wide
+      expect(Math.abs(a.x * b.y - a.y * b.x) / L).toBeLessThan(1e-3) // still on its radial axis
+      const ux = (b.x - a.x) / L, uy = (b.y - a.y) / L
+      const px = -uy * 0.1, py = ux * 0.1
+      // (inset 0.5 µm: a cut end lands ON the window edge, to fmt's 0.1 µm rounding)
+      const inset = 5e-4
+      for (let i = 0; i <= 20; i++) {
+        const t = inset + (i / 20) * (L - 2 * inset)
+        for (const side of [-0.995, 0, 0.995]) expect(inside(a.x + ux * t + px * side, a.y + uy * t + py * side)).toBe(true)
+      }
+      // a shortened outer end stops AT the window: a hair further and its end edge crosses it
+      if (Math.hypot(b.x, b.y) < 7.85 - 1e-3) {
+        cut++
+        const e = 0.01
+        const beyond = [-1, 0, 1].some((side) => !inside(b.x + ux * e + px * side, b.y + uy * e + py * side))
+        expect(beyond).toBe(true)
+      }
+    }
+    expect(cut).toBeGreaterThan(20)
+  })
+
+  it('ticks the cut misses are kept exactly as compiled', () => {
+    const exact = clipLayer([sunburst({ cutEnds: 'exact' }), diamond()], 0)
+    const square = ticks(clipLayer([sunburst(), diamond()], 0))
+    const untouchedExact = exact.filter((s) => s.kind === 'path' && !s.paint.fill).map((s) => (s as { d: string }).d)
+    expect(untouchedExact.length).toBeGreaterThan(0)
+    for (const d of untouchedExact) expect(square.map((t) => t.d)).toContain(d)
+  })
+
+  it('Min length drops short fragments; never below the stroke width', () => {
+    // a disc window of radius 4.4 leaves each tick a ~0.3 mm stub
+    const stubs = (minCutMM: number) => clipLayer([sunburst({ minCutMM }), discMask('win', 4.4)], 0)
+    const kept = ticks(stubs(0))
+    expect(kept).toHaveLength(80)
+    for (const { a, b } of kept) expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeGreaterThan(0.25)
+    expect(stubs(0.5)).toHaveLength(0)
+    expect(squareCutOf(sunburst({ minCutMM: 0.05 }))!.minLenMM).toBe(0.2)
+    expect(squareCutOf(sunburst({ cutEnds: 'exact' }))).toBeNull()
+  })
+
+  it('pointed ticks cut square too (flat across the spindle, never along the edge)', () => {
+    const out = clipLayer([sunburst({ cap: 'point' }), diamond()], 0)
+    expect(out.length).toBeGreaterThan(0)
+    for (const s of out) expect(s.kind === 'path' && s.paint.fill).toBe(true)
+  })
+
+  it('v16 documents: every hatch keeps its exact cut', () => {
+    const doc = { ...makeBlankDoc(), layers: [sunburst()] }
+    const raw = JSON.parse(stringifyDoc(doc))
+    raw.version = 16
+    delete raw.layers[0].cutEnds
+    delete raw.layers[0].minCutMM
+    const back = parseDoc(JSON.stringify(raw))
+    expect(back.ok).toBe(true)
+    if (back.ok) {
+      expect(back.doc.version).toBe(DOC_VERSION)
+      expect(back.doc.layers[0]).toMatchObject({ cutEnds: 'exact', minCutMM: 0 })
+    }
   })
 })

@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 16
+export const DOC_VERSION = 17
 
 /**
  * How a content layer combines with the layers BELOW it (paint order):
@@ -31,6 +31,8 @@ export type StrokeCap = SvgStrokeCap | 'point'
 export type StrokeJoin = 'miter' | 'round' | 'bevel'
 /** Which end(s) of a pointed hatch tick taper to a point. */
 export type PointEnds = 'outer' | 'both'
+/** How a hatch tick ends where something above cuts it: exactly along the cut, or square across the tick. */
+export type CutEnds = 'exact' | 'square'
 /** Halo appearance: clear the pattern only, or also engrave the halo boundary. */
 export type HaloMode = 'clear' | 'outline'
 
@@ -178,6 +180,15 @@ export interface HatchLayer extends LayerBase {
   sweepDeg: number
   /** Number of evenly-spaced copies of the arc around the axis (symmetric fills). */
   repeats: number
+  /**
+   * Where a halo, cut-out or mask above cuts a tick: 'exact' follows the cut's
+   * edge (oblique edges cut obliquely); 'square' shortens the tick along its
+   * own axis so every cut end is square, dropping fragments shorter than the
+   * stroke is wide.
+   */
+  cutEnds: CutEnds
+  /** Square cutting: drop cut fragments shorter than this (mm; never below the stroke width). */
+  minCutMM: number
 }
 
 export type MotifSource =
@@ -389,6 +400,8 @@ export function makeHatchLayer(patch: Partial<HatchLayer> = {}): HatchLayer {
     pointEnds: 'outer',
     sweepDeg: 360,
     repeats: 1,
+    cutEnds: 'exact',
+    minCutMM: 0,
     ...patch,
   }
 }

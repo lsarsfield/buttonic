@@ -149,6 +149,29 @@ export function HatchPanel({ layer }: { layer: HatchLayer }) {
             />
           </>
         )}
+        <SegmentedControl
+          label="Cut ends"
+          value={layer.cutEnds}
+          options={[
+            { value: 'exact', label: 'Exact', title: 'A tick cut by a gap, cut-out or window ends exactly along its edge' },
+            { value: 'square', label: 'Square', title: 'A cut tick stops short with a square end; fragments shorter than the stroke is wide drop' },
+          ]}
+          onChange={(cutEnds) => update({ cutEnds })}
+        />
+        {layer.cutEnds === 'square' && (
+          <>
+            <NumberField
+              label="Min length"
+              value={Math.max(layer.minCutMM, layer.strokeMM)}
+              min={0}
+              max={3}
+              step={0.05}
+              unit="mm"
+              onChange={(minCutMM) => update({ minCutMM })}
+            />
+            <div className="readout">Cut ticks shorter than this drop (never shorter than the stroke is wide).</div>
+          </>
+        )}
       </div>
     </>
   )

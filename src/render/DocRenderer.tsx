@@ -2,7 +2,7 @@ import { memo, useEffect } from 'react'
 import type { ButtonDoc, Layer } from '../model/types'
 import { isLocalFontId } from '../model/types'
 import { layerRelief } from '../model/product'
-import { clipCompiled } from '../geometry/clip'
+import { clipCompiled, squareCutOf } from '../geometry/clip'
 import { compileLayer, INTERACTIVE_TOLERANCE_MM, type CompileCtx } from '../geometry/compile'
 import { annulusPathD } from '../geometry/format'
 import { bareInvertRegion, invertsBare, pruneInvertCache } from '../geometry/invert'
@@ -197,7 +197,7 @@ const LayerGroup = memo(
     const art = own.length > 0 ? { shapes: [...compiled.shapes, ...own], warnings: compiled.warnings } : compiled
     const clipped =
       keepouts.discs.length > 0 || regions.length > 0
-        ? clipCompiled(art, { discs: keepouts.discs, regions }, INTERACTIVE_TOLERANCE_MM)
+        ? clipCompiled(art, { discs: keepouts.discs, regions }, INTERACTIVE_TOLERANCE_MM, squareCutOf(layer))
         : art
     const shapes = clipped.shapes
 

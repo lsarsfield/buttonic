@@ -29,7 +29,7 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **16**), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **17**), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
   `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
   v8 centre `motifId` (built-in motif as a third centre source, inert unless
@@ -89,6 +89,13 @@ param, not an error.)
     cap can poke past its centreline's box. NEVER martinez-difference ticks against a
     halo (hangs tens of seconds, mangles edges). Real motifs (curved/multi-loop/
     non-convex filled) still use `safeDifference`.
+    SQUARE CUT ENDS (v17, hatch `cutEnds` exact|square + `minCutMM`; migrates to exact):
+    Liam found exact oblique cuts ugly where a star window / letter halos cut a
+    sunburst ("cut off in an unpleasant way"). Square = `squareCutTick`: the tick is
+    shortened along its OWN axis to the spans whose whole painted width is clear
+    (`swathClearSpans`, conservative) and re-emitted as a stroked tick with its own
+    cap; fragments under max(stroke, minCutMM) drop. Pointed ticks take the swath
+    fallback (flat across). Opt-in per hatch — exact stays the default and the goldens.
     Halo 'outline' = an exact FILLED ring `dilate(region, haloStrokeMM) \ region`,
     built with the region (worker too), added to the layer's art BEFORE clipping so
     cut-outs/halos above trim it; the stated gap is clear metal. Halos dilate by
