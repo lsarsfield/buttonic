@@ -86,6 +86,16 @@ function coerceBooleanRole(layer: Layer): Layer {
   return { ...layer, booleanRole: 'draw' }
 }
 
+/** Pair kerning degrades softly: a malformed table is empty, non-numeric entries drop. */
+function coerceKernPairs(layer: Layer): Layer {
+  if (layer.type !== 'ringText') return layer
+  const raw: unknown = layer.kernPairsMM
+  if (isObj(raw) && Object.values(raw).every(isNum)) return layer
+  const clean: Record<string, number> = {}
+  if (isObj(raw)) for (const [k, v] of Object.entries(raw)) if (isNum(v)) clean[k] = v
+  return { ...layer, kernPairsMM: clean }
+}
+
 function checkAsset(id: string, value: unknown): string | null {
   if (!isObj(value)) return `asset "${id}" is not an object`
   if (value.kind !== 'svg' && value.kind !== 'font') return `asset "${id}" has an unknown kind`
@@ -158,7 +168,7 @@ export function validateDoc(value: unknown): ValidationResult {
       // product options degrade softly (a newer app's value → a sane default)
       ...productOptions(value),
       holeDiameterMM: value.holeDiameterMM,
-      layers: (value.layers as Layer[]).map(coerceBooleanRole),
+      layers: (value.layers as Layer[]).map(coerceBooleanRole).map(coerceKernPairs),
       assets: assets as Record<string, Asset>,
       localFonts: localFonts as Record<string, LocalFontRef>,
     },

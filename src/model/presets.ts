@@ -180,7 +180,7 @@ export function presetGroovy(): ButtonDoc {
       {
         id: 'groovy-text', type: 'ringText', name: 'Groovy text', visible: true, phaseDeg: 0, relief: 'inherit',
         text: 'GROOVY', fontId: 'bebas', sizeMM: 1.6, radiusMM: 7.1, anchorDeg: 0, anchorAlign: 'center',
-        letterSpacingMM: 0.3, direction: 'outward', mode: 'arc', useKerning: true, repeats: 2,
+        letterSpacingMM: 0.3, direction: 'outward', mode: 'arc', useKerning: true, kernPairsMM: {}, repeats: 2,
         dividerSource: { kind: 'builtin', motifId: 'heart' }, dividerSizeMM: 1.0, dividerStrokeMM: 0.12,
         booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1, invertOverBare: false,
       },
@@ -233,7 +233,7 @@ export function presetOldBook(): ButtonDoc {
       {
         id: 'oldbook-text', type: 'ringText', name: 'Ex libris', visible: true, phaseDeg: 0, relief: 'inherit',
         text: 'EX LIBRIS', fontId: 'garamond', sizeMM: 1.5, radiusMM: 7.1, anchorDeg: 0, anchorAlign: 'center',
-        letterSpacingMM: 0.2, direction: 'outward', mode: 'arc', useKerning: true, repeats: 2,
+        letterSpacingMM: 0.2, direction: 'outward', mode: 'arc', useKerning: true, kernPairsMM: {}, repeats: 2,
         dividerSource: { kind: 'builtin', motifId: 'fleuron' }, dividerSizeMM: 0.9, dividerStrokeMM: 0.12,
         booleanRole: 'draw', haloMM: 0, haloMode: 'clear', haloStrokeMM: 0.1, invertOverBare: false,
       },

@@ -125,6 +125,15 @@ export const migrations: Record<number, (doc: Record<string, unknown>) => Record
   // hatch cuts exactly). The number stays so files saved meanwhile still open;
   // their leftover `cutEnds` / `minCutMM` fields are inert.
   17: (doc) => doc,
+  // v18: ring text gains manual pair kerning (none yet)
+  18: (doc) => ({
+    ...doc,
+    layers: (Array.isArray(doc.layers) ? doc.layers : []).map((layer) =>
+      typeof layer === 'object' && layer !== null && (layer as { type?: string }).type === 'ringText'
+        ? { kernPairsMM: {}, ...layer }
+        : layer,
+    ),
+  }),
 }
 
 export function migrateDoc(raw: Record<string, unknown>): Record<string, unknown> {

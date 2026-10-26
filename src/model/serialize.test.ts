@@ -361,7 +361,7 @@ describe('schema v17: the withdrawn square cut ends', () => {
   it('v16 documents step to v17 unchanged; v17 files with the leftover hatch fields still open', () => {
     const v16 = { ...makeBlankDoc(), version: 16, layers: [makeHatchLayer({ id: 'h' })] }
     const r = parseDoc(JSON.stringify(v16))
-    expect(r.ok && r.doc.version).toBe(17)
+    expect(r.ok && r.doc.version).toBe(DOC_VERSION)
     expect(r.ok && r.doc.layers).toEqual(v16.layers)
     const saved = { ...v16, version: 17, layers: [{ ...makeHatchLayer({ id: 'h' }), cutEnds: 'square', minCutMM: 0.45 }] }
     expect(parseDoc(JSON.stringify(saved)).ok).toBe(true)

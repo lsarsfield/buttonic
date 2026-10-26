@@ -14,7 +14,7 @@ export type AssetId = string
 export type LayerId = string
 export type FontId = string
 
-export const DOC_VERSION = 17
+export const DOC_VERSION = 18
 
 /**
  * How a content layer combines with the layers BELOW it (paint order):
@@ -234,6 +234,12 @@ export interface RingTextLayer extends LayerBase {
   /** arc = classic per-glyph placement (coins); warp = glyph outlines bent through the polar warp. */
   mode: 'arc' | 'warp'
   useKerning: boolean
+  /**
+   * Manual kerning: extra space between specific letter pairs, mm, keyed by the
+   * two characters ("IE"); added to letter-spacing and the font's own kerning,
+   * wherever the pair occurs. Negative tightens.
+   */
+  kernPairsMM: Record<string, number>
   /** The whole text run placed this many times at exact 360/N spacing (symmetric layouts). */
   repeats: number
   /** Motif rendered at the midpoints between runs (null = none). */
@@ -438,6 +444,7 @@ export function makeRingTextLayer(patch: Partial<RingTextLayer> = {}): RingTextL
     direction: 'outward',
     mode: 'arc',
     useKerning: true,
+    kernPairsMM: {},
     repeats: 1,
     dividerSource: null,
     dividerSizeMM: 0.8,

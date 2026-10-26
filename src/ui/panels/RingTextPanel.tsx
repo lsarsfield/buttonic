@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import type { RingTextLayer } from '../../model/types'
+import { textPairs } from '../../geometry/ringText'
 import { getBuiltinMotif } from '../../geometry/motifs/builtins'
 import { useEngraver } from '../../state/store'
 import { FontPicker } from '../controls/FontPicker'
@@ -14,6 +16,14 @@ export function RingTextPanel({ layer }: { layer: RingTextLayer }) {
   const updateLayer = useEngraver((s) => s.updateLayer)
   const maxR = useEngraver((s) => s.doc.diameterMM / 2)
   const update = (patch: Partial<RingTextLayer>) => updateLayer(layer.id, patch)
+  const kerned = Object.values(layer.kernPairsMM ?? {}).some((v) => v !== 0)
+  const [showPairs, setShowPairs] = useState(kerned)
+  const setPair = (pair: string, mm: number) => {
+    const next = { ...(layer.kernPairsMM ?? {}) }
+    if (mm === 0) delete next[pair]
+    else next[pair] = mm
+    update({ kernPairsMM: next })
+  }
 
   return (
     <>
@@ -51,6 +61,26 @@ export function RingTextPanel({ layer }: { layer: RingTextLayer }) {
           unit="mm"
           onChange={(letterSpacingMM) => update({ letterSpacingMM })}
         />
+        <Toggle label="Pair kerning" value={showPairs || kerned} onChange={setShowPairs} />
+        {(showPairs || kerned) && (
+          <>
+            {textPairs(layer.text).map((pair) => (
+              <NumberField
+                key={pair}
+                label={Array.from(pair, (c) => (c === ' ' ? '␣' : c)).join(' ')}
+                value={layer.kernPairsMM?.[pair] ?? 0}
+                min={-2}
+                max={2}
+                step={0.01}
+                unit="mm"
+                onChange={(mm) => setPair(pair, mm)}
+              />
+            ))}
+            <div className="readout">
+              Extra space between each pair, on top of Spacing; − tightens. Applies wherever the pair occurs.
+            </div>
+          </>
+        )}
       </div>
       <div className="field-group">
         <NumberField

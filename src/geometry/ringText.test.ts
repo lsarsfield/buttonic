@@ -5,7 +5,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { makeCenterLayer, makeRingTextLayer } from '../model/types'
 import { compileCenter } from './center'
 import { RAD2DEG } from './polar'
-import { compileRingText, ringTextArcDeg } from './ringText'
+import { compileRingText, ringTextArcDeg, textPairs } from './ringText'
+import { parseDoc, stringifyDoc } from '../model/serialize'
+import { makeBlankDoc } from '../model/types'
+import { pathToMultiPolygon, multiPolygonArea } from './poly'
 
 let garamond: opentype.Font
 let cinzel: opentype.Font
@@ -256,5 +259,60 @@ describe('centre monogram', () => {
     )
     const s = out.shapes[0]!
     if (s.kind === 'path') expect(s.paint.stroke?.widthMM).toBe(0.09)
+  })
+})
+
+describe('pair kerning', () => {
+  const base = { text: 'LIET', sizeMM: 3, radiusMM: 5, letterSpacingMM: 0.2, useKerning: false }
+
+  it('adds exactly its mm to the run, once per occurrence of the pair', () => {
+    const plain = ringTextArcDeg(makeRingTextLayer(base), garamond)
+    const ie = ringTextArcDeg(makeRingTextLayer({ ...base, kernPairsMM: { IE: -0.15 } }), garamond)
+    expect(ie - plain).toBeCloseTo((-0.15 / 5) * RAD2DEG, 9)
+    // a pair the text doesn't contain changes nothing; "ANNA" has AN, NN and NA once each
+    expect(ringTextArcDeg(makeRingTextLayer({ ...base, kernPairsMM: { EI: 1 } }), garamond)).toBeCloseTo(plain, 12)
+    const anna = { ...base, text: 'NANA' }
+    const twice = ringTextArcDeg(makeRingTextLayer({ ...anna, kernPairsMM: { NA: 0.1 } }), garamond) - ringTextArcDeg(makeRingTextLayer(anna), garamond)
+    expect(twice).toBeCloseTo(((2 * 0.1) / 5) * RAD2DEG, 9) // N-A occurs twice
+  })
+
+  it('moves only the glyphs after the pair: the outline before it is untouched', () => {
+    const left = (kern: Record<string, number>) =>
+      compileRingText(makeRingTextLayer({ ...base, text: 'LI', anchorAlign: 'start', kernPairsMM: kern }), garamond)
+    const right = (kern: Record<string, number>) =>
+      compileRingText(makeRingTextLayer({ ...base, text: 'LIET', anchorAlign: 'start', kernPairsMM: kern }), garamond)
+    const area = (c: ReturnType<typeof compileRingText>) =>
+      c.shapes.reduce((a, s) => a + (s.kind === 'path' ? multiPolygonArea(pathToMultiPolygon(s.d, 'nonzero', 0.002)) : 0), 0)
+    // kerning IE leaves the glyphs before it identical (start-anchored: L and I don't move)
+    expect(area(left({ IE: -0.3 }))).toBeCloseTo(area(left({})), 9)
+    expect(area(right({ IE: -0.3 }))).toBeCloseTo(area(right({})), 4) // same ink, only moved
+    const d0 = (right({}).shapes[0] as { d: string }).d
+    const d1 = (right({ IE: -0.3 }).shapes[0] as { d: string }).d
+    expect(d1).not.toBe(d0)
+    expect(d1.startsWith(d0.slice(0, 40))).toBe(true) // L is laid first, unmoved
+  })
+
+  it('lists each adjacent pair once, in order', () => {
+    expect(textPairs('LIET')).toEqual(['LI', 'IE', 'ET'])
+    expect(textPairs('NANA')).toEqual(['NA', 'AN'])
+    expect(textPairs('A')).toEqual([])
+  })
+
+  it('schema: v17 ring text gets an empty table; malformed tables degrade, never reject', () => {
+    const doc = { ...makeBlankDoc(), layers: [makeRingTextLayer({ id: 't', kernPairsMM: { IE: -0.1 } })] }
+    const rt = parseDoc(stringifyDoc(doc))
+    expect(rt.ok && rt.doc).toEqual(doc)
+    const v17 = JSON.parse(stringifyDoc(doc))
+    v17.version = 17
+    delete v17.layers[0].kernPairsMM
+    const m = parseDoc(JSON.stringify(v17))
+    expect(m.ok && (m.doc.layers[0] as { kernPairsMM: unknown }).kernPairsMM).toEqual({})
+    const bad = JSON.parse(stringifyDoc(doc))
+    bad.layers[0].kernPairsMM = { IE: 'tight', ET: 0.05 }
+    const b = parseDoc(JSON.stringify(bad))
+    expect(b.ok && (b.doc.layers[0] as { kernPairsMM: unknown }).kernPairsMM).toEqual({ ET: 0.05 })
+    bad.layers[0].kernPairsMM = 'nope'
+    const c = parseDoc(JSON.stringify(bad))
+    expect(c.ok && (c.doc.layers[0] as { kernPairsMM: unknown }).kernPairsMM).toEqual({})
   })
 })

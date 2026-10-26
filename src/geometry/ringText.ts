@@ -1,4 +1,4 @@
-import type { Font } from 'opentype.js'
+import type { Font, Glyph } from 'opentype.js'
 import type { RingTextLayer } from '../model/types'
 import { flattenSegs } from './flatten'
 import { glyphPathD, opentypePathToSegs } from './glyphs'
@@ -48,7 +48,7 @@ export function compileRingText(
   const gapMM = glyphs.map((g, i) => {
     if (i === glyphs.length - 1) return 0
     const kern = layer.useKerning ? font.getKerningValue(g, glyphs[i + 1]!) * scale : 0
-    return kern + layer.letterSpacingMM
+    return kern + layer.letterSpacingMM + pairKernMM(layer, g, glyphs[i + 1]!)
   })
 
   const angleOf = (mm: number) => (mm / r) * RAD2DEG
@@ -188,6 +188,24 @@ function compileDividers(
   }
 }
 
+/** The text's adjacent letter pairs, in order, each once ("LIET" → LI, IE, ET). */
+export function textPairs(text: string): string[] {
+  const chars = Array.from(text)
+  const out: string[] = []
+  for (let i = 0; i + 1 < chars.length; i++) {
+    const p = chars[i]! + chars[i + 1]!
+    if (!out.includes(p)) out.push(p)
+  }
+  return out
+}
+
+/** Manual kerning between two glyphs, mm, by their characters (a ligature glyph has none). */
+function pairKernMM(layer: RingTextLayer, a: Glyph, b: Glyph): number {
+  const table = layer.kernPairsMM
+  if (!table || a.unicode === undefined || b.unicode === undefined) return 0
+  return table[String.fromCodePoint(a.unicode) + String.fromCodePoint(b.unicode)] ?? 0
+}
+
 /** Layout metadata used by tests and (later) warp-mode text. */
 export function ringTextArcDeg(layer: RingTextLayer, font: Font): number {
   const scale = layer.sizeMM / font.unitsPerEm
@@ -196,7 +214,7 @@ export function ringTextArcDeg(layer: RingTextLayer, font: Font): number {
   for (let i = 0; i < glyphs.length; i++) {
     mm += (glyphs[i]!.advanceWidth ?? 0) * scale
     if (i < glyphs.length - 1) {
-      mm += layer.letterSpacingMM
+      mm += layer.letterSpacingMM + pairKernMM(layer, glyphs[i]!, glyphs[i + 1]!)
       if (layer.useKerning) mm += font.getKerningValue(glyphs[i]!, glyphs[i + 1]!) * scale
     }
   }

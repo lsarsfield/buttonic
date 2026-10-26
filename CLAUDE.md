@@ -29,7 +29,7 @@ param, not an error.)
 
 ## Architecture map
 
-- `src/model/` — doc schema (`types.ts`, DOC_VERSION **17**; v17 is a no-op — a withdrawn hatch "square cut ends" option, Liam preferred the exact cut; files from it carry inert `cutEnds`/`minCutMM`), sequential `migrate.ts`
+- `src/model/` — doc schema (`types.ts`, DOC_VERSION **18**; v18 = ring-text `kernPairsMM` (manual pair kerning, keyed by the two characters, "IE" → mm, added to letter-spacing + font kerning; panel lists the text's pairs; validate drops non-numeric entries); v17 is a no-op — a withdrawn hatch "square cut ends" option, Liam preferred the exact cut; files from it carry inert `cutEnds`/`minCutMM`), sequential `migrate.ts`
   (v2 localFonts, v3 ring-text symmetry, v4 boolean roles/halos, v5 partial-arc hatch
   `sweepDeg`/`repeats`, v6 stroke `cap`/`join`, v7 pointed-hatch `capPointMM`/`pointEnds`,
   v8 centre `motifId` (built-in motif as a third centre source, inert unless
