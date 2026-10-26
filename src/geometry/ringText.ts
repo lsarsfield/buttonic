@@ -34,9 +34,11 @@ export function compileRingText(
   const r = Math.max(0.1, layer.radiusMM)
   const dir = layer.direction === 'outward' ? 1 : -1
 
+  const spread = layer.anchorAlign === 'spread'
   if (!font) {
     // dividers are font-independent; without metrics they assume centred runs
-    compileDividers(layer, repeats, r, dir, 0, getSvgAsset, shapes, warnings)
+    // (spread: one between every letter)
+    compileDividers(layer, spread ? Array.from(layer.text).length * repeats : repeats, r, dir, 0, getSvgAsset, shapes, warnings)
     warnings.push('Font unavailable — text not rendered (loading, or a missing local font).')
     return { shapes, warnings }
   }
@@ -64,6 +66,11 @@ export function compileRingText(
       : layer.anchorAlign === 'end'
         ? (-dir * totalArc) / 2
         : 0
+  if (spread) {
+    compileDividers(layer, glyphs.length * repeats, r, dir, 0, getSvgAsset, shapes, warnings)
+    if (glyphs.length > 0) compileSpread(layer, glyphs, advanceMM, r, dir, repeats, toleranceMM, shapes, warnings)
+    return { shapes, warnings }
+  }
   compileDividers(layer, repeats, r, dir, alignShift, getSvgAsset, shapes, warnings)
   if (glyphs.length === 0) return { shapes, warnings }
 
@@ -90,6 +97,9 @@ export function compileRingText(
         break
       case 'end':
         cursor = anchor - dir * totalArc
+        break
+      case 'spread': // compiled by compileSpread above
+        cursor = anchor
         break
     }
 
@@ -124,6 +134,50 @@ export function compileRingText(
 
   if (parts.length > 0) shapes.push({ kind: 'path', d: parts.join(' '), paint: fillPaint() })
   return { shapes, warnings }
+}
+
+/**
+ * Spread: every letter of every run centred at exact k·360/N from the anchor
+ * (N = letters × repeats) — four letters land on the quarters, whatever their
+ * widths. Letter-spacing and kerning don't apply; each glyph is placed alone
+ * (arc: rotated tangent; warp: its own outline bent through the baseline warp).
+ */
+function compileSpread(
+  layer: RingTextLayer,
+  glyphs: Glyph[],
+  advanceMM: number[],
+  r: number,
+  dir: number,
+  repeats: number,
+  toleranceMM: number,
+  shapes: Shape[],
+  warnings: string[],
+): void {
+  const slots = glyphs.length * repeats
+  const step = 360 / slots
+  const angleOf = (mm: number) => (mm / r) * RAD2DEG
+  if (advanceMM.some((a) => angleOf(a) > step)) warnings.push('Spread letters are wider than their share of the circle — they overlap.')
+  if (layer.sizeMM > layer.radiusMM) warnings.push('Text size exceeds its radius — glyphs will collide.')
+  const parts: string[] = []
+  for (let run = 0; run < repeats; run++) {
+    for (let i = 0; i < glyphs.length; i++) {
+      // exact multiples — never accumulated
+      const thetaCenter = layer.anchorDeg + dir * (((run * glyphs.length + i) * 360) / slots)
+      const glyph = glyphs[i]!
+      let d: string
+      if (layer.mode === 'warp') {
+        const warpFn = baselineWarp(r, thetaCenter - (dir * angleOf(advanceMM[i]!)) / 2, layer.direction)
+        const segs = opentypePathToSegs(glyph.getPath(0, 0, layer.sizeMM))
+        d = subPathsToD(warpSubPaths(flattenSegs(segs, toleranceMM), warpFn, toleranceMM))
+      } else {
+        const pos = polarToXY(thetaCenter, r)
+        const path = glyph.getPath(-advanceMM[i]! / 2, 0, layer.sizeMM)
+        d = glyphPathD(path, rotateThenTranslate(thetaCenter + (dir === 1 ? 0 : 180), pos.x, pos.y))
+      }
+      if (d.length > 0) parts.push(d)
+    }
+  }
+  if (parts.length > 0) shapes.push({ kind: 'path', d: parts.join(' '), paint: fillPaint() })
 }
 
 /**

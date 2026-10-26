@@ -86,6 +86,12 @@ function coerceBooleanRole(layer: Layer): Layer {
   return { ...layer, booleanRole: 'draw' }
 }
 
+/** An unknown ring-text alignment (e.g. from a newer app) centres the run. */
+function coerceAnchorAlign(layer: Layer): Layer {
+  if (layer.type !== 'ringText' || ['start', 'center', 'end', 'spread'].includes(layer.anchorAlign)) return layer
+  return { ...layer, anchorAlign: 'center' }
+}
+
 /** Pair kerning degrades softly: a malformed table is empty, non-numeric entries drop. */
 function coerceKernPairs(layer: Layer): Layer {
   if (layer.type !== 'ringText') return layer
@@ -168,7 +174,7 @@ export function validateDoc(value: unknown): ValidationResult {
       // product options degrade softly (a newer app's value → a sane default)
       ...productOptions(value),
       holeDiameterMM: value.holeDiameterMM,
-      layers: (value.layers as Layer[]).map(coerceBooleanRole).map(coerceKernPairs),
+      layers: (value.layers as Layer[]).map(coerceBooleanRole).map(coerceKernPairs).map(coerceAnchorAlign),
       assets: assets as Record<string, Asset>,
       localFonts: localFonts as Record<string, LocalFontRef>,
     },

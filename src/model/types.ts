@@ -227,7 +227,8 @@ export interface RingTextLayer extends LayerBase {
   /** Baseline radius. */
   radiusMM: number
   anchorDeg: number
-  anchorAlign: 'start' | 'center' | 'end'
+  /** spread = every letter centred at exact k·360/N (N = letters × repeats); spacing + kerning ignored. */
+  anchorAlign: 'start' | 'center' | 'end' | 'spread'
   letterSpacingMM: number
   /** outward = readable at the top of the button; inward = readable at the bottom. */
   direction: 'outward' | 'inward'

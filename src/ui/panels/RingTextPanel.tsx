@@ -94,14 +94,22 @@ export function RingTextPanel({ layer }: { layer: RingTextLayer }) {
         />
         <SegmentedControl
           label="Align"
+          stack
           value={layer.anchorAlign}
           options={[
             { value: 'start', label: 'Start' },
             { value: 'center', label: 'Centre' },
             { value: 'end', label: 'End' },
+            { value: 'spread', label: 'Spread', title: 'Every letter centred at equal angles around the circle' },
           ]}
           onChange={(anchorAlign) => update({ anchorAlign })}
         />
+        {layer.anchorAlign === 'spread' && (
+          <div className="readout">
+            Each letter sits at an equal share of the circle from the anchor (letters × repeats around); Spacing and
+            pair kerning don't apply.
+          </div>
+        )}
         <SegmentedControl
           label="Direction"
           value={layer.direction}

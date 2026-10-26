@@ -316,3 +316,56 @@ describe('pair kerning', () => {
     expect(c.ok && (c.doc.layers[0] as { kernPairsMM: unknown }).kernPairsMM).toEqual({})
   })
 })
+
+describe('spread alignment', () => {
+  const centreAngles = (layer: ReturnType<typeof makeRingTextLayer>) => {
+    // each glyph is its own subpath group; take the angle of each glyph's ink centre
+    const c = compileRingText(layer, garamond)
+    const d = (c.shapes.find((s) => s.kind === 'path') as { d: string }).d
+    const mp = pathToMultiPolygon(d, 'nonzero', 0.002)
+    return mp
+      .map((poly) => {
+        const ring = poly[0]!
+        let x = 0, y = 0
+        for (const [px, py] of ring) { x += px; y += py }
+        return Math.hypot(x, y) > 0 ? ((Math.atan2(x / ring.length, -y / ring.length) * RAD2DEG) + 360) % 360 : 0
+      })
+      .sort((a, b) => a - b)
+  }
+
+  it('puts each of four letters a quarter turn apart, whatever their widths', () => {
+    const layer = makeRingTextLayer({ text: 'LIET', sizeMM: 1.2, radiusMM: 3, anchorAlign: 'spread', anchorDeg: 45, useKerning: false })
+    const angles = centreAngles(layer)
+    expect(angles).toHaveLength(4) // L, I, E, T: one outline each (no counters in these letters)
+    // ink centres sit near the glyphs' advance midpoints: within a few degrees of 45 / 135 / 225 / 315
+    ;[45, 135, 225, 315].forEach((a, k) => expect(Math.abs(angles[k]! - a)).toBeLessThan(6))
+  })
+
+  it('places glyph advance midpoints exactly: a symmetric "I" lands on the quarter', () => {
+    const layer = makeRingTextLayer({ text: 'IIII', sizeMM: 1.2, radiusMM: 3, anchorAlign: 'spread', anchorDeg: 0, useKerning: false })
+    centreAngles(layer).forEach((a, k) => expect(Math.min(Math.abs(a - k * 90), 360 - Math.abs(a - k * 90))).toBeLessThan(0.5))
+    // spacing and pair kerning don't move spread letters
+    const a = (compileRingText(layer, garamond).shapes[0] as { d: string }).d
+    const b = (compileRingText({ ...layer, letterSpacingMM: 1, kernPairsMM: { II: 0.5 } }, garamond).shapes[0] as { d: string }).d
+    expect(b).toBe(a)
+  })
+
+  it('repeats spread across all runs, and dividers fall between every letter', () => {
+    const layer = makeRingTextLayer({
+      text: 'LI', sizeMM: 1, radiusMM: 3, anchorAlign: 'spread', repeats: 2, useKerning: false,
+      dividerSource: { kind: 'builtin', motifId: 'dot' }, dividerSizeMM: 0.3,
+    })
+    const c = compileRingText(layer, garamond)
+    const div = c.shapes.find((s) => s.kind === 'instanced') as { transforms: { rotateDeg: number }[] }
+    expect(div.transforms.map((t) => t.rotateDeg)).toEqual([45, 135, 225, 315])
+  })
+
+  it('an unknown alignment from a newer app centres the run', () => {
+    const doc = { ...makeBlankDoc(), layers: [makeRingTextLayer({ id: 't', anchorAlign: 'spread' })] }
+    expect(parseDoc(stringifyDoc(doc)).ok).toBe(true)
+    const odd = JSON.parse(stringifyDoc(doc))
+    odd.layers[0].anchorAlign = 'justify'
+    const r = parseDoc(JSON.stringify(odd))
+    expect(r.ok && (r.doc.layers[0] as { anchorAlign: string }).anchorAlign).toBe('center')
+  })
+})
