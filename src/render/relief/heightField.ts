@@ -75,7 +75,8 @@ export function reliefParamsOf(d: {
     faceR: d.diameterMM / 2,
     centre,
     centreR,
-    rollMM: roll,
+    // an inverted nipple's rim IS the rolled edge: it rolls from the side wall to the cup's crest
+    rollMM: centre === 'cup' ? Math.max(roll, Math.min(d.diameterMM / 2 - centreR, (CUP_ROLL_MAX * d.diameterMM) / 2)) : roll,
     // the face rolls into an open top as a broad bright funnel
     lipMM: centre === 'pin' ? Math.min(0.12, centreR * 0.4) : Math.min(0.6, centreR * 0.15),
     domeMM: st.domeFrac * d.diameterMM,
@@ -87,7 +88,7 @@ export function reliefParamsOf(d: {
   // the cap must be deeper than its lowest rolled curve (a domed edge or a
   // concave funnel that ends below the underside folds the body back up)
   const g = capGeometry(params)
-  const lowest = Math.min(g.outer ? g.outer.cy : 0, g.lip ? g.lip.cy : 0)
+  const lowest = Math.min(g.outer ? g.outer.cy : 0, g.lip ? g.lip.cy : 0, centre === 'cup' ? g.flat(0) : 0)
   params.capH = Math.max(params.capH, -lowest + 0.15)
   geoCache.delete(params)
   return params
@@ -218,12 +219,33 @@ export const NIPPLE_WALL_H = 0.5
 const NIPPLE_HEAD_R = 0.95
 /** A small fillet where the nail head meets the plate (no serrated base ring). */
 const NIPPLE_FILLET = 0.08
-/** Inverted nipple: bowl depth, the rolled ring around it, and the nail head at its bottom (fractions of the cup radius). */
-export const CUP_D = 0.5
-const CUP_RING_H = 0.28
-const CUP_RING_W = 0.26
-const CUP_HEAD_R = 0.45
-const CUP_HEAD_H = 0.3
+/**
+ * Inverted nipple, matched to trade photos ("nipple-down" / RT-5 rivets): the
+ * cup diameter is the rim's crest — the cap's own rolled edge, a fat round
+ * roll from the side wall over the crest — then an S-walled bowl falls to a
+ * narrow flat valley round the nail head, a round bead whose top sits about
+ * mid-depth. Fractions of the cup radius.
+ */
+export const CUP_D = 0.42
+/** Where the bowl wall reaches the valley floor. */
+const CUP_FLOOR_R = 0.5
+/** Nail head: base radius on the floor, height above it, concave foot fillet (its foot lands just inside the floor). */
+const CUP_HEAD_R = 0.42
+const CUP_HEAD_H = 0.28
+const CUP_HEAD_FILLET = 0.1
+/** The rim roll is at most this share of the cap radius (a small cup gets a flat-topped rim). */
+const CUP_ROLL_MAX = 0.35
+
+/** The nail head's sphere (radius rho, centre cy above the floor) and its foot fillet (radius f, landing at footR), mm. */
+function cupHead(c: number): { rho: number; cy: number; f: number; tangentR: number; footR: number } {
+  const kb = CUP_HEAD_R * c
+  const kh = CUP_HEAD_H * c
+  const rho = (kb * kb + kh * kh) / (2 * kh)
+  const cy = kh - rho
+  const f = CUP_HEAD_FILLET * c
+  const footR = Math.sqrt((rho + f) ** 2 - (f - cy) ** 2)
+  return { rho, cy, f, tangentR: (footR * rho) / (rho + f), footR }
+}
 
 /**
  * A rolled edge: a circular fillet of radius rho that leaves the face
@@ -298,6 +320,12 @@ export function capGeometry(p: ReliefParams): CapGeometry {
       const t = Math.min(1, Math.max(0, (p.plateauR - rr) / w))
       y += p.plateauH * t * t * (3 - 2 * t)
     }
+    if (p.centre === 'cup' && rr < c) {
+      // inverted nipple bowl: an S wall from the crest (level, so the rim's
+      // roll leaves it tangentially) down to the valley floor
+      const t = Math.min(1, (c - rr) / (c * (1 - CUP_FLOOR_R)))
+      y -= CUP_D * c * t * t * (3 - 2 * t)
+    }
     if (p.centre === 'pin' && rr > c && rr < c + collarW) {
       // die-cast pin hole: a raised collar the lip rolls in from
       y += collarH * Math.cos(((rr - c) / collarW) * (Math.PI / 2)) ** 2
@@ -336,17 +364,14 @@ function profileY(r: number, p: ReliefParams): number {
       }
       break
     case 'cup': {
-      // inverted nipple: a round rolled ring, a bowl, and the nail head sitting in it
-      const ringW = CUP_RING_W * c
-      const u = (r - c) / ringW
-      const ring = Math.abs(u) < 1 ? CUP_RING_H * c * Math.sqrt(1 - u * u) : 0
-      if (r < c) {
-        const bowl = g.flat(c) - CUP_D * c * (1 - (r * r) / (c * c))
-        const hr = CUP_HEAD_R * c
-        const head = r < hr ? CUP_HEAD_H * c * Math.sqrt(1 - (r * r) / (hr * hr)) : 0
-        return bowl + head + ring
-      }
-      return g.flat(r) + ring
+      // the nail head on the valley floor: a spherical cap meeting the floor
+      // through a concave circular fillet (tangent both sides — no crease)
+      const k = cupHead(c)
+      if (r >= k.footR) break
+      const floor = g.flat(0)
+      if (r <= k.tangentR) return floor + k.cy + Math.sqrt(Math.max(0, k.rho * k.rho - r * r))
+      const dx = k.footR - r
+      return floor + k.f - Math.sqrt(Math.max(0, k.f * k.f - dx * dx))
     }
   }
   return g.flat(r)

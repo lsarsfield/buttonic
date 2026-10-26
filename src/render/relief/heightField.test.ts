@@ -356,10 +356,33 @@ describe('shape realism (adversarial review fixes)', { timeout: 30_000 }, () => 
     }
   })
 
-  it('inverted nipple: a pronounced rolled ring (~0.28 c) rims the bowl', () => {
-    const p = styleParams('inverted-nipple', 9, 3.8)
-    const ring = baseProfile(p.centreR, p).y - baseProfile(p.centreR + 0.8, p).y
-    expect(ring / p.centreR).toBeGreaterThan(0.25)
+  it('inverted nipple: a fat rolled rim cresting at the cup, a deep bowl, the nail head about mid-depth (trade photos)', () => {
+    for (const [d, cup] of [
+      [9, 6.3],
+      [9, 3.8],
+    ] as const) {
+      const p = styleParams('inverted-nipple', d, cup)
+      const c = p.centreR
+      const g = capGeometry(p)
+      // the rim IS the rolled edge: it leaves the crest level and rolls round to the side wall
+      expect(g.outer!.start).toBeGreaterThanOrEqual(c - 1e-9)
+      expect(p.rollMM).toBeGreaterThan(0.25 * p.faceR)
+      let top = -Infinity
+      for (let r = 0; r <= p.faceR; r += 0.01) top = Math.max(top, baseProfile(r, p).y)
+      expect(baseProfile(c, p).y).toBeCloseTo(top, 6) // nothing stands above the crest
+      // the bowl is deep (~0.4 c) and smooth into its valley; the knob sits well below the crest
+      const floor = baseProfile(c * 0.45, p).y
+      expect(-floor / c).toBeGreaterThan(0.35)
+      const knob = baseProfile(0, p).y
+      expect(knob).toBeGreaterThan(floor + 0.15 * c)
+      expect(knob).toBeLessThan(-0.1 * c)
+      // continuous everywhere inside the vertical side wall
+      for (let r = 0; r < g.outer!.edge - 0.05; r += 0.002) {
+        expect(Math.abs(baseProfile(r + 0.002, p).y - baseProfile(r, p).y)).toBeLessThan(0.01)
+      }
+      // the bowl stays inside the cap body
+      expect(floor).toBeGreaterThan(-p.capH + 0.1)
+    }
   })
 
   it('maxFilter: running max over the window, O(n)', () => {

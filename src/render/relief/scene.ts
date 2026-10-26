@@ -99,7 +99,7 @@ function faceRadii(p: ReliefParams, stepOverride?: number): number[] {
     for (let k = 0; k <= 24; k++) pts.push(c * (0.88 + (0.12 * k) / 24)) // the drafted wall
     for (let k = 0; k <= 24; k++) pts.push(0.9 * c * Math.sin((k / 24) * (Math.PI / 2))) // the head
   } else if (p.centre === 'cup') {
-    for (let k = 0; k <= 80; k++) pts.push((c * 1.3 * k) / 80) // bowl, nail head, rolled ring
+    for (let k = 0; k <= 80; k++) pts.push((c * k) / 80) // nail head, valley, bowl wall
   }
   if (p.centre === 'pin') for (let k = 0; k <= 16; k++) pts.push(c + (Math.max(0.12, c * 0.6) * k) / 16) // collar
   if (p.plateauR > 0) {
