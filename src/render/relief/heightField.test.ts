@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { defaultCentreMM } from '../../model/product'
 import { METAL_FINISHES } from './finishes'
 import {
   baseProfile,
@@ -145,16 +146,16 @@ describe('cap profile', () => {
     expect(baseProfile(3.8, p).y).toBeLessThan(-0.3)
   })
 
-  it('nipple rivet: a knob peaking at the axis; inverted nipple: a cup lowest at the axis', () => {
+  it('nipple rivet: a knob peaking at the axis; inverted nipple: a sunk well round a domed head', () => {
     const nip = styleParams('nipple', 9, 2.7)
     expect(baseProfile(0, nip).y).toBeGreaterThan(baseProfile(1, nip).y)
     expect(baseProfile(1, nip).y).toBeGreaterThan(baseProfile(2.5, nip).y)
     const cup = styleParams('inverted-nipple', 9, 3.8)
     const c = 1.9
-    // the bowl sinks below the face; the nail head rises inside it; a rolled ring rims it
-    expect(baseProfile(0.9, cup).y).toBeLessThan(baseProfile(3.5, cup).y - 0.3)
-    expect(baseProfile(0, cup).y).toBeGreaterThan(baseProfile(0.9, cup).y)
-    expect(baseProfile(c, cup).y).toBeGreaterThan(baseProfile(3.5, cup).y)
+    // the well sinks below the face; the nail head rises inside it
+    expect(baseProfile(1.25, cup).y).toBeLessThan(baseProfile(3.5, cup).y - 0.3)
+    expect(baseProfile(0, cup).y).toBeGreaterThan(baseProfile(1.25, cup).y)
+    expect(baseProfile(c, cup).y).toBeGreaterThan(baseProfile(1.25, cup).y)
   })
 
   it('die-cast rivet: a raised centre plateau and a collared pin hole', () => {
@@ -356,32 +357,32 @@ describe('shape realism (adversarial review fixes)', { timeout: 30_000 }, () => 
     }
   })
 
-  it('inverted nipple: a fat rolled rim cresting at the cup, a deep bowl, the nail head about mid-depth (trade photos)', () => {
+  it('inverted nipple: a near-flat face, a sunk well round the nail head, the head cresting at the face (supplier photo)', () => {
     for (const [d, cup] of [
-      [9, 6.3],
-      [9, 3.8],
+      [9, defaultCentreMM('inverted-nipple', 9)],
+      [9, 3.5],
     ] as const) {
       const p = styleParams('inverted-nipple', d, cup)
       const c = p.centreR
       const g = capGeometry(p)
-      // the rim IS the rolled edge: it leaves the crest level and rolls round to the side wall
-      expect(g.outer!.start).toBeGreaterThanOrEqual(c - 1e-9)
-      expect(p.rollMM).toBeGreaterThan(0.25 * p.faceR)
-      let top = -Infinity
-      for (let r = 0; r <= p.faceR; r += 0.01) top = Math.max(top, baseProfile(r, p).y)
-      expect(baseProfile(c, p).y).toBeCloseTo(top, 6) // nothing stands above the crest
-      // the bowl is deep (~0.4 c) and smooth into its valley; the knob sits well below the crest
-      const floor = baseProfile(c * 0.45, p).y
-      expect(-floor / c).toBeGreaterThan(0.35)
-      const knob = baseProfile(0, p).y
-      expect(knob).toBeGreaterThan(floor + 0.15 * c)
-      expect(knob).toBeLessThan(-0.1 * c)
+      // the face between the well and the rolled edge is near flat (lettering runs round it)
+      const mouth = baseProfile(c, p).y
+      const shoulder = baseProfile(g.outer!.start, p).y
+      expect(Math.abs(mouth - shoulder)).toBeLessThan(0.05 * d)
+      expect(p.rollMM).toBeLessThan(0.05 * d)
+      // a sunk groove round the head, ~0.25 c below the face
+      const groove = baseProfile(c * 0.66, p).y
+      expect((mouth - groove) / c).toBeGreaterThan(0.2)
+      // the head domes up out of it to about face level
+      const head = baseProfile(0, p).y
+      expect(head).toBeGreaterThan(mouth - 0.05)
+      expect(head).toBeLessThan(mouth + 0.15 * c)
       // continuous everywhere inside the vertical side wall
       for (let r = 0; r < g.outer!.edge - 0.05; r += 0.002) {
         expect(Math.abs(baseProfile(r + 0.002, p).y - baseProfile(r, p).y)).toBeLessThan(0.01)
       }
-      // the bowl stays inside the cap body
-      expect(floor).toBeGreaterThan(-p.capH + 0.1)
+      // the well stays inside the cap body
+      expect(groove).toBeGreaterThan(-p.capH + 0.1)
     }
   })
 

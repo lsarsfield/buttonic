@@ -64,8 +64,8 @@ export const STYLES: Record<ProductStyle, StyleSpec> = {
     centre: 'nipple', centreFrac: 0.42, domeFrac: 0, concaveFrac: 0, back: 'nail', capHFrac: 0.07, rollFrac: 0.025,
   },
   'inverted-nipple': {
-    product: 'rivet', label: 'Inverted nipple', blurb: 'A wide sunk cup in a rolled ring, the nail head at its bottom — lettering runs round the ring.',
-    centre: 'cup', centreFrac: 0.7, domeFrac: 0, concaveFrac: 0, back: 'nail', rollFrac: 0.045,
+    product: 'rivet', label: 'Inverted nipple', blurb: 'A flat face round a sunk well, the nail head domed up inside it — lettering runs round the face.',
+    centre: 'cup', centreFrac: 0.55, domeFrac: 0.03, concaveFrac: 0, back: 'nail', rollFrac: 0.04,
   },
   'die-cast': {
     product: 'rivet', label: 'Die-cast', blurb: 'Thick cast cap: a raised centre plateau and a collared pin hole.',
