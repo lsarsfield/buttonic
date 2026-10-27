@@ -667,6 +667,11 @@ export function buildHeightField(
     h[i] = p.depthMM * (r - sk) - LASER_DEPTH_MM * art[i]!
     F[i] = fieldLevel + r * (1 - fieldLevel) - sk * fieldLevel
   }
+  // lowness for the field coat: beneath raised work the field is low ground
+  // whatever else is sunk into it, so a mixed die antiques its field like a
+  // raised-only one. F's midway field is for the cavity and shelter maths only
+  // (there the field is still high ground to a groove).
+  const G = occR && occS ? occR : F
 
   // neighbourhood height (~0.12 mm sigma) → cavity = enclosed by higher ground
   const nb = Float32Array.from(F)
@@ -726,7 +731,7 @@ export function buildHeightField(
       normal[o + 3] = HALF_ONE
 
       occl[o] = Math.round(Math.min(1, Math.max(0, (nb[i]! - F[i]!) * 1.6)) * 255) // cavity
-      occl[o + 1] = Math.round((1 - F[i]!) * 255) // lowness
+      occl[o + 1] = Math.round((1 - G[i]!) * 255) // lowness
       occl[o + 2] = Math.round(art[i]! * 255) // art occupancy
       // oxide hold: sheltered low ground keeps the coat, open field mostly
       // wiped, convex crests rubbed bright

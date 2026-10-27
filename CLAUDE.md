@@ -258,7 +258,9 @@ param, not an error.)
     lasered (`layerRelief`, `reliefGroups` in product.ts). The 3D pipeline
     rasterizes one mask per class via `exportSvg({onlyLayers})` (each layer still
     clipped by ALL keepouts), and `buildHeightField(masks)` puts raised +d, sunk −d,
-    field midway for "high ground" (cavity) purposes; raised art inside a sunk area
+    field midway for "high ground" (cavity + shelter) purposes — but NOT for the field coat:
+    the field's oxide lowness is taken from the raised mask alone, so a debossed layer never
+    lightens the background (a groove shelters nothing; Liam caught a rivet at half the oxide); raised art inside a sunk area
     lands at face level. A mixed die file wraps layers in `marking-embossed` /
     `marking-debossed` / `marking-lasered` groups (single-relief output unchanged); the
     spec sheet lists layers per depth. `regionKey` ignores `relief`.

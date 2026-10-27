@@ -465,9 +465,30 @@ describe('mixed relief', { timeout: 60_000 }, () => {
     expect(at(0, 0)).toBeCloseTo(DEPTH, 2) // raised disc
     expect(at(3.5, 0)).toBeCloseTo(-DEPTH, 2) // sunk ring
     expect(at(2.2, 0)).toBeCloseTo(0, 4) // the field
-    // the field sits midway: neither "low" (raised-only) nor "high" (sunk-only)
+    // to the polishing wheel the field is low ground beneath the raised work,
+    // as on a raised-only die (the midway field is for the cavity maths only)
     const lowness = f.occl[px(2.2, 0) * 4 + 1]! / 255
-    expect(lowness).toBeCloseTo(0.5, 1)
+    expect(lowness).toBeCloseTo(1, 1)
+  })
+
+  it('a sunk layer leaves the field’s antiquing alone: same as raised-only away from the groove', () => {
+    const raised = discCoverage(1.2)
+    const outer = discCoverage(4)
+    const inner = discCoverage(3)
+    const sunk = new Float32Array(N * N)
+    for (let i = 0; i < N * N; i++) sunk[i] = Math.max(0, outer[i]! - inner[i]!)
+    const fin = METAL_FINISHES['copper-oxide'].patina
+    const mixed = finishMaps(buildHeightField({ raised, sunk }, N, SPAN, params()), fin).albedo
+    const plain = finishMaps(buildHeightField({ raised }, N, SPAN, params()), fin).albedo
+    for (const [x, y] of [
+      [1.45, 0], // in the lee of the raised disc
+      [2.2, 0], // open field between the disc and the groove
+      [5.5, 0], // open field beyond the groove
+    ] as const) {
+      expect(Math.abs(mixed[px(x, y) * 4]! - plain[px(x, y) * 4]!)).toBeLessThan(6)
+    }
+    // the groove floor, sheltered by the field around it, holds more of the coat
+    expect(mixed[px(3.5, 0) * 4]!).toBeLessThan(plain[px(5.5, 0) * 4]! - 15)
   })
 
   it('lasered layers are located by the art mask', () => {
