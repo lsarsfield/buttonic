@@ -796,6 +796,7 @@ export class ButtonScene {
       roughness: finishOf(spec.finish).roughness,
       distressed: spec.distressed,
       grain: finishOf(spec.finish).grain ?? 0,
+      brush: finishOf(spec.finish).brush ?? 0,
     }
     const key = JSON.stringify(look)
     if (key === this.patinaKey && this.patinaTex.length > 0) return

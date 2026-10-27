@@ -165,6 +165,9 @@ const LASER_FROST = 0.42
  */
 const WHEEL_REACH_MM = 0.45
 const OPEN_FIELD_HOLD = 0.7
+/** A brushed face's oxide film between the grain lines and in them (finishMaps). */
+const BRUSH_FILM_GAP = 0.42
+const BRUSH_FILM_LINE = 0.68
 /** Shelter = high ground in the wheel's neighbourhood × this, clamped (a straight wall's foot reads ~0.5). */
 const SHELTER_GAIN = 2.5
 /**
@@ -781,6 +784,8 @@ export interface SurfaceLook {
   /** The finish's base roughness (the laser frost is an absolute roughness). */
   roughness?: number
   distressed: boolean
+  /** Relieved with a nylon brush, 0..1: the coat wiped back in a fine straight grain. */
+  brush?: number
 }
 
 const hash2 = (x: number, y: number, seed: number): number => {
@@ -847,9 +852,30 @@ export function finishMaps(field: HeightField, look: SurfaceLook | Patina): { su
     const art = occl[o + 2]! / 255
     const hold = occl[o + 3]! / 255
     let patina = Math.min(1, p.cavity * cav + p.field * low * hold)
+    let grainLine = 0.5
+    if (L.brush) {
+      // a nylon brush drawn across the face (along x): straight scratch lines,
+      // ~20–50 µm apart. Unlike a wheel it doesn't burnish the high ground
+      // clean: everywhere it reaches, raised or not, the face is left a streaky
+      // film — oxide caught in the lines, copper between them. Recesses are out
+      // of its reach and keep the coat, and so does low ground sheltered by
+      // higher metal (an engraved letter's floor, the lee of raised work).
+      const x = -V + ((i % n) + 0.5) * mmPerPx
+      const y = -V + (Math.floor(i / n) + 0.5) * mmPerPx
+      grainLine =
+        0.45 * valueNoise(x / 0.6, y / 0.009, 61) + 0.35 * valueNoise(x / 0.25, y / 0.005, 63) + 0.2 * valueNoise(x / 1.2, y / 0.03, 62)
+      // pressure varies in broad bands across the stroke
+      const pressure = 0.8 + 0.4 * valueNoise(x / 5, y / 0.7, 64)
+      const t = Math.min(1, Math.max(0, (grainLine - 0.3) / 0.4))
+      const line = t * t * (3 - 2 * t)
+      const film = (BRUSH_FILM_GAP + (BRUSH_FILM_LINE - BRUSH_FILM_GAP) * line) * pressure
+      const sheltered = Math.min(1, Math.max(0, (hold - OPEN_FIELD_HOLD) / (1 - OPEN_FIELD_HOLD))) * low
+      const reach = L.brush * (1 - Math.min(1, cav * 1.5)) * (1 - sheltered)
+      patina += (film - patina) * reach
+    }
     let dark = p.darken * patina
     // roughness as a multiple of the finish's base (stored ÷ ROUGH_HEADROOM below)
-    let rough = 1 + (OXIDE_ROUGH - 1) * patina
+    let rough = (1 + (OXIDE_ROUGH - 1) * patina) * (1 + (L.brush ?? 0) * 0.7 * (grainLine - 0.5))
     if (L.distressed) {
       const x = -V + ((i % n) + 0.5) * mmPerPx
       const y = -V + (Math.floor(i / n) + 0.5) * mmPerPx

@@ -24,6 +24,8 @@ export interface MetalFinish {
    * through to the bright metal beneath).
    */
   laser?: 'frost' | 'reveal'
+  /** Relieved with a nylon brush, 0..1: the coat wiped back in fine parallel lines (heightField.finishMaps). */
+  brush?: number
 }
 
 const LIGHT_PATINA: Patina = { cavity: 1, field: 0.12, darken: 0.62 }
@@ -51,6 +53,19 @@ export const METAL_FINISHES: Record<Finish, MetalFinish> = {
     patina: { cavity: 1, field: 0.55, darken: 0.82 },
     grain: 0.8,
     laser: 'reveal',
+  },
+  // dark antique copper relieved with a nylon brush, not a soft wheel: a fine
+  // straight grain of red copper and brown-black oxide across the whole face,
+  // recesses black (the trade's "brushed dark anti-copper"; matched to a
+  // photo of brushed open-top buttons with engraved lettering)
+  'brushed-antique-copper': {
+    color: [0.85, 0.33, 0.14],
+    roughness: 0.3,
+    oxide: 1,
+    patina: { cavity: 1, field: 0.8, darken: 0.88 },
+    grain: 0.3,
+    laser: 'reveal',
+    brush: 1,
   },
   // copper darkened almost to black-brown, bright copper only where it's rubbed
   'copper-oxide': {

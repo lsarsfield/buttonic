@@ -170,6 +170,7 @@ export function markingSummary(doc: Parameters<typeof reliefGroups>[0]): string 
 export const FINISH_LABELS: Record<Finish, string> = {
   'antique-brass': 'Antique brass',
   'antique-copper': 'Antique copper',
+  'brushed-antique-copper': 'Brushed antique copper',
   copper: 'Polished copper',
   'copper-oxide': 'Copper oxide',
   pewter: 'Pewter',
@@ -183,7 +184,7 @@ export const FINISH_LABELS: Record<Finish, string> = {
 }
 
 export const FINISH_GROUPS: readonly { label: string; options: readonly Finish[] }[] = [
-  { label: 'Standard', options: ['antique-brass', 'antique-copper', 'copper-oxide', 'pewter', 'dark-pewter', 'nickel'] },
+  { label: 'Standard', options: ['antique-brass', 'antique-copper', 'brushed-antique-copper', 'copper-oxide', 'pewter', 'dark-pewter', 'nickel'] },
   { label: 'Polished', options: ['polished-nickel', 'polished-gold', 'copper', 'gunmetal', 'brass', 'steel'] },
 ]
 

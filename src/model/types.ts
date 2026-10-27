@@ -65,6 +65,7 @@ export type Finish =
   | 'brass'
   | 'polished-gold'
   | 'antique-copper'
+  | 'brushed-antique-copper'
   | 'copper'
   | 'copper-oxide'
   | 'pewter'
@@ -78,6 +79,7 @@ export const FINISH_IDS: readonly Finish[] = [
   'brass',
   'polished-gold',
   'antique-copper',
+  'brushed-antique-copper',
   'copper',
   'copper-oxide',
   'pewter',

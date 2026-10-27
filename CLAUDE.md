@@ -222,6 +222,11 @@ param, not an error.)
     The roughness map is a multiplier ÷ `ROUGH_HEADROOM` (6) so a mirror can frost
     (the material uniform is base × 6, unclamped — three clamps in-shader); distressed =
     deterministic mottled oxide (`distressMask`) worn bright on the high points.
+    BRUSHED (`brush` on a finish; 'brushed-antique-copper', added with no migration,
+    matched to Rudholm's DELADA photo): a nylon brush along x leaves a streaky oxide
+    FILM on everything it reaches, high ground included (a wheel burnishes highs clean;
+    a brush doesn't); cavities and sheltered low ground (engraved floors, the lee of
+    relief) keep the full coat. Grain lines are ~5–9 µm across — sub-pixel at 2048².
     Patina maps carry METALNESS (surface.B): oxide is a dark dielectric film — dimmed
     metal still mirrors a bright studio. Normals are HALF-FLOAT (8-bit terraced into
     blocky bands on polished domes). SHAPE CALIBRATION (Liam: "things seem very

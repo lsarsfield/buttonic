@@ -497,3 +497,48 @@ describe('mixed relief', { timeout: 60_000 }, () => {
     expect(f.occl[px(0, 0) * 4 + 2]!).toBe(0)
   })
 })
+
+describe('brushed finish', { timeout: 30_000 }, () => {
+  // an engraved disc: the open face is the high ground, the disc floor is sunk
+  const f = buildHeightField(discCoverage(2), N, SPAN, params({ display: 'debossed' }))
+  const fin = METAL_FINISHES['brushed-antique-copper']
+  const look = { patina: fin.patina, roughness: fin.roughness, laser: fin.laser, lasered: true, distressed: false, brush: fin.brush }
+  const g = finishMaps(f, look).albedo
+  const at = (x: number, y: number) => g[px(x, y) * 4]!
+
+  it('is deterministic, and a no-brush finish is untouched by it', () => {
+    expect(finishMaps(f, look).albedo).toEqual(g)
+    const plain = { ...look, patina: METAL_FINISHES['antique-copper'].patina }
+    expect(finishMaps(f, { ...plain, brush: 0 })).toEqual(finishMaps(f, { ...plain, brush: undefined }))
+  })
+
+  it('grains in straight lines along x: smooth along a line, streaky across them', () => {
+    let along = 0
+    let across = 0
+    let k = 0
+    for (let y = 3; y < 5; y += 0.06) {
+      for (let x = 3; x < 5; x += 0.06) {
+        along += Math.abs(at(x + MMPX, y) - at(x, y))
+        across += Math.abs(at(x, y + MMPX) - at(x, y))
+        k++
+      }
+    }
+    expect(across / k).toBeGreaterThan(3 * (along / k))
+  })
+
+  it('leaves an oxide film on the high ground (a wheel would burnish it clean); the engraved floor stays dark', () => {
+    const wheel = finishMaps(f, { ...look, brush: 0 }).albedo
+    let face = 0
+    let clean = 0
+    let k = 0
+    for (let y = 3; y < 5; y += 0.1) {
+      for (let x = 3; x < 5; x += 0.1) {
+        face += at(x, y)
+        clean += wheel[px(x, y) * 4]!
+        k++
+      }
+    }
+    expect(face / k).toBeLessThan(clean / k - 40)
+    expect(at(0, 0)).toBeLessThan(face / k - 25)
+  })
+})
